@@ -10,9 +10,13 @@ export type AppConfig = {
 	mailflareUrl: string;
 	mailflareApiKey: string;
 	webhookSecret: string;
-	reverseDomain: string;
 	signingSecret: string;
 	publicUrl: string;
+	/**
+	 * Origin for links in forwarded mail: the public URL, or else the address the dashboard was
+	 * last opened on, since mail arriving through Email Routing comes with no request URL.
+	 */
+	siteOrigin: string;
 	/** Cloudflare API token that lets the dashboard set up Email Routing and Email Sending. */
 	cloudflareApiToken: string;
 	/** This Worker's name, which the Email Routing rule sends mail to. */
@@ -24,7 +28,6 @@ type StoredKey =
 	| "mailflareUrl"
 	| "mailflareApiKey"
 	| "webhookSecret"
-	| "reverseDomain"
 	| "signingSecret"
 	| "publicUrl"
 	| "cloudflareApiToken"
@@ -34,7 +37,6 @@ const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	mailflareUrl: "MAILFLARE_URL",
 	mailflareApiKey: "MAILFLARE_API_KEY",
 	webhookSecret: "WEBHOOK_SECRET",
-	reverseDomain: "REVERSE_ALIAS_DOMAIN",
 	signingSecret: "SIGNING_SECRET",
 	publicUrl: "PUBLIC_URL",
 	cloudflareApiToken: "CLOUDFLARE_API_TOKEN",
@@ -51,12 +53,12 @@ export function envOverrides(env: Env): Set<StoredKey> {
 	return set;
 }
 
-async function readStored(db: D1Database): Promise<Partial<Record<StoredKey, string>>> {
-	const { results } = await db.prepare("SELECT key, value FROM config").all<{ key: StoredKey; value: string }>();
+async function readStored(db: D1Database): Promise<Partial<Record<StoredKey | "siteOrigin", string>>> {
+	const { results } = await db.prepare("SELECT key, value FROM config").all<{ key: StoredKey | "siteOrigin"; value: string }>();
 	return Object.fromEntries(results.map((row) => [row.key, row.value]));
 }
 
-export async function saveConfig(db: D1Database, values: Partial<Record<StoredKey, string>>): Promise<void> {
+export async function saveConfig(db: D1Database, values: Partial<Record<StoredKey | "siteOrigin", string>>): Promise<void> {
 	const statement = db.prepare("INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
 	const entries = Object.entries(values).filter(([, value]) => typeof value === "string");
 	if (entries.length) await db.batch(entries.map(([key, value]) => statement.bind(key, value)));
@@ -92,8 +94,6 @@ function checkEnv(env: Env): void {
 	for (const name of ["MAILFLARE_URL", "PUBLIC_URL"] as const) {
 		if (value(name) && !validOrigin(value(name))) throw new ConfigError(`${name} must be an https:// URL without a user name or password`);
 	}
-	const domain = value("REVERSE_ALIAS_DOMAIN").toLowerCase();
-	if (domain && !DOMAIN_PATTERN.test(domain)) throw new ConfigError("REVERSE_ALIAS_DOMAIN is not a valid domain name");
 	const worker = value("WORKER_NAME").toLowerCase();
 	if (worker && !WORKER_NAME_PATTERN.test(worker)) throw new ConfigError("WORKER_NAME is not a valid Worker name");
 }
@@ -121,22 +121,25 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 		mailflareUrl: pick("mailflareUrl").replace(/\/+$/, ""),
 		mailflareApiKey: pick("mailflareApiKey"),
 		webhookSecret: pick("webhookSecret"),
-		reverseDomain: pick("reverseDomain").toLowerCase(),
 		signingSecret,
 		publicUrl: pick("publicUrl").replace(/\/+$/, ""),
+		siteOrigin: pick("publicUrl").replace(/\/+$/, "") || (validOrigin(stored.siteOrigin ?? "") ?? ""),
 		// Only from the CLOUDFLARE_API_TOKEN secret: a token typed on the dashboard is never stored.
 		cloudflareApiToken: env.CLOUDFLARE_API_TOKEN?.trim() ?? "",
-		workerName: pick("workerName") || "mailflare-alias",
+		workerName: pick("workerName") || "aliasflare",
 		mailflareService: env.MAILFLARE_SERVICE,
 	};
 }
 
+/** True when the optional Mailflare backend is fully set up: its webhook and its send API. */
+export function mailflareReady(config: AppConfig): boolean {
+	return !!(config.mailflareUrl && config.mailflareApiKey && config.webhookSecret);
+}
+
 /** Settings still needed before mail can flow, as message keys for the interface. */
-export function missingConnection(config: AppConfig): MessageKey[] {
+export function missingConnection(settings: { aliasDomains: string[]; defaultDestination: string }): MessageKey[] {
 	const missing: MessageKey[] = [];
-	if (!config.mailflareUrl) missing.push("missing.mailflareUrl");
-	if (!config.mailflareApiKey) missing.push("missing.apiKey");
-	if (!config.webhookSecret) missing.push("missing.webhookSecret");
-	if (!config.reverseDomain) missing.push("missing.reverseDomain");
+	if (!settings.aliasDomains.length) missing.push("missing.aliasDomains");
+	if (!settings.defaultDestination) missing.push("missing.defaultDestination");
 	return missing;
 }

@@ -1,13 +1,13 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "mailflare-alias",
+	"name": "aliasflare",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-11-01",
 	"compatibility_flags": ["nodejs_compat"],
 	"observability": { "enabled": true },
-	// Connection settings (Mailflare URL, API key, webhook secret, reverse-alias domain) are
-	// entered on the dashboard after you register a passkey. Variables or secrets with the
-	// names listed in src/env.d.ts override them; keep_vars leaves dashboard-set ones alone.
+	// Alias domains and the optional Mailflare connection are set up on the dashboard after
+	// you register a passkey. Variables or secrets with the names listed in src/env.d.ts
+	// override them; keep_vars leaves dashboard-set ones alone.
 	"keep_vars": true,
 	"send_email": [{ "name": "EMAIL", "remote": true }],
 	// Optional: reach Mailflare through a service binding instead of the public internet,
@@ -20,7 +20,7 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "mailflare-alias",
+			"database_name": "aliasflare",
 			"migrations_dir": "migrations"
 		}
 	]

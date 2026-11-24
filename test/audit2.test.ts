@@ -16,7 +16,7 @@ let env: Env;
 
 beforeEach(async () => {
 	db = testDb();
-	env = { DB: db, SIGNING_SECRET: TEST_SECRET, REVERSE_ALIAS_DOMAIN: "r.me.test" } as unknown as Env;
+	env = { DB: db, SIGNING_SECRET: TEST_SECRET } as unknown as Env;
 	await saveSettings(db, { ...(await loadSettings(db)), aliasDomains: ["me.test"], defaultDestination: "owner@gmail.test" });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -45,7 +45,7 @@ describe("sessions (item 4)", () => {
 	});
 	it("refuse the old stateless cookie and a cookie without the __Host- prefix", async () => {
 		const old = await signToken(TEST_SECRET, "session", "admin", 600);
-		expect((await request("GET", "/settings", { cookie: `__Host-mfa_session=${old}` })).status).toBe(302);
+		expect((await request("GET", "/settings", { cookie: `__Host-af_session=${old}` })).status).toBe(302);
 		const cookie = (await signIn(db)).replace("__Host-", "");
 		expect((await request("GET", "/settings", { cookie })).status).toBe(302);
 	});
@@ -83,7 +83,7 @@ async function addForward(fields: Partial<ForwardRow> = {}) {
 	const id = `fw_${"a".repeat(32)}`;
 	await db
 		.prepare(
-			"INSERT INTO forwards (id, mailflare_message_id, alias_address, contact_id, original_unsubscribe, original_unsubscribe_post, status, created_at, updated_at) VALUES (?, 'm1', 'shop@me.test', 'c1', ?, ?, 'sent', 1, 1)",
+			"INSERT INTO forwards (id, inbound_id, alias_address, contact_id, original_unsubscribe, original_unsubscribe_post, status, created_at, updated_at) VALUES (?, 'm1', 'shop@me.test', 'c1', ?, ?, 'sent', 1, 1)",
 		)
 		.bind(id, fields.original_unsubscribe ?? null, fields.original_unsubscribe_post ?? 0)
 		.run();
@@ -152,7 +152,7 @@ describe("the sender's own unsubscribe (items 7 and 17)", () => {
 describe("inbound mail (items 12, 13 and 14)", () => {
 	let sent: { subject: string }[];
 	let downloads: number;
-	const config = { mailflareUrl: "https://mailflare.test", mailflareApiKey: "k", reverseDomain: "r.me.test", signingSecret: TEST_SECRET } as never;
+	const config = { mailflareUrl: "https://mailflare.test", mailflareApiKey: "k", webhookSecret: "w", signingSecret: TEST_SECRET, siteOrigin: "https://alias.test" } as never;
 
 	function stubMailflare(raw: string) {
 		downloads = 0;
@@ -198,7 +198,7 @@ describe("import forwarding addresses (item 15)", () => {
 	const csv = "alias,mailboxes\nx@me.test,stranger@other.test\ny@me.test,y@me.test\nz@me.test,owner@gmail.test\n";
 	const run = async (keepDestinations: boolean) => {
 		const rows = parseAliasCsv(csv);
-		const result = await importAliases(db, await loadSettings(db), "r.me.test", "csv", selectByDomain(rows, ["me.test"], "r.me.test"), rows.length, { keepDestinations });
+		const result = await importAliases(db, await loadSettings(db), "csv", selectByDomain(rows, ["me.test"]), rows.length, { keepDestinations });
 		const { results } = await db.prepare("SELECT address, destination FROM aliases ORDER BY address").all<{ address: string; destination: string | null }>();
 		return { result, destinations: Object.fromEntries(results.map((row) => [row.address, row.destination])) };
 	};
@@ -219,7 +219,7 @@ describe("configuration from the environment (item 19)", () => {
 	it("refuses a short signing secret and insecure URLs", async () => {
 		await expect(loadConfig({ DB: db, SIGNING_SECRET: "short" } as unknown as Env)).rejects.toBeInstanceOf(ConfigError);
 		await expect(loadConfig({ DB: db, SIGNING_SECRET: TEST_SECRET, MAILFLARE_URL: "http://mailflare.test" } as unknown as Env)).rejects.toBeInstanceOf(ConfigError);
-		await expect(loadConfig({ DB: db, SIGNING_SECRET: TEST_SECRET, REVERSE_ALIAS_DOMAIN: "not a domain" } as unknown as Env)).rejects.toBeInstanceOf(ConfigError);
+		await expect(loadConfig({ DB: db, SIGNING_SECRET: TEST_SECRET, WORKER_NAME: "not a worker name" } as unknown as Env)).rejects.toBeInstanceOf(ConfigError);
 	});
 	it("replaces only a missing or too short stored secret", async () => {
 		await db.prepare("INSERT INTO config (key, value) VALUES ('signingSecret', 'tooshort')").run();
@@ -248,7 +248,7 @@ describe("API rate limit (item 23)", () => {
 			return original(sql);
 		}) as D1Database["prepare"];
 		env = { ...env, API_RATE_LIMIT: { limit: async () => ({ success: false }) } } as unknown as Env;
-		const response = await app.fetch(new Request(`${ORIGIN}/api/user_info`, { headers: { Authentication: "mfa_whatever" } }), env);
+		const response = await app.fetch(new Request(`${ORIGIN}/api/user_info`, { headers: { Authentication: "af_whatever" } }), env);
 		expect(response.status).toBe(429);
 		expect(lookups).toBe(0);
 	});

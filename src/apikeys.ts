@@ -7,10 +7,10 @@ import { newId, now } from "./db";
 
 export type ApiKeyRow = { id: string; name: string; prefix: string; created_at: number; last_used_at: number | null };
 
-const KEY_PREFIX = "mfa_";
+const KEY_PREFIX = "af_";
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
-async function sha256Hex(text: string): Promise<string> {
+export async function sha256Hex(text: string): Promise<string> {
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
 	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }

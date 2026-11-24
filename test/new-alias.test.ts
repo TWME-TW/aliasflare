@@ -9,7 +9,7 @@ let env: Env;
 
 beforeEach(async () => {
 	db = testDb();
-	env = { DB: db, SIGNING_SECRET: TEST_SECRET, REVERSE_ALIAS_DOMAIN: "r.me.test" } as unknown as Env;
+	env = { DB: db, SIGNING_SECRET: TEST_SECRET } as unknown as Env;
 	await saveSettings(db, { ...(await loadSettings(db)), aliasDomains: ["me.test", "other.test"], defaultDestination: "owner@gmail.test", customSuffix: "random_string" });
 });
 

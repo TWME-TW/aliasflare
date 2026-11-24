@@ -1,5 +1,5 @@
 /**
- * Alias operations shared by the SimpleLogin and addy.io APIs. In mailflare-alias an alias is a
+ * Alias operations shared by the SimpleLogin and addy.io APIs. In aliasflare an alias is a
  * Mailflare address; one created here starts receiving mail once Mailflare accepts mail for it,
  * which is why new aliases may only use the configured alias domains (catch-all in Mailflare).
  */
@@ -217,11 +217,11 @@ export function cleanPrefix(prefix: string): string {
 export type CreateAliasInput = { localPart: string; domain: string; note?: string | null; name?: string | null; destination?: string | null };
 
 /** Creates an alias, or restores a deleted one with the same address. */
-export async function createAlias(db: D1Database, settings: Settings, reverseDomain: string, input: CreateAliasInput): Promise<AliasView> {
+export async function createAlias(db: D1Database, settings: Settings, input: CreateAliasInput): Promise<AliasView> {
 	const domain = input.domain.trim().toLowerCase();
 	const localPart = input.localPart.trim().toLowerCase();
-	if (!settings.aliasDomains.includes(domain) || domain === reverseDomain) {
-		throw new ClientError(400, "This domain cannot be used for new aliases. Add it under Alias domains in the mailflare-alias settings.");
+	if (!settings.aliasDomains.includes(domain)) {
+		throw new ClientError(400, "This domain cannot be used for new aliases. Add it under Alias domains in the aliasflare settings.");
 	}
 	if (!LOCAL_PART.test(localPart) || localPart.includes("..")) throw new ClientError(400, "The alias contains characters that are not allowed.");
 	const address = normalizeEmail(`${localPart}@${domain}`);
@@ -256,14 +256,13 @@ export async function createAlias(db: D1Database, settings: Settings, reverseDom
 export async function createRandomAlias(
 	db: D1Database,
 	settings: Settings,
-	reverseDomain: string,
 	input: { domain?: string; format?: string; note?: string | null; destination?: string | null },
 ): Promise<AliasView> {
 	const domain = input.domain || settings.aliasDomains[0];
-	if (!domain) throw new ClientError(400, "No alias domain is set up. Add one under Alias domains in the mailflare-alias settings.");
+	if (!domain) throw new ClientError(400, "No alias domain is set up. Add one under Alias domains in the aliasflare settings.");
 	for (let attempt = 0; attempt < 5; attempt += 1) {
 		try {
-			return await createAlias(db, settings, reverseDomain, { localPart: randomLocalPart(input.format || settings.randomAliasFormat), domain, note: input.note, destination: input.destination });
+			return await createAlias(db, settings, { localPart: randomLocalPart(input.format || settings.randomAliasFormat), domain, note: input.note, destination: input.destination });
 		} catch (error) {
 			if (!(error instanceof ClientError && error.status === 409)) throw error;
 		}

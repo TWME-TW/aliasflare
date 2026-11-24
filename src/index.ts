@@ -14,14 +14,15 @@ import {
 } from "./auth";
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
-import { setUpCloudflare, type SetupStep } from "./cloudflare";
+import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api } from "./compat/api";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias, randomSuffix } from "./compat/aliases";
-import { ConfigError, DOMAIN_PATTERN, envOverrides, loadConfig, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
+import { ConfigError, DOMAIN_PATTERN, envOverrides, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
+import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
-import { domainOf, extractEmail, normalizeEmail, reverseAddress } from "./format";
-import { handleInbound, type InboundEvent } from "./forward";
+import { domainOf, extractEmail, normalizeEmail } from "./format";
+import { handleDirectInbound, handleInbound, type InboundEvent } from "./forward";
 import {
 	addSimpleLoginContacts,
 	defaultImportDomains,
@@ -88,7 +89,7 @@ app.use("*", async (c, next) => {
 	} catch (error) {
 		if (!(error instanceof ConfigError)) throw error;
 		console.error("Configuration error:", error.message);
-		return c.text(`mailflare-alias cannot start: ${error.message}. Fix the Worker's variables or secrets and deploy again.`, 500);
+		return c.text(`aliasflare cannot start: ${error.message}. Fix the Worker's variables or secrets and deploy again.`, 500);
 	}
 	const chosen = getCookie(c, LANG_COOKIE);
 	c.set("t", translator(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language"))));
@@ -170,7 +171,7 @@ async function rateLimited(c: C): Promise<boolean> {
 
 const jsonError = (c: C, key: MessageKey, status: 400 | 401 | 403 | 409 | 429) => c.json({ error: c.get("t")(key) }, status);
 
-app.get("/health", (c) => c.json({ ok: missingConnection(c.get("config")).length === 0 }));
+app.get("/health", async (c) => c.json({ ok: missingConnection(await loadSettings(c.env.DB)).length === 0 }));
 
 app.get("/assets/passkey.js", (c) => {
 	c.header("Cache-Control", "public, max-age=300");
@@ -222,8 +223,7 @@ app.route("/api", api);
 // Mailflare webhook: message.inbound → forward to the alias's destination.
 app.post("/webhook", async (c) => {
 	const config = c.get("config");
-	const missing = missingConnection(config);
-	if (missing.length) return c.json({ error: `Not configured: ${missing.join(", ")}` }, 503);
+	if (!mailflareReady(config)) return c.json({ error: "Mailflare is not configured" }, 503);
 	const body = await readLimited(c.req.raw, MAX_WEBHOOK_BYTES);
 	if (body === null) return c.json({ error: "Payload too large" }, 413);
 	if (!(await verifyWebhookSignature(config.webhookSecret, body, c.req.header("X-Email-Platform-Signature") ?? null))) {
@@ -367,6 +367,16 @@ app.post("/logout", async (c) => {
 // dashboard route is protected without being listed anywhere.
 app.use("*", requireAdmin);
 
+app.use("*", async (c, next) => {
+	const config = c.get("config");
+	const origin = new URL(c.req.url).origin;
+	if (!config.publicUrl && c.req.method === "GET" && config.siteOrigin !== origin && validOrigin(origin)) {
+		await saveConfig(c.env.DB, { siteOrigin: origin });
+		c.set("config", { ...config, siteOrigin: origin });
+	}
+	await next();
+});
+
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
 export type AliasFilter = (typeof ALIAS_FILTERS)[number];
 const ALIASES_PER_PAGE = 100;
@@ -415,7 +425,7 @@ app.get("/", async (c) => {
 		)
 		.all<ActivityItem>();
 	return c.html(
-		dashboardPage(c.get("t"), { settings, aliases, list, activity, missing: missingConnection(c.get("config")), notice: noticeFrom(c) }),
+		dashboardPage(c.get("t"), { settings, aliases, list, activity, missing: missingConnection(settings), notice: noticeFrom(c) }),
 	);
 });
 
@@ -423,7 +433,6 @@ app.get("/settings", async (c) =>
 	c.html(
 		settingsPage(c.get("t"), {
 			settings: await loadSettings(c.env.DB),
-			reverseDomain: c.get("config").reverseDomain,
 			origin: publicOrigin(c),
 			notice: noticeFrom(c),
 		}),
@@ -445,15 +454,18 @@ app.post("/settings", async (c) => {
 			? c.json({ ok, message: c.get("t")(key, params), reload: localeChanged }, ok ? 200 : 400)
 			: redirectWithNotice(c, "/settings", key, params);
 	const destination = typeof form.defaultDestination === "string" ? form.defaultDestination.trim() : "";
-	const reverseDomain = c.get("config").reverseDomain;
-	if (destination && !extractEmail(destination)) return reply("notice.badDestination", false);
-	if (destination && reverseDomain && domainOf(destination) === reverseDomain) return reply("notice.destinationOnReverse", false);
-	const aliasDomains = (typeof form.aliasDomains === "string" ? form.aliasDomains : "")
-		.split(/[\s,]+/)
-		.map((domain) => domain.trim().toLowerCase())
-		.filter(Boolean);
-	const badDomain = aliasDomains.find((domain) => !DOMAIN_PATTERN.test(domain) || domain === reverseDomain);
+	const aliasDomains = [
+		...new Set(
+			(typeof form.aliasDomains === "string" ? form.aliasDomains : "")
+				.split(/[\s,]+/)
+				.map((domain) => domain.trim().toLowerCase().replace(/\.$/, ""))
+				.filter(Boolean),
+		),
+	];
+	const badDomain = aliasDomains.find((domain) => !DOMAIN_PATTERN.test(domain)) ?? clashingDomain(aliasDomains);
 	if (badDomain) return reply("notice.badAliasDomain", false, { value: badDomain });
+	if (destination && !extractEmail(destination)) return reply("notice.badDestination", false);
+	if (destination && isOwnAddress(extractEmail(destination)!, aliasDomains)) return reply("notice.destinationOnReverse", false);
 	const settings = normalizeSettings({
 		simpleloginApi: form.simpleloginApi === "1",
 		addyApi: form.addyApi === "1",
@@ -475,16 +487,18 @@ app.post("/settings", async (c) => {
 	return reply("notice.settingsSaved", true);
 });
 
-function renderConnection(c: C, config: AppConfig, setup?: SetupStep[]) {
+async function renderConnection(c: C, config: AppConfig, setup?: DomainSetup[]) {
+	const settings = await loadSettings(c.env.DB);
 	return c.html(
 		connectionPage(c.get("t"), {
-			values: { mailflareUrl: config.mailflareUrl, reverseDomain: config.reverseDomain, publicUrl: config.publicUrl },
+			values: { mailflareUrl: config.mailflareUrl, publicUrl: config.publicUrl },
 			hasApiKey: !!config.mailflareApiKey,
 			hasWebhookSecret: !!config.webhookSecret,
+			mailflare: mailflareReady(config),
 			fixed: envOverrides(c.env),
 			webhookUrl: `${publicOrigin(c)}/webhook`,
-			missing: missingConnection(config),
-			cloudflare: { hasToken: envOverrides(c.env).has("cloudflareApiToken"), workerName: config.workerName, setup },
+			missing: missingConnection(settings),
+			cloudflare: { hasToken: envOverrides(c.env).has("cloudflareApiToken"), workerName: config.workerName, domains: settings.aliasDomains, setup },
 			notice: noticeFrom(c),
 		}),
 	);
@@ -492,9 +506,9 @@ function renderConnection(c: C, config: AppConfig, setup?: SetupStep[]) {
 
 app.get("/connection", (c) => renderConnection(c, c.get("config")));
 
-// Sets up Email Routing and Email Sending for the reverse-alias domain with the stored token.
+// Sets up Email Routing and Email Sending for the chosen alias domains.
 app.post("/connection/cloudflare", async (c) => {
-	const form = await c.req.parseBody();
+	const form = await c.req.parseBody({ all: true });
 	const fixed = envOverrides(c.env);
 	const text = (key: string) => (typeof form[key] === "string" ? (form[key] as string).trim() : "");
 	const values: Record<string, string> = {};
@@ -509,9 +523,12 @@ app.post("/connection/cloudflare", async (c) => {
 	}
 	await saveConfig(c.env.DB, values);
 	const config = await loadConfig(c.env);
-	if (!config.reverseDomain) return redirectWithNotice(c, "/connection", "notice.needReverseDomain");
+	const settings = await loadSettings(c.env.DB);
+	const chosen = (Array.isArray(form.domains) ? form.domains : [form.domains]).filter((domain): domain is string => typeof domain === "string");
+	const domains = settings.aliasDomains.filter((domain) => chosen.includes(domain));
+	if (!domains.length) return redirectWithNotice(c, "/connection", "notice.needAliasDomains");
 	if (!token) return redirectWithNotice(c, "/connection", "notice.needCloudflareToken");
-	const setup = await setUpCloudflare({ token, reverseDomain: config.reverseDomain, workerName: config.workerName });
+	const setup = await setUpCloudflare({ token, domains, workerName: config.workerName });
 	return renderConnection(c, config, setup);
 });
 
@@ -531,11 +548,6 @@ app.post("/connection", async (c) => {
 		const origin = text("publicUrl") ? validOrigin(text("publicUrl")) : "";
 		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badPublicUrl");
 		values.publicUrl = origin;
-	}
-	if (!fixed.has("reverseDomain")) {
-		const domain = text("reverseDomain").toLowerCase().replace(/\.$/, "");
-		if (domain && !DOMAIN_PATTERN.test(domain)) return redirectWithNotice(c, "/connection", "notice.badDomain");
-		values.reverseDomain = domain;
 	}
 	// Secret fields are write-only: blank keeps the stored value.
 	for (const key of ["mailflareApiKey", "webhookSecret"] as const) {
@@ -599,7 +611,6 @@ app.post("/import/:source", async (c) => {
 		);
 	if (!domains.length) return render({ error: t("imp.err.noDomains") });
 
-	const reverseDomain = c.get("config").reverseDomain;
 	let server = "";
 	let aliases: ImportedAlias[];
 	let selection: Selection;
@@ -611,7 +622,7 @@ app.post("/import/:source", async (c) => {
 			if (url.protocol !== "https:") return render({ error: t("imp.err.badServer") });
 			server = url.origin;
 			aliases = await source.fetch(server, apiKey);
-			selection = selectByDomain(aliases, domains, reverseDomain);
+			selection = selectByDomain(aliases, domains);
 			// Contacts are fetched only for the aliases being imported, one list per alias.
 			if (sourceName === "simplelogin" && form.contacts === "1") await addSimpleLoginContacts(server, apiKey, selection.chosen);
 		} else {
@@ -619,7 +630,7 @@ app.post("/import/:source", async (c) => {
 			if (!(file instanceof File) || file.size === 0) return render({ error: t("imp.err.empty") });
 			if (file.size > 5_000_000) return render({ error: t("imp.err.format") });
 			aliases = parseAliasCsv(await file.text());
-			selection = selectByDomain(aliases, domains, reverseDomain);
+			selection = selectByDomain(aliases, domains);
 		}
 	} catch (error) {
 		if (error instanceof TypeError) return render({ error: t("imp.err.badServer") });
@@ -630,7 +641,7 @@ app.post("/import/:source", async (c) => {
 				: t(error.reason === "auth" ? "imp.err.auth" : error.reason === "empty" ? "imp.err.empty" : "imp.err.format");
 		return render({ error: message });
 	}
-	const result = await importAliases(c.env.DB, settings, reverseDomain, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
+	const result = await importAliases(c.env.DB, settings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
 		keepDestinations: form.destinations === "1",
 	});
 	console.log(JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length, newDestinations: result.newDestinations.length }));
@@ -709,8 +720,8 @@ app.post("/aliases/bulk", async (c) => {
 	if (action === "destination") {
 		destination = value ? extractEmail(value) : null;
 		if (value && !destination) return done("notice.badDestination");
-		const reverseDomain = c.get("config").reverseDomain;
-		if (destination && ((reverseDomain && domainOf(destination) === reverseDomain) || ids.includes(destination))) return done("notice.loop");
+		const own = [...(await loadSettings(db)).aliasDomains, ...ids.map(domainOf)];
+		if (destination && (isOwnAddress(destination, own) || ids.includes(destination))) return done("notice.loop");
 	}
 	const timestamp = now();
 	const statement = (sql: string, ...bind: unknown[]) => ids.map((id) => db.prepare(sql).bind(...bind, id));
@@ -755,15 +766,14 @@ app.post("/aliases/:address/mode", async (c) => {
 app.post("/aliases/new", async (c) => {
 	const db = c.env.DB;
 	const settings = await loadSettings(db);
-	const reverseDomain = c.get("config").reverseDomain;
 	const form = await c.req.parseBody();
 	const field = (name: string, max: number) => (typeof form[name] === "string" ? (form[name] as string).trim().slice(0, max) : "");
 	const domain = field("domain", 253).toLowerCase();
-	if (!settings.aliasDomains.includes(domain) || domain === reverseDomain) return redirectWithNotice(c, "/", "notice.newBadDomain");
+	if (!settings.aliasDomains.includes(domain)) return redirectWithNotice(c, "/", "notice.newBadDomain");
 	const rawDestination = field("destination", 254);
 	const destination = rawDestination ? extractEmail(rawDestination) : null;
 	if (rawDestination && !destination) return redirectWithNotice(c, "/", "notice.badDestination");
-	if (destination && ((reverseDomain && domainOf(destination) === reverseDomain) || settings.aliasDomains.includes(domainOf(destination)))) {
+	if (destination && isOwnAddress(destination, settings.aliasDomains)) {
 		return redirectWithNotice(c, "/", "notice.loop");
 	}
 	const note = field("note", 500) || null;
@@ -771,7 +781,7 @@ app.post("/aliases/new", async (c) => {
 	try {
 		let alias;
 		if (!prefix) {
-			alias = await createRandomAlias(db, settings, reverseDomain, { domain, note, destination });
+			alias = await createRandomAlias(db, settings, { domain, note, destination });
 		} else {
 			const cleaned = cleanPrefix(prefix);
 			if (!cleaned || cleaned !== prefix.toLowerCase()) return redirectWithNotice(c, "/", "notice.newBadPrefix");
@@ -780,7 +790,7 @@ app.post("/aliases/new", async (c) => {
 			for (let attempt = 0; ; attempt += 1) {
 				try {
 					const localPart = form.suffix ? `${cleaned}${randomSuffix(settings.customSuffix)}` : cleaned;
-					alias = await createAlias(db, settings, reverseDomain, { localPart, domain, note, destination });
+					alias = await createAlias(db, settings, { localPart, domain, note, destination });
 					break;
 				} catch (error) {
 					if (!(error instanceof ClientError && error.status === 409) || attempt + 1 >= tries) throw error;
@@ -802,8 +812,7 @@ app.post("/aliases/:address/destination", async (c) => {
 	const raw = typeof form.destination === "string" ? form.destination.trim() : "";
 	const destination = raw ? extractEmail(raw) : null;
 	if (raw && !destination) return redirectWithNotice(c, "/", "notice.badDestination");
-	const reverseDomain = c.get("config").reverseDomain;
-	if (destination && ((reverseDomain && domainOf(destination) === reverseDomain) || destination === address)) {
+	if (destination && (isOwnAddress(destination, [...(await loadSettings(c.env.DB)).aliasDomains, domainOf(address)]) || destination === address)) {
 		return redirectWithNotice(c, "/", "notice.loop");
 	}
 	await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?").bind(destination, now(), address).run();
@@ -831,21 +840,19 @@ app.get("/aliases/:address", async (c) => {
 	)
 		.bind(alias.address)
 		.all<ContactRow>();
-	return c.html(aliasPage(c.get("t"), { alias, contacts, reverseDomain: c.get("config").reverseDomain, notice: noticeFrom(c) }));
+	return c.html(aliasPage(c.get("t"), { alias, contacts, notice: noticeFrom(c) }));
 });
 
 app.post("/aliases/:address/contacts", async (c) => {
 	const alias = await getAlias(c.env.DB, normalizeEmail(c.req.param("address")));
 	if (!alias) return c.notFound();
-	const reverseDomain = c.get("config").reverseDomain;
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
-	if (!reverseDomain) return redirectWithNotice(c, base, "notice.needReverseDomain");
 	const form = await c.req.parseBody();
-	const email = extractEmail(typeof form.email === "string" ? form.email : "");
-	if (!email || domainOf(email) === reverseDomain) return redirectWithNotice(c, base, "notice.badContact");
 	const settings = await loadSettings(c.env.DB);
+	const email = extractEmail(typeof form.email === "string" ? form.email : "");
+	if (!email || isOwnAddress(email, [...settings.aliasDomains, domainOf(alias.address)])) return redirectWithNotice(c, base, "notice.badContact");
 	const contact = await ensureContact(c.env.DB, alias.address, email, null, settings.includeSenderInReverseAlias);
-	return redirectWithNotice(c, base, "notice.contactCreated", { reverse: reverseAddress(contact.reverse_local, reverseDomain), email });
+	return redirectWithNotice(c, base, "notice.contactCreated", { reverse: contactReverseAddress(contact), email });
 });
 
 app.post("/aliases/:address/contacts/:id/block", async (c) => {
@@ -875,10 +882,17 @@ export default {
 			message.setReject("This address is temporarily unavailable");
 			return;
 		}
-		if (missingConnection(config).length) {
-			message.setReject("This address is temporarily unavailable");
+		// An alias domain may itself start with "r." (when its parent is not an alias domain),
+		// so alias domains are matched first.
+		const domain = domainOf(normalizeEmail(message.to));
+		const settings = await loadSettings(env.DB);
+		if (!settings.aliasDomains.includes(domain)) {
+			if (aliasDomainOfReverse(domain)) await handleReverseAliasMail(message, env, config);
+			else message.setReject("This address does not exist");
 			return;
 		}
-		await handleReverseAliasMail(message, env, config);
+		const outcome = await handleDirectInbound(message, env, config);
+		// A failure the next attempt may fix: throwing makes the sending server try again later.
+		if (outcome.status >= 500) throw new Error(`Forwarding failed: ${outcome.result}`);
 	},
 } satisfies ExportedHandler<Env>;

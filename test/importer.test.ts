@@ -158,7 +158,7 @@ describe("toTimestamp", () => {
 describe("selectByDomain", () => {
 	it("keeps chosen domains, removes duplicates and counts the rest", () => {
 		const rows = parseAliasCsv("alias\nA@Me.com\na@me.com\nx@simplelogin.com\ny@simplelogin.com\nr@r.me.com");
-		const { chosen, skippedDomains } = selectByDomain(rows, ["me.com", "r.me.com"], "r.me.com");
+		const { chosen, skippedDomains } = selectByDomain(rows, ["me.com", "r.me.com"]);
 		expect(chosen.map((alias) => alias.email)).toEqual(["a@me.com"]);
 		expect(skippedDomains).toEqual([
 			{ domain: "simplelogin.com", count: 2 },

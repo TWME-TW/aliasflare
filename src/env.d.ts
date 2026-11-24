@@ -4,7 +4,6 @@ interface Env {
 	MAILFLARE_URL?: string;
 	MAILFLARE_API_KEY?: string;
 	WEBHOOK_SECRET?: string;
-	REVERSE_ALIAS_DOMAIN?: string;
 	SIGNING_SECRET?: string;
 	/** Public origin of this Worker for links in forwarded mail. */
 	PUBLIC_URL?: string;
@@ -12,7 +11,7 @@ interface Env {
 	SETUP_CODE?: string;
 	/** Token for setting up Email Routing and Email Sending from the dashboard. */
 	CLOUDFLARE_API_TOKEN?: string;
-	/** Name of this Worker, when it is not "mailflare-alias". */
+	/** Name of this Worker, when it is not "aliasflare". */
 	WORKER_NAME?: string;
 	/** Optional service binding to the Mailflare Worker, used instead of its public URL. */
 	MAILFLARE_SERVICE?: Fetcher;

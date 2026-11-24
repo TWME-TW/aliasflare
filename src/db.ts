@@ -63,7 +63,7 @@ export type ContactRow = {
 
 export type ForwardRow = {
 	id: string;
-	mailflare_message_id: string;
+	inbound_id: string;
 	alias_address: string;
 	contact_id: string | null;
 	original_message_id: string | null;

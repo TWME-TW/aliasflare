@@ -11,6 +11,7 @@
  */
 import { newId, now } from "./db";
 import { domainOf, extractEmail, makeReverseLocal, normalizeEmail } from "./format";
+import { aliasDomainOfReverse, isReverseDomainOf } from "./domains";
 import type { Settings } from "./settings";
 
 export type ImportSource = "simplelogin" | "addy" | "csv";
@@ -124,7 +125,7 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 		try {
 			// No redirects: the key travels in a custom header that fetch would carry to any host.
 			response = await fetch(url, {
-				headers: { Accept: "application/json", "User-Agent": "mailflare-alias-import", ...headers },
+				headers: { Accept: "application/json", "User-Agent": "aliasflare-import", ...headers },
 				redirect: "error",
 				signal: AbortSignal.timeout(20_000),
 			});
@@ -369,14 +370,14 @@ export async function defaultImportDomains(db: D1Database, settings: Settings): 
 export type Selection = { chosen: ImportedAlias[]; skippedDomains: ImportResult["skippedDomains"] };
 
 /** Splits aliases into those on the chosen domains (deduplicated) and counts of the rest by domain. */
-export function selectByDomain(aliases: ImportedAlias[], domains: string[], reverseDomain: string): Selection {
+export function selectByDomain(aliases: ImportedAlias[], domains: string[]): Selection {
 	const wanted = new Set(domains.map((domain) => domain.toLowerCase()));
 	const skipped = new Map<string, number>();
 	const unique = new Map<string, ImportedAlias>();
 	for (const alias of aliases) {
 		const email = normalizeEmail(alias.email);
 		const domain = domainOf(email);
-		if (!wanted.has(domain) || domain === reverseDomain) skipped.set(domain, (skipped.get(domain) ?? 0) + 1);
+		if (!wanted.has(domain) || wanted.has(aliasDomainOfReverse(domain) ?? "")) skipped.set(domain, (skipped.get(domain) ?? 0) + 1);
 		else unique.set(email, { ...alias, email });
 	}
 	return {
@@ -400,7 +401,6 @@ function detailsJson(details: Record<string, unknown>): string | null {
 export async function importAliases(
 	db: D1Database,
 	settings: Settings,
-	reverseDomain: string,
 	source: ImportSource,
 	selection: Selection,
 	found: number,
@@ -414,7 +414,7 @@ export async function importAliases(
 		.prepare("SELECT DISTINCT destination FROM aliases WHERE destination IS NOT NULL AND imported_from IS NULL AND deleted_at IS NULL")
 		.all<{ destination: string }>();
 	for (const row of used) known.add(row.destination.toLowerCase());
-	const ownDomain = (domain: string) => domain === reverseDomain || settings.aliasDomains.includes(domain);
+	const ownDomain = (domain: string) => settings.aliasDomains.includes(domain) || isReverseDomainOf(domain, settings.aliasDomains);
 	const newDestinations = new Set<string>();
 	const destinationFor = (alias: ImportedAlias): string | null => {
 		const destination = alias.destination?.toLowerCase();
@@ -498,7 +498,7 @@ export async function importAliases(
 	let contacts = 0;
 	for (const alias of list) {
 		for (const contact of alias.contacts ?? []) {
-			if (domainOf(contact.email) === reverseDomain) continue;
+			if (isReverseDomainOf(domainOf(contact.email), [...settings.aliasDomains, domainOf(alias.email)])) continue;
 			contacts += 1;
 			statements.push(
 				db

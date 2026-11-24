@@ -63,7 +63,8 @@ export async function resolveLink(
 		action === "preserve_original"
 			? unsubscribePlan(loaded.forward, loaded.contactEmail, {
 					blockedHosts: [...blockedHosts, ...[config.mailflareUrl, config.publicUrl].filter(Boolean).map((url) => new URL(url).hostname)],
-					ownDomains: [config.reverseDomain, ...settings.aliasDomains].filter(Boolean),
+					// An alias domain also covers its reverse-alias domain r.<domain>.
+					ownDomains: [...settings.aliasDomains, loaded.forward.alias_address.split("@").pop() ?? ""].filter(Boolean),
 				})
 			: null;
 	return { ...loaded, action, kind, plan, token };

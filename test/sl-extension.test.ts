@@ -15,7 +15,7 @@ let key: string;
 
 beforeEach(async () => {
 	const db = testDb();
-	env = { DB: db, SIGNING_SECRET: TEST_SECRET, REVERSE_ALIAS_DOMAIN: "r.me.test" } as unknown as Env;
+	env = { DB: db, SIGNING_SECRET: TEST_SECRET } as unknown as Env;
 	await saveSettings(db, { ...(await loadSettings(db)), simpleloginApi: true, aliasDomains: ["me.test"], defaultDestination: "owner@gmail.test" });
 	key = (await createApiKey(db, "extension")).key;
 	await db.prepare("INSERT INTO aliases (address, mailbox_id, num_id, uid, created_at, updated_at) VALUES ('shop@me.test', 'mb', 1, 'u1', 1, 1)").run();

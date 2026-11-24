@@ -13,10 +13,14 @@ import {
 	reverseLocalOf,
 	type Replacement,
 } from "./format";
+import { mailflareReady } from "./config";
+import { aliasDomainOfReverse } from "./domains";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings } from "./settings";
 
+/** Mailflare's limit per message. */
 const MAX_ATTACHMENTS = 10;
+const MAX_SENDING_ATTACHMENTS = 50;
 const MAX_REFERENCES = 10;
 
 /**
@@ -110,9 +114,9 @@ export function stripSignedLinks(body: string): string {
 
 /** Drops the forwarding banner from quoted HTML (where the mail client kept its attribute). */
 async function removeBanner(html: string): Promise<string> {
-	if (typeof HTMLRewriter === "undefined" || !html.includes("data-mailflare-alias-banner")) return html;
+	if (typeof HTMLRewriter === "undefined" || !html.includes("data-aliasflare-banner")) return html;
 	return new HTMLRewriter()
-		.on("[data-mailflare-alias-banner]", {
+		.on("[data-aliasflare-banner]", {
 			element(element) {
 				element.remove();
 			},
@@ -131,19 +135,22 @@ function headerSection(raw: Uint8Array): string {
 /**
  * Handles mail to a reverse alias: the user's reply (or new message) to a correspondent.
  * It must come from the alias's destination address with a DMARC pass, and is sent
- * through Mailflare as the alias so the correspondent never sees the real address.
+ * as the alias (through Mailflare or Email Sending) so the correspondent never sees the real address.
  */
 export async function handleReverseAliasMail(message: ForwardableEmailMessage, env: Env, config: AppConfig): Promise<void> {
 	const db = env.DB;
-	const reverseDomain = config.reverseDomain;
 	const recipient = normalizeEmail(message.to);
-	if (domainOf(recipient) !== reverseDomain) {
+	const reverseDomain = domainOf(recipient);
+	const aliasDomain = aliasDomainOfReverse(reverseDomain);
+	if (!aliasDomain) {
 		message.setReject("This address does not exist");
 		return;
 	}
 	const reverseLocal = reverseLocalOf(recipient);
 	const contact = reverseLocal ? await getContactByReverseLocal(db, reverseLocal) : null;
-	if (!contact) {
+	// A reverse alias only works on its own alias's domain, so one domain's reverse alias
+	// cannot be used through another domain (and nothing ties the two domains together).
+	if (!contact || domainOf(contact.alias_address) !== aliasDomain) {
 		message.setReject("This address does not exist");
 		return;
 	}
@@ -210,35 +217,66 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		.map((id) => toOriginal.get(id) ?? id)
 		.slice(-MAX_REFERENCES);
 
-	if (email.attachments.length > MAX_ATTACHMENTS) {
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `${email.attachments.length} attachments; Mailflare accepts ${MAX_ATTACHMENTS}` });
-		message.setReject(`Too many attachments: Mailflare sends at most ${MAX_ATTACHMENTS} per message`);
+	// An alias Mailflare receives also sends through Mailflare, so the reply is kept in its
+	// mailbox there. Every other alias sends with Cloudflare Email Sending.
+	const viaMailflare = !!alias.mailbox_id && mailflareReady(config);
+	const limit = viaMailflare ? MAX_ATTACHMENTS : MAX_SENDING_ATTACHMENTS;
+	if (email.attachments.length > limit) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `${email.attachments.length} attachments; at most ${limit}` });
+		message.setReject(`Too many attachments: at most ${limit} per message`);
 		return;
 	}
-	const attachments = email.attachments.map((attachment, index) => ({
-		filename: attachment.filename || `attachment-${index + 1}`,
-		type: attachment.mimeType || "application/octet-stream",
-		contentBase64: bytesToBase64(new Uint8Array(attachment.content as ArrayBuffer)),
-	}));
+	const subject = email.subject?.trim() || "(no subject)";
+	const name = alias.name?.replace(/["\\\r\n<>]/g, "") || "";
 
 	try {
-		await sendViaMailflare(mailflareConfig(config), {
-			mailboxId: alias.mailbox_id,
-			from: alias.name ? `"${alias.name.replace(/["\\\r\n<>]/g, "")}" <${contact.alias_address}>` : contact.alias_address,
-			to: [contact.email],
-			subject: email.subject?.trim() || "(no subject)",
-			...(html ? { html } : {}),
-			...(text ? { text } : {}),
-			...(inReplyTo ? { inReplyTo } : {}),
-			...(references.length ? { references } : {}),
-			...(attachments.length ? { attachments } : {}),
-		});
+		if (viaMailflare) {
+			await sendViaMailflare(mailflareConfig(config), {
+				mailboxId: alias.mailbox_id,
+				from: name ? `"${name}" <${contact.alias_address}>` : contact.alias_address,
+				to: [contact.email],
+				subject,
+				...(html ? { html } : {}),
+				...(text ? { text } : {}),
+				...(inReplyTo ? { inReplyTo } : {}),
+				...(references.length ? { references } : {}),
+				...(email.attachments.length
+					? {
+							attachments: email.attachments.map((attachment, index) => ({
+								filename: attachment.filename || `attachment-${index + 1}`,
+								type: attachment.mimeType || "application/octet-stream",
+								contentBase64: bytesToBase64(new Uint8Array(attachment.content as ArrayBuffer)),
+							})),
+						}
+					: {}),
+			});
+		} else {
+			const headers: Record<string, string> = {};
+			if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
+			if (references.length) headers.References = references.join(" ");
+			await env.EMAIL.send({
+				from: name ? { name, email: contact.alias_address } : contact.alias_address,
+				to: contact.email,
+				subject,
+				headers,
+				...(html ? { html } : {}),
+				text: text ?? (html ? undefined : ""),
+				attachments: email.attachments.map((attachment, index) => {
+					const filename = attachment.filename || `attachment-${index + 1}`;
+					const type = attachment.mimeType || "application/octet-stream";
+					const contentId = attachment.contentId?.replace(/^<|>$/g, "");
+					return attachment.disposition === "inline" && contentId
+						? { disposition: "inline" as const, contentId, filename, type, content: attachment.content as ArrayBuffer }
+						: { disposition: "attachment" as const, filename, type, content: attachment.content as ArrayBuffer };
+				}),
+			});
+		}
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : String(error);
 		console.error("Reply failed", contact.id, detail);
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "failed", detail });
 		// Rejecting bounces the message back to the user, who learns it was not delivered.
-		message.setReject("Mailflare could not send this message. Check the mailflare-alias activity log.");
+		message.setReject("This message could not be sent. Check the aliasflare activity log.");
 		return;
 	}
 

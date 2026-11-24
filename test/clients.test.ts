@@ -22,8 +22,8 @@ describe("reverse aliases use plus addressing", () => {
 
 describe("API keys", () => {
 	it("reads SimpleLogin's Authentication header and a Bearer token", () => {
-		expect(presentedKey(headers({ Authentication: "mfa_abc" }))).toBe("mfa_abc");
-		expect(presentedKey(headers({ Authorization: "Bearer mfa_xyz" }))).toBe("mfa_xyz");
+		expect(presentedKey(headers({ Authentication: "af_abc" }))).toBe("af_abc");
+		expect(presentedKey(headers({ Authorization: "Bearer af_xyz" }))).toBe("af_xyz");
 	});
 	it("ignores keys without the prefix", () => {
 		expect(presentedKey(headers({ Authorization: "Bearer sk_live_123" }))).toBeNull();

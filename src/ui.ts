@@ -2,10 +2,11 @@ import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
 import type { AliasRow, BlocklistRow, ContactRow } from "./db";
 import { FORWARD_MODES } from "./db";
-import { reverseAddress, SENDER_FORMATS } from "./format";
+import { contactReverseAddress, reverseDomainFor } from "./domains";
+import { SENDER_FORMATS } from "./format";
 import { LOCALE_LIST, LOCALES, textDirection, type MessageKey, type Translate } from "./i18n";
 import type { ApiKeyRow } from "./apikeys";
-import type { SetupStep } from "./cloudflare";
+import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
 import { CUSTOM_SUFFIXES, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
@@ -70,6 +71,8 @@ input:focus, select:focus, button:focus-visible, a:focus-visible { outline:none;
 td input[type=text], td input[type=email], td select { max-width:240px; min-height:36px; padding:6px 12px; border-radius:10px; }
 .check { display:flex; gap:12px; align-items:flex-start; margin-top:18px; font-weight:500; }
 .check input { margin-top:3px; width:18px; height:18px; flex:none; accent-color:var(--primary); }
+fieldset { border:0; padding:0; margin:18px 0 0; min-width:0; }
+legend { font-weight:600; padding:0; }
 button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 20px; border-radius:999px;
 	border:1px solid var(--line); background:var(--card); color:var(--primary); font:inherit; font-weight:500; cursor:pointer; white-space:nowrap; }
 button:hover { background:var(--soft); }
@@ -200,7 +203,7 @@ export function page(title: string, body: Html, options: PageOptions): Html {
 	const { t } = options;
 	const link = (href: string, key: MessageKey, name: keyof typeof ICONS) =>
 		html`<a href="${href}" ${options.current === href ? html`aria-current="page"` : ""}>${icon(name)}<span>${t(key)}</span></a>`;
-	const brand = html`<a class="brand" href="/">${LOGO}<span>mailflare-alias</span></a>`;
+	const brand = html`<a class="brand" href="/">${LOGO}<span>aliasflare</span></a>`;
 	return html`<!doctype html>
 <html lang="${t.locale}" dir="${textDirection(t.locale)}">
 <head>
@@ -210,7 +213,7 @@ export function page(title: string, body: Html, options: PageOptions): Html {
 <meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
 <meta name="theme-color" content="#202124" media="(prefers-color-scheme: dark)" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-<title>${title} · mailflare-alias</title>
+<title>${title} · aliasflare</title>
 <link rel="stylesheet" href="/assets/app.css?v=${STYLE_VERSION}" />
 </head>
 <body>
@@ -218,9 +221,9 @@ ${options.nav
 	? html`<header class="topbar">${brand}<span class="spacer"></span>
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
-<nav class="sidebar" aria-label="mailflare-alias">
+<nav class="sidebar" aria-label="aliasflare">
 ${link("/", "nav.aliases", "aliases")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
-<p class="powered">mailflare-alias · <a href="https://github.com/TWME-TW/mailflare-alias">GitHub</a></p>
+<p class="powered">aliasflare · <a href="https://github.com/TWME-TW/aliasflare">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
 <div class="toast" role="status" aria-live="polite" data-toast hidden></div>
@@ -244,7 +247,7 @@ export function loginPage(t: Translate): Html {
 	return page(
 		t("login.title"),
 		html`<main class="center"><section>
-<h1>mailflare-alias</h1>
+<h1>aliasflare</h1>
 <form data-passkey="login">
 <p class="help">${t("login.help")}</p>
 <p><button class="primary">${t("login.button")}</button></p>
@@ -376,7 +379,7 @@ export function dashboardPage(
 		html`<main>
 ${noticeBox(notice)}
 ${missing.length
-	? html`<p class="notice">${t("dash.notConnected", { missing: missing.map((key) => t(key)).join(", ") })} <a href="/connection">${t("dash.finishConnection")}</a></p>`
+	? html`<p class="notice">${t("dash.notConnected", { missing: missing.map((key) => t(key)).join(", ") })} <a href="/settings">${t("dash.finishConnection")}</a></p>`
 	: ""}
 ${!settings.defaultDestination ? html`<p class="notice">${t("dash.setDestination")} <a href="/settings">${t("dash.goToSettings")}</a></p>` : ""}
 <section>
@@ -453,7 +456,7 @@ ${activity.map(
 	);
 }
 
-export function settingsPage(t: Translate, input: { settings: Settings; reverseDomain: string; origin: string; notice?: string }): Html {
+export function settingsPage(t: Translate, input: { settings: Settings; origin: string; notice?: string }): Html {
 	const { settings, notice, origin } = input;
 	return page(
 		t("settings.title"),
@@ -535,72 +538,81 @@ ${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.app
 export function connectionPage(
 	t: Translate,
 	input: {
-		values: { mailflareUrl: string; reverseDomain: string; publicUrl: string };
+		values: { mailflareUrl: string; publicUrl: string };
 		hasApiKey: boolean;
 		hasWebhookSecret: boolean;
+		mailflare: boolean;
 		fixed: Set<string>;
 		webhookUrl: string;
 		missing: MessageKey[];
-		cloudflare: { hasToken: boolean; workerName: string; setup?: SetupStep[] };
+		cloudflare: { hasToken: boolean; workerName: string; domains: string[]; setup?: DomainSetup[] };
 		notice?: string;
 	},
 ): Html {
-	const { values, hasApiKey, hasWebhookSecret, fixed, webhookUrl, missing, cloudflare, notice } = input;
+	const { values, hasApiKey, hasWebhookSecret, mailflare, fixed, webhookUrl, missing, cloudflare, notice } = input;
 	const fixedNote = (key: string) => (fixed.has(key) ? html`<p class="help">${t("conn.fixed")}</p>` : "");
 	const disabled = (key: string) => (fixed.has(key) ? "disabled" : "");
 	const secretField = (key: string, label: string, isSet: boolean, help: string) => html`
 <label for="${key}">${label} ${isSet ? html`<span class="pill ok">${t("conn.isSet")}</span>` : html`<span class="pill bad">${t("conn.notSet")}</span>`}</label>
 <input id="${key}" name="${key}" type="password" autocomplete="off" placeholder="${isSet ? t("conn.keepCurrent") : ""}" ${disabled(key)} />
 <p class="help">${help}</p>${fixedNote(key)}`;
+	const example = cloudflare.domains[0] ?? "example.com";
 	return page(
 		t("conn.title"),
 		html`<main>
 ${noticeBox(notice)}
-<section>
-<h2>${t("conn.title")} ${missing.length ? html`<span class="pill bad">${t("conn.incomplete")}</span>` : html`<span class="pill ok">${t("conn.ready")}</span>`}</h2>
-<form method="post" action="/connection">
-<label for="mailflareUrl">${t("conn.mailflareUrl")}</label>
-<input id="mailflareUrl" name="mailflareUrl" type="url" value="${values.mailflareUrl}" placeholder="https://mail.example.com" ${disabled("mailflareUrl")} />
-<p class="help">${t("conn.mailflareUrlHelp")}</p>${fixedNote("mailflareUrl")}
-
-${secretField("mailflareApiKey", t("conn.apiKey"), hasApiKey, t("conn.apiKeyHelp"))}
-${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, t("conn.webhookSecretHelp", { url: webhookUrl }))}
-
-<label for="reverseDomain">${t("conn.reverseDomain")}</label>
-<input id="reverseDomain" name="reverseDomain" type="text" value="${values.reverseDomain}" placeholder="r.example.com" autocapitalize="none" ${disabled("reverseDomain")} />
-<p class="help">${t("conn.reverseDomainHelp")}</p>${fixedNote("reverseDomain")}
-
-<label for="publicUrl">${t("conn.publicUrl")}</label>
-<input id="publicUrl" name="publicUrl" type="url" value="${values.publicUrl}" placeholder="https://alias.example.com" ${disabled("publicUrl")} />
-<p class="help">${t("conn.publicUrlHelp")}</p>${fixedNote("publicUrl")}
-
-<p><button class="primary">${t("conn.saveButton")}</button></p>
-</form>
-</section>
 <section id="cloudflare">
-<h2>${t("cf.title")}</h2>
+<h2>${t("cf.title")} ${missing.length ? html`<span class="pill bad">${t("conn.incomplete")}</span>` : html`<span class="pill ok">${t("conn.ready")}</span>`}</h2>
 <p class="help">${t("cf.help")}</p>
+<p class="notice">${t("cf.warnMx")}</p>
 ${cloudflare.setup
-	? html`<ul class="results">${cloudflare.setup.map(
-			(step) => html`<li><span class="pill ${step.ok ? "ok" : "bad"}">${step.ok ? "✓" : "✕"}</span> <b>${t(`cf.step.${step.step}`)}</b> <span class="muted">${step.detail}</span></li>`,
-		)}</ul>`
+	? cloudflare.setup.map(
+			(result) => html`<h3><code>${result.domain}</code></h3><ul class="results">${result.steps.map(
+				(step) => html`<li><span class="pill ${step.ok ? "ok" : "bad"}">${step.ok ? "✓" : "✕"}</span> <b>${t(`cf.step.${step.step}`)}</b> <span class="muted">${step.detail}</span></li>`,
+			)}</ul>`,
+		)
 	: ""}
 <form method="post" action="/connection/cloudflare">
+<fieldset><legend>${t("cf.domains")}</legend>
+${cloudflare.domains.length
+	? cloudflare.domains.map(
+			(domain) => html`<label class="check"><input type="checkbox" name="domains" value="${domain}" checked /> <code>${domain}</code> <span class="muted">→ ${t("cf.reverseIs", { reverse: reverseDomainFor(domain) })}</span></label>`,
+		)
+	: html`<p class="help">${t("notice.needAliasDomains")} <a href="/settings#clients">${t("nav.settings")} →</a></p>`}
+</fieldset>
 ${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.tokenHelp"))}
 <label for="workerName">${t("cf.workerName")}</label>
 <input id="workerName" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
 <p class="help">${t("cf.workerNameHelp")}</p>${fixedNote("workerName")}
-<p><button class="primary" ${values.reverseDomain ? "" : "disabled"}>${t("cf.run")}</button></p>
-${values.reverseDomain ? "" : html`<p class="help">${t("notice.needReverseDomain")}</p>`}
+<p><button class="primary" ${cloudflare.domains.length ? "" : "disabled"}>${t("cf.run")}</button></p>
 </form>
 <details><summary>${t("conn.checklist")}</summary>
 <ol class="steps">
-<li>${t("conn.step1", { domain: values.reverseDomain || t("conn.theReverseDomain") })}</li>
-<li>${t("conn.step2")}</li>
-<li>${t("conn.step3")}</li>
+<li>${t("conn.step1", { domain: example, worker: cloudflare.workerName })}</li>
+<li>${t("conn.step2", { reverse: reverseDomainFor(example), worker: cloudflare.workerName })}</li>
+<li>${t("conn.step3", { domain: example, reverse: reverseDomainFor(example) })}</li>
+<li>${t("conn.step4")}</li>
 </ol>
 </details>
 </section>
+<form method="post" action="/connection" class="sections">
+<section>
+<h2>${t("conn.publicUrl")}</h2>
+<input id="publicUrl" name="publicUrl" type="url" value="${values.publicUrl}" placeholder="https://alias.example.com" aria-label="${t("conn.publicUrl")}" ${disabled("publicUrl")} />
+<p class="help">${t("conn.publicUrlHelp")}</p>${fixedNote("publicUrl")}
+<p><button class="primary">${t("conn.saveButton")}</button></p>
+</section>
+<section id="mailflare">
+<h2>${t("conn.mailflareTitle")} ${mailflare ? html`<span class="pill ok">${t("conn.isSet")}</span>` : html`<span class="pill">${t("conn.notSet")}</span>`}</h2>
+<p class="help">${t("conn.mailflareHelp")}</p>
+<label for="mailflareUrl">${t("conn.mailflareUrl")}</label>
+<input id="mailflareUrl" name="mailflareUrl" type="url" value="${values.mailflareUrl}" placeholder="https://mail.example.com" ${disabled("mailflareUrl")} />
+<p class="help">${t("conn.mailflareUrlHelp")}</p>${fixedNote("mailflareUrl")}
+${secretField("mailflareApiKey", t("conn.apiKey"), hasApiKey, t("conn.apiKeyHelp"))}
+${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, t("conn.webhookSecretHelp", { url: webhookUrl }))}
+<p><button class="primary">${t("conn.saveButton")}</button></p>
+</section>
+</form>
 </main>`,
 		{ t, nav: true, current: "/connection", path: "/connection" },
 	);
@@ -666,8 +678,8 @@ ${entries.map(
 	);
 }
 
-export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: ContactRow[]; reverseDomain: string; notice?: string }): Html {
-	const { alias, contacts, reverseDomain, notice } = input;
+export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: ContactRow[]; notice?: string }): Html {
+	const { alias, contacts, notice } = input;
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return page(
 		alias.address,
@@ -676,7 +688,7 @@ export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: Cont
 ${noticeBox(notice)}
 <section>
 <h2><code>${alias.address}</code></h2>
-<p class="help">${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ${t(`mode.${alias.forward_mode}`)}</p>
+<p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)}</p>
 <form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <label for="note">${t("alias.note")}</label>
 <div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" /><noscript><button>${t("common.save")}</button></noscript></div>
@@ -696,7 +708,7 @@ ${contacts.length === 0
 ${contacts.map(
 	(contact) => html`<tr>
 <td data-label="${t("alias.colContact")}"><span class="stack">${contact.name ? html`${contact.name}<br />` : ""}<code>${contact.email}</code></span></td>
-<td data-label="${t("alias.colReverse")}"><code>${reverseAddress(contact.reverse_local, reverseDomain)}</code></td>
+<td data-label="${t("alias.colReverse")}"><code>${contactReverseAddress(contact)}</code></td>
 <td data-label="${t("alias.colForwarded")}"><span class="stack">${contact.forward_count}<br /><span class="muted">${when(contact.last_forward_at, t.locale)}</span></span></td>
 <td data-label="${t("alias.colReplied")}"><span class="stack">${contact.reply_count}<br /><span class="muted">${when(contact.last_reply_at, t.locale)}</span></span></td>
 <td data-label=""><form class="inline" method="post" action="${base}/contacts/${contact.id}/block">

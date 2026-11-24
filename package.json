@@ -1,7 +1,7 @@
 {
-	"name": "mailflare-alias",
+	"name": "aliasflare",
 	"version": "0.1.0",
-	"description": "SimpleLogin-style reverse aliases for Mailflare, on Cloudflare Workers.",
+	"description": "SimpleLogin-style email aliases with reverse aliases, on Cloudflare Workers and Email Routing.",
 	"private": true,
 	"type": "module",
 	"license": "MIT",

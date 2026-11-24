@@ -14,7 +14,7 @@ import { randomToken } from "./format";
 
 const CHALLENGE_TTL_SECONDS = 5 * 60;
 const SETUP_CODE_TTL_SECONDS = 60 * 60;
-const RP_NAME = "mailflare-alias";
+const RP_NAME = "aliasflare";
 
 export type PasskeyRow = {
 	id: string;
@@ -93,7 +93,7 @@ export async function issueSetupCode(db: D1Database, replace = false): Promise<{
 		db.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup'"),
 		db.prepare("INSERT INTO auth_challenges (id, purpose, challenge, expires_at) VALUES (?, 'setup', ?, ?)").bind(newId("ch"), code, expiresAt),
 	]);
-	console.log(`[mailflare-alias] Setup code: ${code} (valid for 60 minutes)`);
+	console.log(`[aliasflare] Setup code: ${code} (valid for 60 minutes)`);
 	return { created: true, expiresAt };
 }
 
@@ -118,7 +118,7 @@ export async function registrationOptions(db: D1Database, rp: RelyingParty, purp
 		rpName: RP_NAME,
 		rpID: rp.rpID,
 		userName: "admin",
-		userDisplayName: "mailflare-alias admin",
+		userDisplayName: "aliasflare admin",
 		attestationType: "none",
 		excludeCredentials: existing.map((row) => ({ id: row.id, transports: transportsOf(row) })),
 		authenticatorSelection: { residentKey: "required", userVerification: "required" },

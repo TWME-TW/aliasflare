@@ -4,13 +4,15 @@ import { signToken } from "./crypto";
 import { ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
 import { domainOf, ensureAngle, extractEmail, formatSenderName, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
 import { translator } from "./i18n";
-import { getStoredMessage, mailflareConfig, MailflareError } from "./mailflare";
+import { getStoredMessage, mailflareConfig, MailflareError, MAX_MESSAGE_BYTES, type StoredMessage } from "./mailflare";
+import { sha256Hex } from "./apikeys";
+import { isOwnAddress, isReverseDomainOf, reverseDomainFor } from "./domains";
 import { LINK_TTL_SECONDS } from "./unsubscribe";
 import { firstAuthenticationResults } from "./reply";
 import { loadSettings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
 
-export const LOOP_HEADER = "X-Mailflare-Alias";
+export const LOOP_HEADER = "X-Aliasflare";
 const STALE_PROCESSING_SECONDS = 120;
 const MAX_REFERENCES = 10;
 /** A message that failed this many times is given up on, so Mailflare stops retrying it. */
@@ -37,13 +39,13 @@ async function claim(db: D1Database, messageId: string, aliasAddress: string): P
 	const id = newId("fw");
 	const inserted = await db
 		.prepare(
-			"INSERT INTO forwards (id, mailflare_message_id, alias_address, status, attempts, created_at, updated_at) VALUES (?, ?, ?, 'processing', 1, ?, ?) ON CONFLICT (mailflare_message_id) DO NOTHING",
+			"INSERT INTO forwards (id, inbound_id, alias_address, status, attempts, created_at, updated_at) VALUES (?, ?, ?, 'processing', 1, ?, ?) ON CONFLICT (inbound_id) DO NOTHING",
 		)
 		.bind(id, messageId, aliasAddress, timestamp, timestamp)
 		.run();
 	if (inserted.meta.changes > 0) return { id };
 
-	const existing = await db.prepare("SELECT * FROM forwards WHERE mailflare_message_id = ?").bind(messageId).first<ForwardRow>();
+	const existing = await db.prepare("SELECT * FROM forwards WHERE inbound_id = ?").bind(messageId).first<ForwardRow>();
 	if (!existing) return { status: 409, result: "busy" };
 	if (existing.status === "sent" || existing.status === "skipped") return { status: 200, result: `duplicate (${existing.status})` };
 	if (existing.status === "failed" && (existing.attempts ?? 0) >= MAX_ATTEMPTS) return { status: 200, result: `gave up after ${MAX_ATTEMPTS} attempts` };
@@ -101,15 +103,63 @@ function rawHeaderSection(raw: ArrayBuffer): string {
 	return end >= 0 ? head.slice(0, end) : head;
 }
 
-/** Forwards one message Mailflare received to the alias's destination, from a reverse alias. */
+/** Forwards one message Mailflare received (its message.inbound webhook) to the alias's destination. */
 export async function handleInbound(env: Env, config: AppConfig, event: InboundEvent, origin: string): Promise<ForwardOutcome> {
-	const db = env.DB;
-	const reverseDomain = config.reverseDomain;
 	const aliasAddress = event.to ? extractEmail(event.to) : null;
 	if (!event.messageId || !aliasAddress) return { status: 400, result: "missing messageId or recipient" };
-	if (domainOf(aliasAddress) === reverseDomain) return { status: 200, result: "ignored: recipient is a reverse alias" };
+	return forwardMessage(env, config, {
+		key: event.messageId,
+		aliasAddress,
+		envelopeFrom: event.from,
+		origin,
+		load: () => getStoredMessage(mailflareConfig(config), event.messageId),
+	});
+}
 
-	const claimed = await claim(db, event.messageId, aliasAddress);
+/** Reads a message stream up to MAX_MESSAGE_BYTES. */
+async function readRaw(stream: ReadableStream<Uint8Array>, declared: number): Promise<ArrayBuffer> {
+	if (declared > MAX_MESSAGE_BYTES) throw new MailflareError(`The message is ${declared} bytes; at most ${MAX_MESSAGE_BYTES} are forwarded`, 413);
+	const buffer = await new Response(stream).arrayBuffer();
+	if (buffer.byteLength > MAX_MESSAGE_BYTES) throw new MailflareError(`The message is larger than ${MAX_MESSAGE_BYTES} bytes`, 413);
+	return buffer;
+}
+
+/**
+ * Forwards a message Cloudflare Email Routing delivered to this Worker (the catch-all of an
+ * alias domain). Email Routing does not redeliver an accepted message, so the key only has to
+ * tell retries of a failed delivery apart: the Message-ID with the recipient.
+ */
+export async function handleDirectInbound(message: ForwardableEmailMessage, env: Env, config: AppConfig): Promise<ForwardOutcome> {
+	const aliasAddress = normalizeEmail(message.to);
+	const messageId = message.headers.get("Message-ID")?.trim();
+	const key = `cf:${await sha256Hex(`${messageId || crypto.randomUUID()}\n${aliasAddress}`)}`;
+	return forwardMessage(env, config, {
+		key,
+		aliasAddress,
+		envelopeFrom: message.from,
+		origin: config.siteOrigin,
+		load: async () => ({ mailboxId: "", raw: await readRaw(message.raw, message.rawSize) }),
+	});
+}
+
+type ForwardInput = {
+	/** Identifies the delivery, so the same message is forwarded once. */
+	key: string;
+	aliasAddress: string;
+	envelopeFrom?: string;
+	/** Origin of the links in the banner and the unsubscribe header. */
+	origin: string;
+	load: () => Promise<StoredMessage>;
+};
+
+async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput): Promise<ForwardOutcome> {
+	const db = env.DB;
+	const { aliasAddress, origin } = input;
+	const event = { messageId: input.key, from: input.envelopeFrom };
+	const aliasDomain = domainOf(aliasAddress);
+	const reverseDomain = reverseDomainFor(aliasDomain);
+
+	const claimed = await claim(db, input.key, aliasAddress);
 	if (!("id" in claimed)) return claimed;
 	const forwardId = claimed.id;
 	const skip = async (reason: string): Promise<ForwardOutcome> => {
@@ -119,11 +169,12 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 
 	try {
 		const settings = await loadSettings(db);
+		if (isReverseDomainOf(aliasDomain, settings.aliasDomains)) return await skip("the recipient is a reverse alias");
 		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
 		const known = await getAlias(db, aliasAddress);
 		if (known?.deleted_at) return await skip("the alias was deleted");
 		if (known?.forward_mode === "none") return await skip("forwarding is off for this alias");
-		const stored = await getStoredMessage(mailflareConfig(config), event.messageId);
+		const stored = await input.load();
 		const alias = await ensureAlias(db, aliasAddress, stored.mailboxId, {
 			forwardEnabled: settings.autoForwardNewAliases,
 			destination: settings.defaultDestination || null,
@@ -132,13 +183,13 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 		if (alias.deleted_at) return await skip("the alias was deleted");
 		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias");
 		if (!destination) return await skip("no forwarding address");
-		if (domainOf(destination) === reverseDomain || normalizeEmail(destination) === aliasAddress) return await skip("destination would loop");
+		if (isOwnAddress(destination, [...settings.aliasDomains, aliasDomain])) return await skip("destination would loop");
 
 		const email = await PostalMime.parse(stored.raw, { attachmentEncoding: "arraybuffer" });
 		if (headerValue(email, LOOP_HEADER)) return await skip("already forwarded by this Worker");
 
 		const senderEmail = extractEmail(email.from?.address ?? event.from ?? null);
-		if (!senderEmail || domainOf(senderEmail) === reverseDomain) return await skip("no usable sender");
+		if (!senderEmail || isReverseDomainOf(domainOf(senderEmail), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
 		await finish(db, forwardId, {
 			original_message_id: ensureAngle(email.messageId),
 			original_unsubscribe: usableUnsubscribe(headerValue(email, "List-Unsubscribe"))?.slice(0, MAX_UNSUBSCRIBE_LENGTH) ?? null,

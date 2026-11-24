@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const CODE = /^[a-z]{2,3}(?:-[A-Z]{2})?$/;
-const KEY = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+$/;
+const KEY = /^[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9_]+)+$/;
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const input = JSON.parse(readFileSync(process.argv[2], "utf8"));
 for (const [code, entries] of Object.entries(input)) {

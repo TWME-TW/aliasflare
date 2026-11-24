@@ -4,7 +4,7 @@ import { handleReverseAliasMail } from "../src/reply";
 import { loadSettings, saveSettings } from "../src/settings";
 import { testDb } from "./helpers/d1";
 
-const config = { mailflareUrl: "https://mailflare.test", mailflareApiKey: "k", reverseDomain: "r.me.test" } as AppConfig;
+const config = { mailflareUrl: "https://mailflare.test", mailflareApiKey: "k", webhookSecret: "w" } as AppConfig;
 let db: D1Database;
 let sent: { to: string[]; from: string; text?: string }[];
 

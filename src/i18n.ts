@@ -83,7 +83,7 @@ export const LOCALES = {
 
 export type Locale = keyof typeof LOCALES;
 export const LOCALE_LIST = Object.keys(LOCALES) as Locale[];
-export const LANG_COOKIE = "mfa_lang";
+export const LANG_COOKIE = "af_lang";
 
 const RTL = new Set<Locale>(["ar", "fa", "ur"]);
 

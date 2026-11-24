@@ -1,19 +1,24 @@
 /**
- * Sets up Cloudflare for the reverse-alias domain from the dashboard, so nobody has to click
- * through Email Routing and Email Sending by hand:
+ * Sets up Cloudflare for each alias domain from the dashboard, so nobody has to click through
+ * Email Routing and Email Sending by hand. For an alias domain a.com:
  *
- * 1. find the zone the domain belongs to;
- * 2. enable Email Routing on the domain (MX and SPF records);
- * 3. turn on subaddressing, so reply+<anything>@domain matches the rule for reply@domain;
- * 4. route reply@domain to this Worker (one rule covers every reverse alias);
- * 5. onboard the domain for Email Sending, which forwarded copies are sent with.
+ * 1. find the zone a.com belongs to;
+ * 2. enable Email Routing on a.com and send its catch-all to this Worker, so mail to any
+ *    address there arrives here (an existing catch-all that goes elsewhere is left alone);
+ * 3. enable Email Routing on r.a.com, the reverse-alias domain of a.com;
+ * 4. turn on subaddressing, so reply+<anything>@r.a.com matches the rule for reply@r.a.com;
+ * 5. route reply@r.a.com to this Worker (one rule covers every reverse alias of the domain);
+ * 6. onboard r.a.com and a.com for Email Sending: forwarded copies come from r.a.com, replies
+ *    from the alias itself.
  *
- * Catch-all rules only exist on apex domains, and a subdomain allows 200 literal rules, which is
- * why reverse aliases use plus addressing instead of one rule each.
+ * Catch-all rules only exist on a zone's apex, and a subdomain allows 200 literal rules, which
+ * is why reverse aliases use plus addressing and alias domains must be a zone apex here. An
+ * alias domain on a subdomain can still be received by Mailflare instead.
  *
- * Token permissions, for the zone: Zone: Read, Zone Settings: Edit, Email Routing Rules: Edit and
- * Email Sending: Edit.
+ * Token permissions, for each zone: Zone: Read, Zone Settings: Edit, Email Routing Rules: Edit
+ * and Email Sending: Edit.
  */
+import { reverseDomainFor } from "./domains";
 import { REVERSE_BASE } from "./format";
 
 const API = "https://api.cloudflare.com/client/v4";
@@ -50,9 +55,12 @@ async function cf<T>(token: string, path: string, init: RequestInit = {}): Promi
 	return body.result;
 }
 
-export type SetupStep = { step: "zone" | "routing" | "subaddress" | "rule" | "sending"; ok: boolean; detail: string };
+export type SetupStepName = "zone" | "catchall" | "routing" | "subaddress" | "rule" | "sending";
+export type SetupStep = { step: SetupStepName; ok: boolean; detail: string };
+export type DomainSetup = { domain: string; steps: SetupStep[] };
 
-type Rule = { id: string; enabled: boolean; matchers: { type: string; field?: string; value?: string }[]; actions: { type: string; value?: string[] }[] };
+type Action = { type: string; value?: string[] };
+type Rule = { id: string; enabled: boolean; matchers: { type: string; field?: string; value?: string }[]; actions: Action[] };
 
 /** The domain and its parents, longest first: r.mail.example.com, mail.example.com, example.com. */
 export function zoneCandidates(domain: string): string[] {
@@ -83,60 +91,103 @@ async function findRule(token: string, zoneId: string, address: string): Promise
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 // Only "already exists / enabled / configured" counts as done, not any message with "exist" in it.
 const alreadyDone = (error: unknown) => /\balready (exists?|enabled|configured|added|in use)\b|\bduplicate\b/i.test(message(error));
+const toWorker = (actions: Action[], workerName: string) => actions.some((action) => action.type === "worker" && action.value?.includes(workerName));
 
-export async function setUpCloudflare(input: { token: string; reverseDomain: string; workerName: string }): Promise<SetupStep[]> {
-	const { token, reverseDomain, workerName } = input;
+/** Enables Email Routing for a domain: the zone apex, or a subdomain of it. */
+async function enableRouting(token: string, zone: { id: string; name: string }, domain: string): Promise<void> {
+	try {
+		await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing/dns`, {
+			method: "POST",
+			...(zone.name === domain ? {} : { body: JSON.stringify({ name: domain }) }),
+		});
+	} catch (error) {
+		if (!alreadyDone(error)) throw error;
+	}
+}
+
+async function enableSending(token: string, zoneId: string, domain: string): Promise<void> {
+	try {
+		// Creating also re-enables an existing sending domain, so it is safe to repeat.
+		await cf(token, `/zones/${encodeURIComponent(zoneId)}/email/sending/subdomains`, { method: "POST", body: JSON.stringify({ name: domain }) });
+	} catch (error) {
+		if (!alreadyDone(error)) throw error;
+	}
+}
+
+export async function setUpDomain(input: { token: string; domain: string; workerName: string }): Promise<DomainSetup> {
+	const { token, domain, workerName } = input;
+	const reverseDomain = reverseDomainFor(domain);
 	const steps: SetupStep[] = [];
+	const attempt = async (step: SetupStepName, run: () => Promise<string>) => {
+		try {
+			steps.push({ step, ok: true, detail: await run() });
+		} catch (error) {
+			steps.push({ step, ok: false, detail: message(error) });
+		}
+	};
 
 	let zone: { id: string; name: string } | null = null;
 	try {
-		zone = await findZone(token, reverseDomain);
-		steps.push(zone ? { step: "zone", ok: true, detail: zone.name } : { step: "zone", ok: false, detail: `No zone found for ${reverseDomain} with this token.` });
+		zone = await findZone(token, domain);
+		steps.push(zone ? { step: "zone", ok: true, detail: zone.name } : { step: "zone", ok: false, detail: `No zone found for ${domain} with this token.` });
 	} catch (error) {
 		steps.push({ step: "zone", ok: false, detail: message(error) });
 	}
-	if (!zone) return steps;
+	if (!zone) return { domain, steps };
+	const zonePath = `/zones/${encodeURIComponent(zone.id)}`;
+	const found = zone;
 
-	try {
-		const isApex = zone.name === reverseDomain;
-		await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing/dns`, { method: "POST", ...(isApex ? {} : { body: JSON.stringify({ name: reverseDomain }) }) });
-		steps.push({ step: "routing", ok: true, detail: reverseDomain });
-	} catch (error) {
-		steps.push({ step: "routing", ok: alreadyDone(error), detail: alreadyDone(error) ? reverseDomain : message(error) });
-	}
+	await attempt("catchall", async () => {
+		if (found.name !== domain) {
+			throw new Error(`Catch-all rules only exist on a zone's apex (${found.name}). Use the apex as the alias domain, or let Mailflare receive ${domain}.`);
+		}
+		await enableRouting(token, found, domain);
+		const current = await cf<Rule>(token, `${zonePath}/email/routing/rules/catch_all`).catch(() => null);
+		if (current?.enabled && !toWorker(current.actions, workerName)) {
+			const where = current.actions.map((action) => [action.type, ...(action.value ?? [])].join(" ")).join(", ");
+			throw new Error(`The catch-all of ${domain} already sends mail elsewhere (${where}); it was left unchanged. Point it at the Worker ${workerName} in the Cloudflare dashboard if this domain is only for aliases.`);
+		}
+		await cf(token, `${zonePath}/email/routing/rules/catch_all`, {
+			method: "PUT",
+			body: JSON.stringify({ actions: [{ type: "worker", value: [workerName] }], matchers: [{ type: "all" }], enabled: true, name: "aliasflare aliases" }),
+		});
+		return `*@${domain} → ${workerName}`;
+	});
 
-	try {
-		await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing`, { method: "PATCH", body: JSON.stringify({ support_subaddress: true }) });
-		steps.push({ step: "subaddress", ok: true, detail: zone.name });
-	} catch (error) {
-		steps.push({ step: "subaddress", ok: false, detail: message(error) });
-	}
+	await attempt("routing", async () => {
+		await enableRouting(token, found, reverseDomain);
+		return reverseDomain;
+	});
+
+	await attempt("subaddress", async () => {
+		await cf(token, `${zonePath}/email/routing`, { method: "PATCH", body: JSON.stringify({ support_subaddress: true }) });
+		return found.name;
+	});
 
 	const address = `${REVERSE_BASE}@${reverseDomain}`;
-	try {
+	await attempt("rule", async () => {
 		const rule = {
 			actions: [{ type: "worker", value: [workerName] }],
 			matchers: [{ type: "literal", field: "to", value: address }],
 			enabled: true,
-			name: `mailflare-alias reverse aliases (${address})`,
+			name: `aliasflare reverse aliases (${address})`,
 		};
-		const existing = await findRule(token, zone.id, address);
-		if (existing) {
-			await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing/rules/${encodeURIComponent(existing.id)}`, { method: "PUT", body: JSON.stringify(rule) });
-		} else {
-			await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing/rules`, { method: "POST", body: JSON.stringify(rule) });
-		}
-		steps.push({ step: "rule", ok: true, detail: `${address} → ${workerName}` });
-	} catch (error) {
-		steps.push({ step: "rule", ok: false, detail: message(error) });
-	}
+		const existing = await findRule(token, found.id, address);
+		if (existing) await cf(token, `${zonePath}/email/routing/rules/${encodeURIComponent(existing.id)}`, { method: "PUT", body: JSON.stringify(rule) });
+		else await cf(token, `${zonePath}/email/routing/rules`, { method: "POST", body: JSON.stringify(rule) });
+		return `${address} → ${workerName}`;
+	});
 
-	try {
-		// Creating also re-enables an existing sending domain, so it is safe to repeat.
-		await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/sending/subdomains`, { method: "POST", body: JSON.stringify({ name: reverseDomain }) });
-		steps.push({ step: "sending", ok: true, detail: reverseDomain });
-	} catch (error) {
-		steps.push({ step: "sending", ok: alreadyDone(error), detail: alreadyDone(error) ? reverseDomain : message(error) });
-	}
-	return steps;
+	await attempt("sending", async () => {
+		await enableSending(token, found.id, reverseDomain);
+		await enableSending(token, found.id, domain);
+		return `${reverseDomain}, ${domain}`;
+	});
+	return { domain, steps };
+}
+
+export async function setUpCloudflare(input: { token: string; domains: string[]; workerName: string }): Promise<DomainSetup[]> {
+	const results: DomainSetup[] = [];
+	for (const domain of input.domains) results.push(await setUpDomain({ token: input.token, domain, workerName: input.workerName }));
+	return results;
 }

@@ -8,10 +8,10 @@ import type { Translate } from "./i18n";
 
 export type AppEnv = { Bindings: Env; Variables: { config: AppConfig; t: Translate } };
 
-// Sent as __Host-mfa_session and __Host-mfa_challenge: Secure, Path=/ and no Domain, so a
+// Sent as __Host-af_session and __Host-af_challenge: Secure, Path=/ and no Domain, so a
 // sibling subdomain cannot set or overwrite them.
-export const SESSION_COOKIE = "mfa_session";
-export const CHALLENGE_COOKIE = "mfa_challenge";
+export const SESSION_COOKIE = "af_session";
+export const CHALLENGE_COOKIE = "af_challenge";
 const COOKIE_PREFIX = "host" as const;
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 

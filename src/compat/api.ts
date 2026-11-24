@@ -12,6 +12,7 @@ import type { AppEnv } from "../auth";
 import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
 import { domainOf, extractEmail, isSenderFormat, reverseAddress } from "../format";
+import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
 import {
 	ClientError,
@@ -68,7 +69,7 @@ api.use("*", async (c, next) => {
 	// The apps check the version before signing in.
 	if (c.req.path === "/api/v1/app-version") return c.json(VERSION);
 	if (c.req.path === "/api/auth/login") {
-		return c.json({ error: "Sign in with an API key. Create one on the API keys page of mailflare-alias." }, 403);
+		return c.json({ error: "Sign in with an API key. Create one on the API keys page of aliasflare." }, 403);
 	}
 	const key = presentedKey(c.req.raw.headers);
 	// Every request counts against a per-address limit before the key is looked up, so a
@@ -99,14 +100,13 @@ async function body(c: C): Promise<Record<string, unknown>> {
 }
 
 const str = (value: unknown, max = 500): string | undefined => (typeof value === "string" ? value.slice(0, max) : undefined);
-const reverseDomainOf = (c: C) => c.get("config").reverseDomain;
 
 // ═════════════════════════════════════════ SimpleLogin ═════════════════════════════════════════
 
 const isoSeconds = (seconds: number) => new Date(seconds * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, "+00:00");
 
 function reverseAliasAddress(c: C, contact: ContactRow): string {
-	return reverseAddress(contact.reverse_local, reverseDomainOf(c));
+	return contactReverseAddress(contact);
 }
 
 function slContact(c: C, contact: ContactRow, existed?: boolean) {
@@ -181,7 +181,7 @@ function pageId(c: C): number {
 
 api.get("/user_info", (c) =>
 	c.json({
-		name: "mailflare-alias",
+		name: "aliasflare",
 		is_premium: true,
 		email: c.get("settings").defaultDestination,
 		in_trial: false,
@@ -193,7 +193,7 @@ api.get("/user_info", (c) =>
 	}),
 );
 
-api.get("/user/cookie_token", (c) => c.json({ error: "Open the mailflare-alias dashboard in your browser instead." }, 403));
+api.get("/user/cookie_token", (c) => c.json({ error: "Open the aliasflare dashboard in your browser instead." }, 403));
 api.get("/logout", (c) => c.json({ msg: "logged out" }));
 
 api.get("/stats", async (c) => {
@@ -247,7 +247,7 @@ const createCustomAlias = async (c: C) => {
 	// v3 takes mailbox_ids; v2 (the browser extension) uses the default mailbox.
 	const mailboxIds = Array.isArray(input.mailbox_ids) ? input.mailbox_ids : input.mailbox_id !== undefined ? [input.mailbox_id] : [];
 	const destination = await resolveDestination(c.env.DB, c.get("settings"), mailboxIds[0] as number | undefined);
-	const alias = await createAlias(c.env.DB, c.get("settings"), reverseDomainOf(c), {
+	const alias = await createAlias(c.env.DB, c.get("settings"), {
 		localPart: prefix + suffix.slice(0, at),
 		domain: suffix.slice(at + 1),
 		note: str(input.note) ?? null,
@@ -262,7 +262,7 @@ api.post("/v2/alias/custom/new", createCustomAlias);
 api.post("/alias/random/new", async (c) => {
 	const input = await body(c);
 	const mode = c.req.query("mode");
-	const alias = await createRandomAlias(c.env.DB, c.get("settings"), reverseDomainOf(c), {
+	const alias = await createRandomAlias(c.env.DB, c.get("settings"), {
 		format: mode === "uuid" ? "uuid" : mode === "word" ? "random_words" : undefined,
 		note: str(input.note) ?? null,
 	});
@@ -319,7 +319,7 @@ api.get("/aliases/:id/activities", async (c) => {
 		.all<{ created_at: number; status: string; email: string; reverse_local: string; name: string | null }>();
 	return c.json({
 		activities: results.map((row) => {
-			const address = reverseAddress(row.reverse_local, reverseDomainOf(c));
+			const address = reverseAddress(row.reverse_local, reverseDomainFor(domainOf(alias.address)));
 			return {
 				action: row.status === "sent" ? "forward" : "block",
 				from: row.email,
@@ -342,10 +342,9 @@ api.get("/aliases/:id/contacts", async (c) => {
 
 api.post("/aliases/:id/contacts", async (c) => {
 	const alias = await slFindAlias(c);
-	if (!reverseDomainOf(c)) throw new ClientError(400, "Set the reverse-alias domain first.");
 	const text = str((await body(c)).contact) ?? "";
 	const email = extractEmail(text);
-	if (!email || domainOf(email) === reverseDomainOf(c)) throw new ClientError(400, "Enter a valid email address.");
+	if (!email || isOwnAddress(email, [...c.get("settings").aliasDomains, domainOf(alias.address)])) throw new ClientError(400, "Enter a valid email address.");
 	const name = text.includes("<") ? text.slice(0, text.indexOf("<")).replace(/["\\]/g, "").trim() || null : null;
 	const before = await c.env.DB.prepare("SELECT 1 FROM contacts WHERE alias_address = ? AND email = ?").bind(alias.address, email).first();
 	const contact = await ensureContact(c.env.DB, alias.address, email, name, c.get("settings").includeSenderInReverseAlias);
@@ -388,7 +387,7 @@ async function changeSettings(c: C, update: Partial<Settings>): Promise<Settings
 
 function requireAppSettings(c: C): void {
 	if (!c.get("settings").appSettings) {
-		throw new ClientError(403, "Changing settings from apps is turned off. Turn it on in the mailflare-alias settings.");
+		throw new ClientError(403, "Changing settings from apps is turned off. Turn it on in the aliasflare settings.");
 	}
 }
 
@@ -433,7 +432,7 @@ api.patch("/setting", async (c) => {
 		update.senderFormat = body.sender_format;
 	}
 	if (body.notification !== undefined && typeof body.notification !== "boolean") throw new ClientError(400, "Invalid notification");
-	// mailflare-alias sends no notification emails, so "notification" is accepted and stays off.
+	// aliasflare sends no notification emails, so "notification" is accepted and stays off.
 	return c.json(slSetting(Object.keys(update).length ? await changeSettings(c, update) : settings));
 });
 
@@ -441,7 +440,7 @@ api.patch("/setting", async (c) => {
 api.put("/mailboxes/:id", async (c) => {
 	const body = await jsonBody(c);
 	if (body.email !== undefined || body.cancel_email_change !== undefined) {
-		throw new ClientError(400, "Change forwarding addresses in the mailflare-alias dashboard.");
+		throw new ClientError(400, "Change forwarding addresses in the aliasflare dashboard.");
 	}
 	const id = c.req.param("id");
 	const match = (await listDestinations(c.env.DB, c.get("settings"))).find((d) => d.numId === Number(id) || d.uid === id);
@@ -535,7 +534,7 @@ api.get("/v1/account-details", async (c) => {
 	return c.json({
 		data: {
 			id: OWNER_ID,
-			username: "mailflare-alias",
+			username: "aliasflare",
 			from_name: null,
 			email_subject: null,
 			banner_location: settings.showBanner ? "top" : "off",
@@ -752,8 +751,8 @@ api.post("/v1/aliases", async (c) => {
 	const note = str(input.description) ?? null;
 	const alias =
 		format === "custom"
-			? await createAlias(c.env.DB, settings, reverseDomainOf(c), { localPart: cleanPrefix(str(input.local_part, 64) ?? ""), domain, note, destination })
-			: await createRandomAlias(c.env.DB, settings, reverseDomainOf(c), { domain, format, note, destination });
+			? await createAlias(c.env.DB, settings, { localPart: cleanPrefix(str(input.local_part, 64) ?? ""), domain, note, destination })
+			: await createRandomAlias(c.env.DB, settings, { domain, format, note, destination });
 	return c.json({ data: await addyAlias(c, alias) }, 201);
 });
 
@@ -846,5 +845,5 @@ api.get("/v1/domains", (c) =>
 	}),
 );
 
-api.all("*", (c) => c.json({ error: "Not supported by mailflare-alias", message: "Not Found" }, 404));
+api.all("*", (c) => c.json({ error: "Not supported by aliasflare", message: "Not Found" }, 404));
 

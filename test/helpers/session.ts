@@ -10,7 +10,7 @@ export async function signIn(db: D1Database, secret = TEST_SECRET): Promise<stri
 		.run();
 	const id = `s${crypto.randomUUID().replace(/-/g, "")}`;
 	await db.prepare("INSERT INTO sessions (id, passkey_id, created_at, expires_at) VALUES (?, 'pk1', 1, ?)").bind(id, Math.floor(Date.now() / 1000) + 600).run();
-	return `__Host-mfa_session=${await signToken(secret, "session", id, 600)}`;
+	return `__Host-af_session=${await signToken(secret, "session", id, 600)}`;
 }
 
 /** The notice a redirect asks the next page to show, in English. */
