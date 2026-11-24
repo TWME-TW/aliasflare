@@ -74,6 +74,7 @@ export type ForwardRow = {
 	trackers_removed: number;
 	status: "processing" | "sent" | "skipped" | "failed";
 	error: string | null;
+	attempts?: number;
 	created_at: number;
 	updated_at: number;
 };

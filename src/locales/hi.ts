@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias में आपका स्वागत है",
 	"setup.intro": "इस डैशबोर्ड को सुरक्षित रखने के लिए एक पासकी पंजीकृत करें। इसके बाद आप Mailflare कनेक्शन का विवरण दर्ज करेंगे।",
 	"setup.code": "सेटअप कोड",
-	"setup.codeFromLogs":
-		"एक बार उपयोग होने वाला कोड इस Worker के लॉग में लिखा गया है। Cloudflare डैशबोर्ड → Workers & Pages → mailflare-alias → Observability → Logs खोलें, या `npx wrangler tail mailflare-alias` चलाएँ और यह पेज फिर से लोड करें। यह 60 मिनट तक मान्य है।",
-	"setup.codeFromSecret": "SETUP_CODE सीक्रेट दर्ज करें, या इस Worker के लॉग में दिया गया कोड।",
+	"setup.codeFromLogs": "इस Worker के लॉग में एक बार उपयोग होने वाला कोड लिखा जाता है। Cloudflare डैशबोर्ड → Workers & Pages → mailflare-alias → Observability → Logs खोलें, या `npx wrangler tail mailflare-alias` चलाएँ, फिर नीचे “लॉग में नया कोड लिखें” दबाएँ। यह कोड 60 मिनट तक मान्य है।",
+	"setup.codeFromSecret": "SETUP_CODE सीक्रेट दर्ज करें।",
 	"setup.passkeyName": "पासकी का नाम",
 	"setup.defaultName": "मेरी पासकी",
 	"setup.button": "पासकी पंजीकृत करें",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "आपके लिए रिवर्स-उपनाम डोमेन सेट करता है: subaddressing के साथ Email Routing, reply+…@ पतों को इस Worker पर भेजने वाला एक नियम, और Email Sending। इसे दोबारा चलाना सुरक्षित है।",
 	"cf.token": "Cloudflare API टोकन",
-	"cf.tokenHelp": "ज़ोन के लिए इन अनुमतियों वाला टोकन बनाएँ: Zone Read, Zone Settings Edit, Email Routing Rules Edit और Email Sending Edit।",
+	"cf.tokenHelp": "ज़ोन के लिए इन अनुमतियों वाला टोकन बनाएँ: Zone Read, Zone Settings Edit, Email Routing Rules Edit और Email Sending Edit। यह टोकन केवल इसी सेटअप के लिए उपयोग होता है और सहेजा नहीं जाता; इसे रखने के लिए CLOUDFLARE_API_TOKEN सीक्रेट सेट करें।",
 	"cf.workerName": "Worker का नाम",
 	"cf.workerNameHelp": "वह नाम जिससे यह Worker डिप्लॉय किया गया था।",
 	"cf.run": "अपने आप सेट करें",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "केवल अक्षर, अंक, बिंदु, हाइफ़न, अंडरस्कोर और प्लस चिह्न का उपयोग करें, और शुरुआत व अंत अक्षर या अंक से हो।",
 	"notice.newBadDomain": "अपने उपनाम डोमेन में से कोई एक चुनें।",
 	"notice.newFailed": "उपनाम नहीं बनाया जा सका। फिर से कोशिश करें।",
+	"setup.newCode": "लॉग में नया कोड लिखें",
+	"notice.setupCodeIssued": "लॉग में नया सेटअप कोड लिखा गया है। पिछला कोड अब काम नहीं करता।",
+	"link.used": "यह लिंक पहले ही इस्तेमाल हो चुका है। फ़ॉरवर्ड किए गए संदेश का हर लिंक केवल एक बार काम करता है।",
+	"action.preserveMail": "{alias} से {target} पर अनसब्सक्राइब ईमेल भेजकर {sender} से सदस्यता छोड़ें। ऐसा न हो पाए तो प्रेषक को ब्लॉक कर दिया जाता है।",
+	"banner.spoofSubject": "[असत्यापित प्रेषक]",
+	"imp.destinations": "उनके अग्रेषण पते उपयोग करें",
+	"imp.destinationsHelp": "बंद: आयात किए गए उपनाम आपके डिफ़ॉल्ट पते पर अग्रेषित होंगे, जब तक उनका अग्रेषण पता यहाँ पहले से उपयोग में न हो। चालू: आयात से आए नए अग्रेषण पते भी उपयोग होंगे। हर अग्रेषण पता रिवर्स उपनामों से मेल भेज सकता है, इसलिए इसे केवल अपने पतों के लिए चालू करें।",
+	"imp.newDestinations": "इस आयात द्वारा जोड़े गए नए अग्रेषण पते:",
 };
 
 export default dictionary;

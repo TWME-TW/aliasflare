@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias-এ স্বাগতম",
 	"setup.intro": "এই ড্যাশবোর্ড সুরক্ষিত রাখতে একটি পাসকি নিবন্ধন করুন। এরপর আপনি Mailflare সংযোগের তথ্য দেবেন।",
 	"setup.code": "সেটআপ কোড",
-	"setup.codeFromLogs":
-		"একবার ব্যবহারের একটি কোড এই Worker-এর লগে লেখা হয়েছে। Cloudflare ড্যাশবোর্ড → Workers & Pages → mailflare-alias → Observability → Logs খুলুন, অথবা `npx wrangler tail mailflare-alias` চালিয়ে এই পেজ আবার লোড করুন। কোডটি ৬০ মিনিট বৈধ থাকে।",
-	"setup.codeFromSecret": "SETUP_CODE সিক্রেট দিন, অথবা এই Worker-এর লগে থাকা কোডটি দিন।",
+	"setup.codeFromLogs": "এই Worker-এর লগে একবার ব্যবহারের একটি কোড লেখা হয়। Cloudflare ড্যাশবোর্ড → Workers & Pages → mailflare-alias → Observability → Logs খুলুন, অথবা `npx wrangler tail mailflare-alias` চালান, তারপর নিচে “লগে নতুন কোড লিখুন” বোতামে চাপ দিন। কোডটি ৬০ মিনিট বৈধ থাকে।",
+	"setup.codeFromSecret": "SETUP_CODE সিক্রেট দিন।",
 	"setup.passkeyName": "পাসকির নাম",
 	"setup.defaultName": "আমার পাসকি",
 	"setup.button": "পাসকি নিবন্ধন করুন",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "আপনার জন্য রিভার্স-অ্যালিয়াস ডোমেইন সেট করে: subaddressing সহ Email Routing, reply+…@ ঠিকানাগুলো এই Worker-এ পাঠানোর একটি নিয়ম, এবং Email Sending। আবার চালানো নিরাপদ।",
 	"cf.token": "Cloudflare API টোকেন",
-	"cf.tokenHelp": "জোনের জন্য এই অনুমতিসহ একটি টোকেন তৈরি করুন: Zone Read, Zone Settings Edit, Email Routing Rules Edit এবং Email Sending Edit।",
+	"cf.tokenHelp": "জোনের জন্য এই অনুমতিসহ একটি টোকেন তৈরি করুন: Zone Read, Zone Settings Edit, Email Routing Rules Edit এবং Email Sending Edit। এটি শুধু এই সেটআপের জন্য ব্যবহৃত হয় এবং সংরক্ষণ করা হয় না; রাখতে চাইলে CLOUDFLARE_API_TOKEN সিক্রেট সেট করুন।",
 	"cf.workerName": "Worker-এর নাম",
 	"cf.workerNameHelp": "যে নামে এই Worker ডিপ্লয় করা হয়েছিল।",
 	"cf.run": "স্বয়ংক্রিয়ভাবে সেট করুন",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "শুধু অক্ষর, সংখ্যা, বিন্দু, হাইফেন, আন্ডারস্কোর ও প্লাস চিহ্ন ব্যবহার করুন; শুরু ও শেষ হতে হবে অক্ষর বা সংখ্যা দিয়ে।",
 	"notice.newBadDomain": "আপনার অ্যালিয়াস ডোমেইনগুলোর একটি বেছে নিন।",
 	"notice.newFailed": "অ্যালিয়াসটি তৈরি করা যায়নি। আবার চেষ্টা করুন।",
+	"setup.newCode": "লগে নতুন কোড লিখুন",
+	"notice.setupCodeIssued": "লগে নতুন সেটআপ কোড লেখা হয়েছে। আগের কোডটি আর কাজ করবে না।",
+	"link.used": "এই লিংকটি আগেই ব্যবহার করা হয়েছে। ফরোয়ার্ড করা বার্তার প্রতিটি লিংক একবারই কাজ করে।",
+	"action.preserveMail": "{alias} থেকে {target}-এ একটি আনসাবস্ক্রাইব ইমেল পাঠিয়ে {sender}-এর সাবস্ক্রিপশন বাতিল করুন। তা ব্যর্থ হলে বরং প্রেরককে ব্লক করা হবে।",
+	"banner.spoofSubject": "[যাচাই-না-করা প্রেরক]",
+	"imp.destinations": "তাদের ফরোয়ার্ডিং ঠিকানা ব্যবহার করুন",
+	"imp.destinationsHelp": "বন্ধ: আমদানি করা অ্যালিয়াসগুলো আপনার ডিফল্ট ঠিকানায় ফরোয়ার্ড হবে, যদি না তাদের ফরোয়ার্ডিং ঠিকানা এখানে আগে থেকেই ব্যবহৃত হয়। চালু: আমদানি থেকে আসা নতুন ফরোয়ার্ডিং ঠিকানাও ব্যবহার করা হবে। প্রতিটি ফরোয়ার্ডিং ঠিকানা রিভার্স অ্যালিয়াসের মাধ্যমে মেইল পাঠাতে পারে, তাই যে ঠিকানাগুলো আপনার নিজের, শুধু সেগুলোর জন্য এটি চালু করুন।",
+	"imp.newDestinations": "এই আমদানিতে যুক্ত নতুন ফরোয়ার্ডিং ঠিকানা:",
 };
 
 export default dictionary;

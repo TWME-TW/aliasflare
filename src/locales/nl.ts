@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Welkom bij mailflare-alias",
 	"setup.intro": "Registreer een passkey om dit dashboard te beveiligen. Daarna voer je de verbindingsgegevens van Mailflare in.",
 	"setup.code": "Installatiecode",
-	"setup.codeFromLogs":
-		"Er is een eenmalige code naar de logs van deze Worker geschreven. Open het Cloudflare-dashboard → Workers & Pages → mailflare-alias → Observability → Logs, of voer `npx wrangler tail mailflare-alias` uit en laad deze pagina opnieuw. De code is 60 minuten geldig.",
-	"setup.codeFromSecret": "Voer de secret SETUP_CODE in, of de code uit de logs van deze Worker.",
+	"setup.codeFromLogs": "Er is een eenmalige code naar de logs van deze Worker geschreven. Open het Cloudflare-dashboard → Workers & Pages → mailflare-alias → Observability → Logs, of voer `npx wrangler tail mailflare-alias` uit en klik daarna hieronder op „Nieuwe code naar de logs schrijven”. De code is 60 minuten geldig.",
+	"setup.codeFromSecret": "Voer de secret SETUP_CODE in.",
 	"setup.passkeyName": "Naam van de passkey",
 	"setup.defaultName": "Mijn passkey",
 	"setup.button": "Passkey registreren",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Stelt het domein voor omgekeerde aliassen voor je in: Email Routing met subaddressing, één regel die reply+…@-adressen naar deze Worker stuurt, en Email Sending. Opnieuw uitvoeren is veilig.",
 	"cf.token": "Cloudflare-API-token",
-	"cf.tokenHelp": "Maak een token voor de zone met deze rechten: Zone Read, Zone Settings Edit, Email Routing Rules Edit en Email Sending Edit.",
+	"cf.tokenHelp": "Maak een token voor de zone met deze rechten: Zone Read, Zone Settings Edit, Email Routing Rules Edit en Email Sending Edit. Het wordt alleen voor deze setup gebruikt en niet opgeslagen; om het te bewaren, stel je de secret CLOUDFLARE_API_TOKEN in.",
 	"cf.workerName": "Worker-naam",
 	"cf.workerNameHelp": "De naam waarmee deze Worker is uitgerold.",
 	"cf.run": "Automatisch instellen",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Gebruik alleen letters, cijfers, punten, koppeltekens, underscores en plustekens, en begin en eindig met een letter of cijfer.",
 	"notice.newBadDomain": "Kies een van je aliasdomeinen.",
 	"notice.newFailed": "De alias kon niet worden aangemaakt. Probeer het opnieuw.",
+	"setup.newCode": "Nieuwe code naar de logs schrijven",
+	"notice.setupCodeIssued": "Er is een nieuwe setupcode naar de logs geschreven. De vorige code werkt niet meer.",
+	"link.used": "Deze link is al gebruikt. Elke link in een doorgestuurd bericht werkt maar één keer.",
+	"action.preserveMail": "Schrijf je uit voor {sender} door een uitschrijfmail te sturen van {alias} naar {target}. Lukt dat niet, dan wordt de afzender in plaats daarvan geblokkeerd.",
+	"banner.spoofSubject": "[Niet-geverifieerde afzender]",
+	"imp.destinations": "Hun doorstuuradressen gebruiken",
+	"imp.destinationsHelp": "Uit: geïmporteerde aliassen sturen door naar je standaardadres, tenzij hun doorstuuradres hier al in gebruik is. Aan: nieuwe doorstuuradressen uit de import worden ook gebruikt. Elk doorstuuradres kan via reverse-aliassen mail versturen, dus zet dit alleen aan voor adressen die van jou zijn.",
+	"imp.newDestinations": "Nieuwe doorstuuradressen toegevoegd door deze import:",
 };
 
 export default dictionary;

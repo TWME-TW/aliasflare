@@ -32,6 +32,8 @@ export class CloudflareError extends Error {
 async function cf<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
 	const response = await fetch(`${API}${path}`, {
 		...init,
+		redirect: "error",
+		signal: AbortSignal.timeout(15_000),
 		headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
 	});
 	let body: CfEnvelope<T> | null = null;
@@ -70,7 +72,7 @@ async function findZone(token: string, domain: string): Promise<{ id: string; na
 
 async function findRule(token: string, zoneId: string, address: string): Promise<Rule | null> {
 	for (let page = 1; page <= 10; page += 1) {
-		const rules = await cf<Rule[]>(token, `/zones/${zoneId}/email/routing/rules?page=${page}&per_page=50`);
+		const rules = await cf<Rule[]>(token, `/zones/${encodeURIComponent(zoneId)}/email/routing/rules?page=${page}&per_page=50`);
 		const match = rules.find((rule) => rule.matchers.some((m) => m.type === "literal" && m.value?.toLowerCase() === address));
 		if (match) return match;
 		if (rules.length < 50) return null;
@@ -79,7 +81,8 @@ async function findRule(token: string, zoneId: string, address: string): Promise
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
-const alreadyDone = (error: unknown) => /already|exist/i.test(message(error));
+// Only "already exists / enabled / configured" counts as done, not any message with "exist" in it.
+const alreadyDone = (error: unknown) => /\balready (exists?|enabled|configured|added|in use)\b|\bduplicate\b/i.test(message(error));
 
 export async function setUpCloudflare(input: { token: string; reverseDomain: string; workerName: string }): Promise<SetupStep[]> {
 	const { token, reverseDomain, workerName } = input;
@@ -96,14 +99,14 @@ export async function setUpCloudflare(input: { token: string; reverseDomain: str
 
 	try {
 		const isApex = zone.name === reverseDomain;
-		await cf(token, `/zones/${zone.id}/email/routing/dns`, { method: "POST", ...(isApex ? {} : { body: JSON.stringify({ name: reverseDomain }) }) });
+		await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing/dns`, { method: "POST", ...(isApex ? {} : { body: JSON.stringify({ name: reverseDomain }) }) });
 		steps.push({ step: "routing", ok: true, detail: reverseDomain });
 	} catch (error) {
 		steps.push({ step: "routing", ok: alreadyDone(error), detail: alreadyDone(error) ? reverseDomain : message(error) });
 	}
 
 	try {
-		await cf(token, `/zones/${zone.id}/email/routing`, { method: "PATCH", body: JSON.stringify({ support_subaddress: true }) });
+		await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing`, { method: "PATCH", body: JSON.stringify({ support_subaddress: true }) });
 		steps.push({ step: "subaddress", ok: true, detail: zone.name });
 	} catch (error) {
 		steps.push({ step: "subaddress", ok: false, detail: message(error) });
@@ -119,9 +122,9 @@ export async function setUpCloudflare(input: { token: string; reverseDomain: str
 		};
 		const existing = await findRule(token, zone.id, address);
 		if (existing) {
-			await cf(token, `/zones/${zone.id}/email/routing/rules/${existing.id}`, { method: "PUT", body: JSON.stringify(rule) });
+			await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing/rules/${encodeURIComponent(existing.id)}`, { method: "PUT", body: JSON.stringify(rule) });
 		} else {
-			await cf(token, `/zones/${zone.id}/email/routing/rules`, { method: "POST", body: JSON.stringify(rule) });
+			await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/routing/rules`, { method: "POST", body: JSON.stringify(rule) });
 		}
 		steps.push({ step: "rule", ok: true, detail: `${address} → ${workerName}` });
 	} catch (error) {
@@ -130,7 +133,7 @@ export async function setUpCloudflare(input: { token: string; reverseDomain: str
 
 	try {
 		// Creating also re-enables an existing sending domain, so it is safe to repeat.
-		await cf(token, `/zones/${zone.id}/email/sending/subdomains`, { method: "POST", body: JSON.stringify({ name: reverseDomain }) });
+		await cf(token, `/zones/${encodeURIComponent(zone.id)}/email/sending/subdomains`, { method: "POST", body: JSON.stringify({ name: reverseDomain }) });
 		steps.push({ step: "sending", ok: true, detail: reverseDomain });
 	} catch (error) {
 		steps.push({ step: "sending", ok: alreadyDone(error), detail: alreadyDone(error) ? reverseDomain : message(error) });

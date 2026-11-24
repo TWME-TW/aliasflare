@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias へようこそ",
 	"setup.intro": "まずパスキーを登録してダッシュボードを保護してください。その後 Mailflare の接続情報を入力します。",
 	"setup.code": "セットアップコード",
-	"setup.codeFromLogs":
-		"ワンタイムコードをこの Worker のログに書き出しました。Cloudflare ダッシュボード → Workers & Pages → mailflare-alias → Observability → Logs を開くか、`npx wrangler tail mailflare-alias` を実行してからこのページを再読み込みしてください。有効期限は 60 分です。",
-	"setup.codeFromSecret": "SETUP_CODE シークレット、または Worker のログにあるコードを入力してください。",
+	"setup.codeFromLogs": "ワンタイムコードをこの Worker のログに書き出しました。Cloudflare ダッシュボード → Workers & Pages → mailflare-alias → Observability → Logs を開くか、`npx wrangler tail mailflare-alias` を実行してから、下の「新しいコードをログに書き出す」を押してください。有効期限は 60 分です。",
+	"setup.codeFromSecret": "SETUP_CODE シークレットを入力してください。",
 	"setup.passkeyName": "パスキー名",
 	"setup.defaultName": "マイパスキー",
 	"setup.button": "パスキーを登録",
@@ -230,7 +229,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "リバースエイリアス用ドメインを自動で設定します：Email Routing とサブアドレスの有効化、reply+…@ 宛てをこの Worker に送るルールの作成、Email Sending の設定。何度実行しても問題ありません。",
 	"cf.token": "Cloudflare API トークン",
-	"cf.tokenHelp": "対象ゾーンに次の権限を持つトークンを作成してください：Zone Read、Zone Settings Edit、Email Routing Rules Edit、Email Sending Edit。",
+	"cf.tokenHelp": "対象ゾーンに次の権限を持つトークンを作成してください：Zone Read、Zone Settings Edit、Email Routing Rules Edit、Email Sending Edit。このトークンはこのセットアップの間だけ使われ、保存されません。保存するには CLOUDFLARE_API_TOKEN シークレットを設定してください。",
 	"cf.workerName": "Worker 名",
 	"cf.workerNameHelp": "この Worker をデプロイしたときの名前。",
 	"cf.run": "自動で設定",
@@ -346,6 +345,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "使用できるのは英字、数字、ドット、ハイフン、アンダースコア、プラス記号のみです。先頭と末尾は英字または数字にしてください。",
 	"notice.newBadDomain": "エイリアス用ドメインのいずれかを選択してください。",
 	"notice.newFailed": "エイリアスを作成できませんでした。もう一度お試しください。",
+	"setup.newCode": "新しいコードをログに書き出す",
+	"notice.setupCodeIssued": "新しいセットアップコードをログに書き出しました。以前のコードは使えなくなりました。",
+	"link.used": "このリンクは使用済みです。転送メールの各リンクは一度だけ使えます。",
+	"action.preserveMail": "{alias} から {target} 宛に配信停止メールを送信して、{sender} の配信を停止します。失敗した場合は、代わりに差出人をブロックします。",
+	"banner.spoofSubject": "[未確認の差出人]",
+	"imp.destinations": "転送先アドレスを使用",
+	"imp.destinationsHelp": "オフ：インポートしたエイリアスは、転送先アドレスがここで既に使われていない限り、デフォルトのアドレスに転送されます。オン：インポートに含まれる新しい転送先アドレスも使用されます。転送先アドレスはすべて逆エイリアスで送信できるため、自分のアドレスの場合のみオンにしてください。",
+	"imp.newDestinations": "今回のインポートで追加された転送先アドレス：",
 };
 
 export default dictionary;

@@ -16,7 +16,7 @@ type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
  * Visual style follows Mailflare's (Gmail-like): a #f6f8fc canvas, white cards with large radii,
  * #0b57d0 as the accent, pill-shaped buttons and navigation, and Mailflare's dark palette.
  */
-const STYLE = raw(`
+export const STYLE = raw(`
 :root { color-scheme: light dark;
 	--bg:#f6f8fc; --card:#fff; --text:#202124; --muted:#5f6368; --line:#dadce0; --soft:#eef3fb; --hover:#e9eef6;
 	--primary:#0b57d0; --primary-text:#fff; --primary-hover:#0a4fbe; --nav-active:#d3e3fd; --nav-active-text:#041e49;
@@ -148,7 +148,20 @@ form.note input { width:100%; min-width:12ch; }
 	padding:12px 20px; border-radius:12px; background:#323232; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
 .toast.bad { background:var(--danger); color:#fff; }
 @media (prefers-color-scheme: dark) { .toast { background:#e8eaed; color:#202124; } .toast.bad { background:#f2b8b5; color:#601410; } }
+
+.lang-label { margin:0; display:flex; }
+.sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+.mt12 { margin-top:12px; }
+.m0 { margin:0; }
+.mono { font-family:ui-monospace,monospace; }
 `);
+/** Changes whenever the stylesheet does, so browsers fetch the new one after a deploy. */
+export const STYLE_VERSION = (() => {
+	let hash = 0;
+	for (const char of String(STYLE)) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+	return (hash >>> 0).toString(36);
+})();
+
 
 /** Lucide icons (ISC license), inlined so the page needs no extra requests. */
 const ICONS = {
@@ -174,7 +187,7 @@ export type PageOptions = { t: Translate; nav?: boolean; script?: boolean; curre
 
 function languageMenu(t: Translate, path = "/", extraClass = ""): Html {
 	return html`<form class="lang ${extraClass}" method="get" action="/lang">
-<label for="lang-${extraClass || "main"}" style="margin:0;display:flex">${icon("globe")}<span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">${t("nav.language")}</span></label>
+<label for="lang-${extraClass || "main"}" class="lang-label">${icon("globe")}<span class="sr">${t("nav.language")}</span></label>
 <input type="hidden" name="next" value="${path}" />
 <select id="lang-${extraClass || "main"}" name="locale" data-autosubmit>
 ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${locale === t.locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
@@ -198,7 +211,7 @@ export function page(title: string, body: Html, options: PageOptions): Html {
 <meta name="theme-color" content="#202124" media="(prefers-color-scheme: dark)" />
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <title>${title} · mailflare-alias</title>
-<style>${STYLE}</style>
+<link rel="stylesheet" href="/assets/app.css?v=${STYLE_VERSION}" />
 </head>
 <body>
 ${options.nav
@@ -248,11 +261,12 @@ function withCode(text: string): Html {
 	return html`${parts.map((part, index) => (index % 2 ? html`<code>${part}</code>` : part))}`;
 }
 
-export function setupPage(t: Translate, input: { codeInLogs: boolean }): Html {
+export function setupPage(t: Translate, input: { codeInLogs: boolean; notice?: string }): Html {
 	return page(
 		t("setup.title"),
 		html`<main class="center"><section>
 <h1>${t("setup.welcome")}</h1>
+${noticeBox(input.notice)}
 <p>${t("setup.intro")}</p>
 <form data-passkey="setup" data-next="/connection">
 <label for="code">${t("setup.code")}</label>
@@ -263,6 +277,7 @@ export function setupPage(t: Translate, input: { codeInLogs: boolean }): Html {
 <p><button class="primary">${t("setup.button")}</button></p>
 ${errorBox(t)}
 </form>
+${input.codeInLogs ? html`<form method="post" action="/setup/code"><button>${t("setup.newCode")}</button></form>` : ""}
 </section></main>`,
 		{ t, script: true, path: "/setup" },
 	);
@@ -611,7 +626,7 @@ ${passkeys.map(
 </section>
 <section>
 <h2>${t("pk.add")}</h2>
-<form data-passkey="add" data-next="/passkeys?notice=${encodeURIComponent(t("notice.passkeyAdded"))}">
+<form data-passkey="add" data-next="/passkeys?notice=notice.passkeyAdded">
 <label for="name">${t("pk.name")}</label>
 <div class="row"><input id="name" name="name" type="text" value="${t("pk.defaultName")}" maxlength="60" /><button class="primary">${t("setup.button")}</button></div>
 <p class="help">${t("pk.addHelp")}</p>
@@ -632,13 +647,13 @@ ${noticeBox(notice)}
 <section>
 <h2>${t("bl.title")}</h2>
 <p class="help">${t("bl.help")}</p>
-<form class="row" method="post" action="/blocklist" style="margin-top:12px">
+<form class="row mt12" method="post" action="/blocklist">
 <input name="value" type="text" placeholder="${t("bl.placeholder")}" autocapitalize="none" required aria-label="${t("bl.colSender")}" />
 <button class="primary">${t("bl.block")}</button>
 </form>
 ${entries.length === 0
 	? html`<p class="muted">${t("bl.empty")}</p>`
-	: html`<table class="rt" style="margin-top:12px"><thead><tr><th>${t("bl.colSender")}</th><th>${t("bl.colType")}</th><th>${t("bl.colHits")}</th><th>${t("bl.colAdded")}</th><th></th></tr></thead><tbody>
+	: html`<table class="rt mt12"><thead><tr><th>${t("bl.colSender")}</th><th>${t("bl.colType")}</th><th>${t("bl.colHits")}</th><th>${t("bl.colAdded")}</th><th></th></tr></thead><tbody>
 ${entries.map(
 	(entry) => html`<tr><td data-label="${t("bl.colSender")}"><code>${entry.value}</code></td><td data-label="${t("bl.colType")}">${t(entry.kind === "domain" ? "bl.domain" : "bl.address")}</td>
 <td data-label="${t("bl.colHits")}">${entry.hits}</td><td data-label="${t("bl.colAdded")}">${when(entry.created_at, t.locale)}</td>
@@ -657,7 +672,7 @@ export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: Cont
 	return page(
 		alias.address,
 		html`<main>
-<p style="margin:0"><a href="/">${t("alias.back")}</a></p>
+<p class="m0"><a href="/">${t("alias.back")}</a></p>
 ${noticeBox(notice)}
 <section>
 <h2><code>${alias.address}</code></h2>
@@ -710,7 +725,7 @@ export function apiKeysPage(
 ${noticeBox(notice)}
 ${newKey
 	? html`<section><h2>${t("keys.createdTitle")}</h2><p class="notice" role="status">${t("keys.created")}</p>
-<p><input type="text" readonly value="${newKey}" aria-label="${t("keys.colKey")}" data-select spellcheck="false" style="font-family:ui-monospace,monospace" /></p></section>`
+<p><input type="text" readonly value="${newKey}" aria-label="${t("keys.colKey")}" data-select spellcheck="false" class="mono" /></p></section>`
 	: ""}
 <section>
 <h2>${t("keys.title")}</h2>
@@ -752,7 +767,8 @@ export function importPage(
 	const serverField = (id: string, value: string) => html`<details><summary>${t("imp.server")}</summary>
 <input name="server" type="url" value="${value}" aria-label="${t("imp.server")}" />
 <p class="help">${t("imp.serverHelp")}</p></details>`;
-	const domainsField = html`<input type="hidden" name="domains" value="${domains.join(" ")}" data-domains />`;
+	const domainsField = html`<input type="hidden" name="domains" value="${domains.join(" ")}" data-domains />
+${checkbox("destinations", false, t("imp.destinations"), t("imp.destinationsHelp"))}`;
 	return page(
 		t("imp.title"),
 		html`<main>
@@ -764,6 +780,9 @@ ${result.skippedDomains.length
 	? html`<p>${t("imp.skipped")}</p><ul class="results">${result.skippedDomains.map(
 			(item) => html`<li><code>${item.domain}</code> <span class="muted">${t("imp.count", { count: String(item.count) })}</span></li>`,
 		)}</ul><p class="help">${t("imp.skippedHelp")}</p>`
+	: ""}
+${result.newDestinations.length
+	? html`<p>${t("imp.newDestinations")}</p><ul class="results">${result.newDestinations.map((email) => html`<li><code>${email}</code></li>`)}</ul>`
 	: ""}
 <p><a href="/">${t("imp.viewAliases")} →</a></p></section>`
 	: ""}

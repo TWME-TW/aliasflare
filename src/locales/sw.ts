@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Karibu kwenye mailflare-alias",
 	"setup.intro": "Sajili passkey ili kulinda dashibodi hii. Kisha utaingiza maelezo ya muunganisho wa Mailflare.",
 	"setup.code": "Msimbo wa usanidi",
-	"setup.codeFromLogs":
-		"Msimbo wa mara moja uliandikwa kwenye kumbukumbu (logs) za Worker hii. Fungua dashibodi ya Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, au endesha `npx wrangler tail mailflare-alias` kisha pakia upya ukurasa huu. Unatumika kwa dakika 60.",
-	"setup.codeFromSecret": "Ingiza siri ya SETUP_CODE, au msimbo kutoka kwenye kumbukumbu za Worker hii.",
+	"setup.codeFromLogs": "Msimbo wa mara moja umeandikwa kwenye kumbukumbu (logs) za Worker hii. Fungua dashibodi ya Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, au endesha `npx wrangler tail mailflare-alias`, kisha ubonyeze “Andika msimbo mpya kwenye kumbukumbu” hapa chini. Msimbo unatumika kwa dakika 60.",
+	"setup.codeFromSecret": "Ingiza siri ya SETUP_CODE.",
 	"setup.passkeyName": "Jina la passkey",
 	"setup.defaultName": "Passkey yangu",
 	"setup.button": "Sajili passkey",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Hukusanidia kikoa cha lakabu za kinyume: Email Routing yenye subaddressing, kanuni moja inayotuma anwani za reply+…@ kwa Worker hii, na Email Sending. Kuiendesha tena ni salama.",
 	"cf.token": "Tokeni ya API ya Cloudflare",
-	"cf.tokenHelp": "Unda tokeni kwa zone hii yenye ruhusa hizi: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit.",
+	"cf.tokenHelp": "Unda tokeni kwa zone hii yenye ruhusa hizi: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. Inatumika kwa usanidi huu pekee na haihifadhiwi; ili kuihifadhi, weka siri ya CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Jina la Worker",
 	"cf.workerNameHelp": "Jina ambalo Worker hii ilitumwa nalo.",
 	"cf.run": "Sanidi kiotomatiki",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Tumia herufi, tarakimu, nukta, viunganishi, mistari ya chini na alama ya kujumlisha pekee; anza na kumaliza kwa herufi au tarakimu.",
 	"notice.newBadDomain": "Chagua mojawapo ya vikoa vyako vya lakabu.",
 	"notice.newFailed": "Lakabu haikuweza kuundwa. Jaribu tena.",
+	"setup.newCode": "Andika msimbo mpya kwenye kumbukumbu",
+	"notice.setupCodeIssued": "Msimbo mpya wa usanidi umeandikwa kwenye kumbukumbu. Msimbo wa awali hautumiki tena.",
+	"link.used": "Kiungo hiki kimeshatumika. Kila kiungo katika ujumbe uliosambazwa hufanya kazi mara moja tu.",
+	"action.preserveMail": "Jiondoe kutoka {sender} kwa kutuma barua pepe ya kujiondoa kutoka {alias} kwenda {target}. Ikishindikana, mtumaji huzuiwa badala yake.",
+	"banner.spoofSubject": "[Mtumaji Asiyethibitishwa]",
+	"imp.destinations": "Tumia anwani zao za kusambaza",
+	"imp.destinationsHelp": "Zimezimwa: lakabu zilizoletwa husambaza kwa anwani yako chaguomsingi, isipokuwa anwani yao ya kusambaza tayari inatumika hapa. Zimewashwa: anwani mpya za kusambaza kutoka kwenye uletaji pia hutumika. Kila anwani ya kusambaza inaweza kutuma barua kupitia lakabu za kinyume, kwa hivyo washa hili kwa anwani zako tu.",
+	"imp.newDestinations": "Anwani mpya za kusambaza zilizoongezwa na uletaji huu:",
 };
 
 export default dictionary;

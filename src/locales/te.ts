@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-aliasకు స్వాగతం",
 	"setup.intro": "ఈ డాష్‌బోర్డ్‌ను రక్షించడానికి ఒక పాస్‌కీని నమోదు చేయండి. ఆ తర్వాత మీరు Mailflare కనెక్షన్ వివరాలను నమోదు చేస్తారు.",
 	"setup.code": "సెటప్ కోడ్",
-	"setup.codeFromLogs":
-		"ఒక్కసారి ఉపయోగించే కోడ్‌ను ఈ Worker లాగ్‌లలో రాశాం. Cloudflare డాష్‌బోర్డ్ → Workers & Pages → mailflare-alias → Observability → Logs తెరవండి, లేదా `npx wrangler tail mailflare-alias` నడిపి ఈ పేజీని మళ్లీ లోడ్ చేయండి. ఇది 60 నిమిషాల పాటు చెల్లుతుంది.",
-	"setup.codeFromSecret": "SETUP_CODE సీక్రెట్‌ను, లేదా ఈ Worker లాగ్‌లలోని కోడ్‌ను నమోదు చేయండి.",
+	"setup.codeFromLogs": "ఈ Worker లాగ్‌లలో ఒక్కసారి ఉపయోగించే కోడ్ రాయబడుతుంది. Cloudflare డాష్‌బోర్డ్ → Workers & Pages → mailflare-alias → Observability → Logs తెరవండి, లేదా `npx wrangler tail mailflare-alias` నడపండి, తర్వాత కింద ఉన్న “లాగ్‌లకు కొత్త కోడ్ రాయి” బటన్‌ను నొక్కండి. ఈ కోడ్ 60 నిమిషాల పాటు చెల్లుతుంది.",
+	"setup.codeFromSecret": "SETUP_CODE సీక్రెట్‌ను నమోదు చేయండి.",
 	"setup.passkeyName": "పాస్‌కీ పేరు",
 	"setup.defaultName": "నా పాస్‌కీ",
 	"setup.button": "పాస్‌కీని నమోదు చేయండి",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "మీ కోసం రివర్స్-మారుపేరు డొమైన్‌ను సెట్ చేస్తుంది: subaddressingతో Email Routing, reply+…@ చిరునామాలను ఈ Workerకు పంపే ఒక నియమం, మరియు Email Sending. మళ్లీ నడపడం సురక్షితం.",
 	"cf.token": "Cloudflare API టోకెన్",
-	"cf.tokenHelp": "జోన్ కోసం ఈ అనుమతులతో టోకెన్‌ను సృష్టించండి: Zone Read, Zone Settings Edit, Email Routing Rules Edit మరియు Email Sending Edit.",
+	"cf.tokenHelp": "జోన్ కోసం ఈ అనుమతులతో టోకెన్‌ను సృష్టించండి: Zone Read, Zone Settings Edit, Email Routing Rules Edit మరియు Email Sending Edit. ఇది ఈ సెటప్ కోసం మాత్రమే ఉపయోగించబడుతుంది, నిల్వ చేయబడదు; దానిని ఉంచుకోవాలంటే CLOUDFLARE_API_TOKEN సీక్రెట్‌ను సెట్ చేయండి.",
 	"cf.workerName": "Worker పేరు",
 	"cf.workerNameHelp": "ఈ Workerను డిప్లాయ్ చేసిన పేరు.",
 	"cf.run": "ఆటోమేటిక్‌గా సెట్ చేయండి",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "అక్షరాలు, అంకెలు, చుక్కలు, హైఫన్‌లు, అండర్‌స్కోర్‌లు మరియు ప్లస్ గుర్తులు మాత్రమే వాడండి; అక్షరం లేదా అంకెతో మొదలై, అక్షరం లేదా అంకెతో ముగియాలి.",
 	"notice.newBadDomain": "మీ మారుపేరు డొమైన్‌లలో ఒకదాన్ని ఎంచుకోండి.",
 	"notice.newFailed": "మారుపేరును సృష్టించలేకపోయాము. మళ్లీ ప్రయత్నించండి.",
+	"setup.newCode": "లాగ్‌లకు కొత్త కోడ్ రాయి",
+	"notice.setupCodeIssued": "లాగ్‌లలో కొత్త సెటప్ కోడ్ రాయబడింది. మునుపటి కోడ్ ఇక పని చేయదు.",
+	"link.used": "ఈ లింక్ ఇప్పటికే ఉపయోగించబడింది. ఫార్వర్డ్ చేసిన సందేశంలోని ప్రతి లింక్ ఒక్కసారి మాత్రమే పనిచేస్తుంది.",
+	"action.preserveMail": "{alias} నుండి {target}కి అన్‌సబ్‌స్క్రైబ్ ఇమెయిల్ పంపడం ద్వారా {sender} నుండి చందా రద్దు చేయండి. అది విఫలమైతే, బదులుగా పంపినవారిని బ్లాక్ చేస్తారు.",
+	"banner.spoofSubject": "[ధృవీకరించని పంపినవారు]",
+	"imp.destinations": "వాటి ఫార్వర్డింగ్ చిరునామాలను ఉపయోగించండి",
+	"imp.destinationsHelp": "ఆఫ్: దిగుమతి చేసిన మారుపేర్లు మీ డిఫాల్ట్ చిరునామాకు ఫార్వర్డ్ అవుతాయి, వాటి ఫార్వర్డింగ్ చిరునామా ఇక్కడ ఇప్పటికే ఉపయోగంలో ఉంటే తప్ప. ఆన్: దిగుమతి నుండి వచ్చిన కొత్త ఫార్వర్డింగ్ చిరునామాలు కూడా ఉపయోగించబడతాయి. ప్రతి ఫార్వర్డింగ్ చిరునామా రివర్స్ మారుపేర్ల ద్వారా మెయిల్ పంపగలదు, కాబట్టి మీవి అయిన చిరునామాలకు మాత్రమే దీన్ని ఆన్ చేయండి.",
+	"imp.newDestinations": "ఈ దిగుమతి ద్వారా జోడించబడిన కొత్త ఫార్వర్డింగ్ చిరునామాలు:",
 };
 
 export default dictionary;

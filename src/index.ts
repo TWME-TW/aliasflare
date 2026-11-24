@@ -17,7 +17,7 @@ import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
 import { setUpCloudflare, type SetupStep } from "./cloudflare";
 import { api } from "./compat/api";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias, randomSuffix } from "./compat/aliases";
-import { envOverrides, loadConfig, missingConnection, saveConfig, type AppConfig } from "./config";
+import { ConfigError, DOMAIN_PATTERN, envOverrides, loadConfig, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
 import { domainOf, extractEmail, normalizeEmail, reverseAddress } from "./format";
@@ -34,7 +34,7 @@ import {
 	type ImportedAlias,
 	type Selection,
 } from "./importer";
-import { isLocale, LANG_COOKIE, negotiateLocale, translator, type MessageKey } from "./i18n";
+import { isLocale, isNoticeKey, LANG_COOKIE, negotiateLocale, translator, type MessageKey } from "./i18n";
 import {
 	authenticationOptions,
 	checkSetupCode,
@@ -55,6 +55,7 @@ import {
 	connectionPage,
 	dashboardPage,
 	FAVICON_SVG,
+	STYLE,
 	importPage,
 	loginPage,
 	messagePage,
@@ -63,11 +64,10 @@ import {
 	setupPage,
 	type ActivityItem,
 } from "./ui";
-import { describeAction, performAction, resolveLink } from "./unsubscribe";
+import { claimLink, describeAction, performAction, releaseLink, resolveLink } from "./unsubscribe";
 
 const MAX_WEBHOOK_BYTES = 64 * 1024;
 const MAX_JSON_BYTES = 32 * 1024;
-const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
 const app = new Hono<AppEnv>();
 
@@ -78,12 +78,18 @@ app.use("*", async (c, next) => {
 	c.header("X-Frame-Options", "DENY");
 	c.header(
 		"Content-Security-Policy",
-		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	);
 });
 
 app.use("*", async (c, next) => {
-	c.set("config", await loadConfig(c.env));
+	try {
+		c.set("config", await loadConfig(c.env));
+	} catch (error) {
+		if (!(error instanceof ConfigError)) throw error;
+		console.error("Configuration error:", error.message);
+		return c.text(`mailflare-alias cannot start: ${error.message}. Fix the Worker's variables or secrets and deploy again.`, 500);
+	}
 	const chosen = getCookie(c, LANG_COOKIE);
 	c.set("t", translator(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language"))));
 	await next();
@@ -91,18 +97,65 @@ app.use("*", async (c, next) => {
 
 type C = Context<AppEnv>;
 
-/** Redirects with a translated notice, shown once at the top of the next page. */
+/**
+ * A URL that shows a notice once at the top of the page. Only the message key and its
+ * values travel in the URL, so a crafted link cannot put text of its own on the page.
+ */
+function noticeUrl(path: string, key: MessageKey, params?: Record<string, string>): string {
+	const query = new URLSearchParams({ notice: key });
+	for (const [name, value] of Object.entries(params ?? {})) query.set(`n.${name}`, value);
+	return `${path}${path.includes("?") ? "&" : "?"}${query}`;
+}
+
 function redirectWithNotice(c: C, path: string, key: MessageKey, params?: Record<string, string>) {
-	return c.redirect(`${path}?notice=${encodeURIComponent(c.get("t")(key, params))}`);
+	return c.redirect(noticeUrl(path, key, params));
+}
+
+/** The notice named in the URL, translated, or nothing for an unknown key. */
+function noticeFrom(c: C): string | undefined {
+	const key = c.req.query("notice");
+	if (!isNoticeKey(key)) return undefined;
+	const params: Record<string, string> = {};
+	for (const [name, value] of Object.entries(c.req.query())) if (name.startsWith("n.")) params[name.slice(2)] = value.slice(0, 200);
+	return c.get("t")(key, params);
 }
 
 function publicOrigin(c: C): string {
 	return c.get("config").publicUrl || new URL(c.req.url).origin;
 }
 
+/**
+ * Reads a request body up to `max` bytes, or returns null when it is larger. A declared
+ * Content-Length is checked first, and a streamed body stops being read past the limit.
+ */
+async function readLimited(request: Request, max: number): Promise<string | null> {
+	if (Number(request.headers.get("Content-Length") ?? 0) > max) return null;
+	if (!request.body) return "";
+	const reader = request.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > max) {
+			await reader.cancel();
+			return null;
+		}
+		chunks.push(value);
+	}
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return new TextDecoder().decode(bytes);
+}
+
 async function readJson<T>(c: C): Promise<T | null> {
-	const text = await c.req.text();
-	if (text.length > MAX_JSON_BYTES) return null;
+	const text = await readLimited(c.req.raw, MAX_JSON_BYTES);
+	if (text === null) return null;
 	try {
 		return JSON.parse(text || "{}") as T;
 	} catch {
@@ -127,6 +180,11 @@ app.get("/assets/passkey.js", (c) => {
 app.get("/favicon.svg", (c) => {
 	c.header("Cache-Control", "public, max-age=86400");
 	return c.body(FAVICON_SVG, 200, { "Content-Type": "image/svg+xml" });
+});
+
+app.get("/assets/app.css", (c) => {
+	c.header("Cache-Control", "public, max-age=86400");
+	return c.body(String(STYLE), 200, { "Content-Type": "text/css; charset=utf-8" });
 });
 
 app.get("/assets/app.js", (c) => {
@@ -166,10 +224,8 @@ app.post("/webhook", async (c) => {
 	const config = c.get("config");
 	const missing = missingConnection(config);
 	if (missing.length) return c.json({ error: `Not configured: ${missing.join(", ")}` }, 503);
-	const length = Number(c.req.header("Content-Length") ?? 0);
-	if (length > MAX_WEBHOOK_BYTES) return c.json({ error: "Payload too large" }, 413);
-	const body = await c.req.text();
-	if (body.length > MAX_WEBHOOK_BYTES) return c.json({ error: "Payload too large" }, 413);
+	const body = await readLimited(c.req.raw, MAX_WEBHOOK_BYTES);
+	if (body === null) return c.json({ error: "Payload too large" }, 413);
 	if (!(await verifyWebhookSignature(config.webhookSecret, body, c.req.header("X-Email-Platform-Signature") ?? null))) {
 		return c.json({ error: "Invalid signature" }, 401);
 	}
@@ -186,14 +242,16 @@ app.post("/webhook", async (c) => {
 
 // Signed links in forwarded mail. GET only shows a confirmation, so link scanners change
 // nothing; the change happens on POST (RFC 8058 one-click unsubscribe, or the button).
+// Each link works once: a link that leaks, say in a quoted reply, cannot be replayed.
 for (const kind of ["unsubscribe", "action"] as const) {
 	const invalid = (c: C) => {
 		const t = c.get("t");
 		return c.html(messagePage(t, t("link.invalidTitle"), html`<p>${t("link.invalid")}</p>`), 404);
 	};
+	const resolve = (c: C) => resolveLink(c.env, c.get("config"), kind, c.req.param("token") ?? "", [new URL(c.req.url).hostname]);
 	app.get(`/${kind}/:token`, async (c) => {
 		const t = c.get("t");
-		const target = await resolveLink(c.env, c.get("config"), kind, c.req.param("token"));
+		const target = await resolve(c);
 		if (!target) return invalid(c);
 		const title = kind === "unsubscribe" ? t("link.unsubscribe") : target.action === "disable_alias" ? t("link.disable") : t("link.block");
 		return c.html(
@@ -202,12 +260,21 @@ for (const kind of ["unsubscribe", "action"] as const) {
 	});
 	app.post(`/${kind}/:token`, async (c) => {
 		const t = c.get("t");
-		const target = await resolveLink(c.env, c.get("config"), kind, c.req.param("token"));
+		// The one-click unsubscribe POST comes from mail providers' servers, without an Origin;
+		// the banner buttons are only ever pressed on this site's own confirmation page.
+		if (kind === "action" && !sameOrigin(c)) return c.text(t("err.crossSite"), 403);
+		if (await rateLimited(c)) return c.text(t("err.rateLimited"), 429);
+		const target = await resolve(c);
 		if (!target) return invalid(c);
+		if (!(await claimLink(c.env.DB, target.token))) {
+			return c.html(messagePage(t, t("link.done"), html`<p>${t("link.used")}</p>`));
+		}
 		try {
 			await performAction(c.env, c.get("config"), target);
 		} catch (error) {
-			return c.html(messagePage(t, t("link.error"), html`<p>${error instanceof Error ? error.message : t("link.tryAgain")}</p>`), 500);
+			await releaseLink(c.env.DB, target.token);
+			console.error("Link action failed", kind, error instanceof Error ? error.message : error);
+			return c.html(messagePage(t, t("link.error"), html`<p>${t("link.tryAgain")}</p>`), 500);
 		}
 		return c.html(messagePage(t, t("link.done"), html`<p>${describeAction(target, t)}</p>`));
 	});
@@ -216,8 +283,18 @@ for (const kind of ["unsubscribe", "action"] as const) {
 // First run: register the first passkey with the one-time setup code.
 app.get("/setup", async (c) => {
 	if (await hasPasskeys(c.env.DB)) return c.redirect("/login");
-	if (!c.env.SETUP_CODE) await issueSetupCode(c.env.DB);
-	return c.html(setupPage(c.get("t"), { codeInLogs: !c.env.SETUP_CODE }));
+	const codeInLogs = !c.env.SETUP_CODE?.trim();
+	if (codeInLogs) await issueSetupCode(c.env.DB);
+	return c.html(setupPage(c.get("t"), { codeInLogs, notice: noticeFrom(c) }));
+});
+
+// Writes a fresh setup code to the logs, for whoever started watching them after the first one.
+app.post("/setup/code", async (c) => {
+	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
+	if (await hasPasskeys(c.env.DB)) return c.redirect("/login");
+	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
+	if (!c.env.SETUP_CODE?.trim()) await issueSetupCode(c.env.DB, true);
+	return redirectWithNotice(c, "/setup", "notice.setupCodeIssued");
 });
 
 app.post("/setup/options", async (c) => {
@@ -226,7 +303,7 @@ app.post("/setup/options", async (c) => {
 	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
 	const body = await readJson<{ code?: string }>(c);
 	if (!body?.code || !(await checkSetupCode(c.env, body.code))) return jsonError(c, "err.badCode", 401);
-	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url));
+	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url), "setup_register");
 	setChallengeCookie(c, challengeId);
 	return c.json({ options });
 });
@@ -234,17 +311,23 @@ app.post("/setup/options", async (c) => {
 app.post("/setup/verify", async (c) => {
 	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
 	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
+	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
 	const body = await readJson<{ response?: RegistrationResponseJSON; name?: string }>(c);
 	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
-	const passkey = await completeRegistration(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response, body.name ?? "").catch(
-		() => null,
-	);
+	const passkey = await completeRegistration(
+		c.env.DB,
+		relyingParty(c.req.url),
+		takeChallengeCookie(c),
+		body.response,
+		body.name ?? "",
+		"setup_register",
+	).catch(() => null);
 	if (!passkey) return jsonError(c, "err.registerFailed", 400);
 	await c.env.DB.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup'").run();
 	// The language picked during setup also becomes the language of forwarded-mail banners.
 	const settings = await loadSettings(c.env.DB);
 	await saveSettings(c.env.DB, { ...settings, language: c.get("t").locale });
-	await startSession(c);
+	await startSession(c, passkey.id);
 	return c.json({ ok: true });
 });
 
@@ -264,17 +347,18 @@ app.post("/login/options", async (c) => {
 
 app.post("/login/verify", async (c) => {
 	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
+	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
 	const body = await readJson<{ response?: AuthenticationResponseJSON }>(c);
 	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
 	const passkey = await completeAuthentication(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response).catch(() => null);
 	if (!passkey) return jsonError(c, "err.loginFailed", 401);
-	await startSession(c);
+	await startSession(c, passkey.id);
 	return c.json({ ok: true });
 });
 
-app.post("/logout", (c) => {
+app.post("/logout", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
-	endSession(c);
+	await endSession(c);
 	return c.redirect("/login");
 });
 
@@ -331,7 +415,7 @@ app.get("/", async (c) => {
 		)
 		.all<ActivityItem>();
 	return c.html(
-		dashboardPage(c.get("t"), { settings, aliases, list, activity, missing: missingConnection(c.get("config")), notice: c.req.query("notice") }),
+		dashboardPage(c.get("t"), { settings, aliases, list, activity, missing: missingConnection(c.get("config")), notice: noticeFrom(c) }),
 	);
 });
 
@@ -341,7 +425,7 @@ app.get("/settings", async (c) =>
 			settings: await loadSettings(c.env.DB),
 			reverseDomain: c.get("config").reverseDomain,
 			origin: publicOrigin(c),
-			notice: c.req.query("notice"),
+			notice: noticeFrom(c),
 		}),
 	),
 );
@@ -400,8 +484,8 @@ function renderConnection(c: C, config: AppConfig, setup?: SetupStep[]) {
 			fixed: envOverrides(c.env),
 			webhookUrl: `${publicOrigin(c)}/webhook`,
 			missing: missingConnection(config),
-			cloudflare: { hasToken: !!config.cloudflareApiToken, workerName: config.workerName, setup },
-			notice: c.req.query("notice"),
+			cloudflare: { hasToken: envOverrides(c.env).has("cloudflareApiToken"), workerName: config.workerName, setup },
+			notice: noticeFrom(c),
 		}),
 	);
 }
@@ -414,28 +498,23 @@ app.post("/connection/cloudflare", async (c) => {
 	const fixed = envOverrides(c.env);
 	const text = (key: string) => (typeof form[key] === "string" ? (form[key] as string).trim() : "");
 	const values: Record<string, string> = {};
-	if (!fixed.has("cloudflareApiToken") && text("cloudflareApiToken")) values.cloudflareApiToken = text("cloudflareApiToken");
+	// The token can edit the zone, so it is used for this request only and never stored.
+	// A CLOUDFLARE_API_TOKEN secret is the way to keep one; an older stored token is removed.
+	const token = fixed.has("cloudflareApiToken") ? c.get("config").cloudflareApiToken : text("cloudflareApiToken");
+	await c.env.DB.prepare("DELETE FROM config WHERE key = 'cloudflareApiToken'").run();
 	if (!fixed.has("workerName")) {
 		const name = text("workerName").toLowerCase();
-		if (name && !/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) return redirectWithNotice(c, "/connection", "notice.badWorkerName");
+		if (name && !WORKER_NAME_PATTERN.test(name)) return redirectWithNotice(c, "/connection", "notice.badWorkerName");
 		values.workerName = name;
 	}
 	await saveConfig(c.env.DB, values);
 	const config = await loadConfig(c.env);
 	if (!config.reverseDomain) return redirectWithNotice(c, "/connection", "notice.needReverseDomain");
-	if (!config.cloudflareApiToken) return redirectWithNotice(c, "/connection", "notice.needCloudflareToken");
-	const setup = await setUpCloudflare({ token: config.cloudflareApiToken, reverseDomain: config.reverseDomain, workerName: config.workerName });
+	if (!token) return redirectWithNotice(c, "/connection", "notice.needCloudflareToken");
+	const setup = await setUpCloudflare({ token, reverseDomain: config.reverseDomain, workerName: config.workerName });
 	return renderConnection(c, config, setup);
 });
 
-function validOrigin(value: string): string | null {
-	try {
-		const url = new URL(value);
-		return url.protocol === "https:" && !url.username && !url.password ? url.origin : null;
-	} catch {
-		return null;
-	}
-}
 
 app.post("/connection", async (c) => {
 	const form = await c.req.parseBody();
@@ -468,7 +547,7 @@ app.post("/connection", async (c) => {
 
 app.get("/blocklist", async (c) => {
 	const { results } = await c.env.DB.prepare("SELECT * FROM blocklist ORDER BY created_at DESC").all<BlocklistRow>();
-	return c.html(blocklistPage(c.get("t"), { entries: results, notice: c.req.query("notice") }));
+	return c.html(blocklistPage(c.get("t"), { entries: results, notice: noticeFrom(c) }));
 });
 
 app.post("/blocklist", async (c) => {
@@ -551,8 +630,10 @@ app.post("/import/:source", async (c) => {
 				: t(error.reason === "auth" ? "imp.err.auth" : error.reason === "empty" ? "imp.err.empty" : "imp.err.format");
 		return render({ error: message });
 	}
-	const result = await importAliases(c.env.DB, settings, reverseDomain, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length);
-	console.log(JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length }));
+	const result = await importAliases(c.env.DB, settings, reverseDomain, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
+		keepDestinations: form.destinations === "1",
+	});
+	console.log(JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length, newDestinations: result.newDestinations.length }));
 	return render({ result });
 });
 
@@ -563,7 +644,7 @@ async function renderApiKeys(c: C, extra: { newKey?: string; notice?: string } =
 			keys: await listApiKeys(c.env.DB),
 			enabled: { simplelogin: settings.simpleloginApi, addy: settings.addyApi },
 			origin: publicOrigin(c),
-			notice: extra.notice ?? c.req.query("notice"),
+			notice: extra.notice ?? noticeFrom(c),
 			newKey: extra.newKey,
 		}),
 	);
@@ -584,7 +665,7 @@ app.post("/api-keys/:id/delete", async (c) => {
 	return redirectWithNotice(c, "/api-keys", "notice.keyRevoked");
 });
 
-app.get("/passkeys", async (c) => c.html(passkeysPage(c.get("t"), { passkeys: await listPasskeys(c.env.DB), notice: c.req.query("notice") })));
+app.get("/passkeys", async (c) => c.html(passkeysPage(c.get("t"), { passkeys: await listPasskeys(c.env.DB), notice: noticeFrom(c) })));
 
 app.post("/passkeys/options", async (c) => {
 	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url));
@@ -604,7 +685,10 @@ app.post("/passkeys/verify", async (c) => {
 
 app.post("/passkeys/:id/delete", async (c) => {
 	// Never remove the last passkey, or nobody could sign in again.
-	const result = await c.env.DB.prepare("DELETE FROM passkeys WHERE id = ? AND (SELECT COUNT(*) FROM passkeys) > 1").bind(c.req.param("id")).run();
+	const id = c.req.param("id");
+	const result = await c.env.DB.prepare("DELETE FROM passkeys WHERE id = ? AND (SELECT COUNT(*) FROM passkeys) > 1").bind(id).run();
+	// Sessions started with that passkey end with it (also by ON DELETE CASCADE where enforced).
+	if (result.meta.changes > 0) await c.env.DB.prepare("DELETE FROM sessions WHERE passkey_id = ?").bind(id).run();
 	return redirectWithNotice(c, "/passkeys", result.meta.changes > 0 ? "notice.passkeyRemoved" : "notice.lastPasskey");
 });
 
@@ -615,7 +699,7 @@ app.post("/aliases/bulk", async (c) => {
 	const form = await c.req.parseBody({ all: true });
 	const back = typeof form.back === "string" && /^\/(\?|$)/.test(form.back) ? safeLocalPath(form.back) : "/";
 	const done = (key: MessageKey, params?: Record<string, string>) =>
-		c.redirect(`${back}${back.includes("?") ? "&" : "?"}notice=${encodeURIComponent(c.get("t")(key, params))}`);
+		c.redirect(noticeUrl(back, key, params));
 	const action = form.action as (typeof BULK_ACTIONS)[number];
 	const ids = [...new Set((Array.isArray(form.ids) ? form.ids : [form.ids]).filter((id): id is string => typeof id === "string").map(normalizeEmail))].slice(0, 500);
 	if (!BULK_ACTIONS.includes(action) || ids.length === 0) return done("notice.bulkBad");
@@ -747,7 +831,7 @@ app.get("/aliases/:address", async (c) => {
 	)
 		.bind(alias.address)
 		.all<ContactRow>();
-	return c.html(aliasPage(c.get("t"), { alias, contacts, reverseDomain: c.get("config").reverseDomain, notice: c.req.query("notice") }));
+	return c.html(aliasPage(c.get("t"), { alias, contacts, reverseDomain: c.get("config").reverseDomain, notice: noticeFrom(c) }));
 });
 
 app.post("/aliases/:address/contacts", async (c) => {
@@ -773,9 +857,24 @@ app.post("/aliases/:address/contacts/:id/block", async (c) => {
 export { app };
 
 export default {
-	fetch: app.fetch,
+	fetch(request, env, ctx) {
+		// An API URL saved with a trailing slash ("https://host/") makes apps call "//api/…".
+		const url = new URL(request.url);
+		if (url.pathname.startsWith("//")) {
+			url.pathname = url.pathname.replace(/^\/+/, "/");
+			return app.fetch(new Request(url, request), env, ctx);
+		}
+		return app.fetch(request, env, ctx);
+	},
 	async email(message, env) {
-		const config = await loadConfig(env);
+		const config = await loadConfig(env).catch((error) => {
+			console.error("Configuration error:", error instanceof Error ? error.message : error);
+			return null;
+		});
+		if (!config) {
+			message.setReject("This address is temporarily unavailable");
+			return;
+		}
 		if (missingConnection(config).length) {
 			message.setReject("This address is temporarily unavailable");
 			return;

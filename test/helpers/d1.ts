@@ -29,7 +29,8 @@ export function testDb(): D1Database {
 			},
 			run: async () => {
 				const prepared = run();
-				if (/\bRETURNING\b/i.test(sql)) {
+				// Like D1, a query run on its own or in a batch still returns its rows.
+				if (/\bRETURNING\b/i.test(sql) || /^\s*(SELECT|WITH)\b/i.test(sql)) {
 					const results = prepared.all(...params);
 					return { results, success: true, meta: { changes: results.length } };
 				}

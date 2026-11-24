@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias වෙත සාදරයෙන් පිළිගනිමු",
 	"setup.intro": "මෙම උපකරණ පුවරුව ආරක්ෂා කිරීමට passkey එකක් ලියාපදිංචි කරන්න. ඉන්පසු ඔබ Mailflare සම්බන්ධතා විස්තර ඇතුළත් කරනු ඇත.",
 	"setup.code": "පිහිටුවීමේ කේතය",
-	"setup.codeFromLogs":
-		"එක් වරක් පමණක් භාවිත කළ හැකි කේතයක් මෙම Worker හි ලොග වෙත ලියා ඇත. Cloudflare උපකරණ පුවරුව → Workers & Pages → mailflare-alias → Observability → Logs විවෘත කරන්න, නැතහොත් `npx wrangler tail mailflare-alias` ධාවනය කර මෙම පිටුව නැවත පූරණය කරන්න. එය මිනිත්තු 60ක් වලංගුයි.",
-	"setup.codeFromSecret": "SETUP_CODE රහස ඇතුළත් කරන්න, නැතහොත් මෙම Worker හි ලොග වල ඇති කේතය ඇතුළත් කරන්න.",
+	"setup.codeFromLogs": "එක්-වාර කේතයක් මෙම Worker හි ලොග වලට ලියැවේ. Cloudflare උපකරණ පුවරුව → Workers & Pages → mailflare-alias → Observability → Logs විවෘත කරන්න, නැතහොත් `npx wrangler tail mailflare-alias` ධාවනය කරන්න, ඉන්පසු පහළ “ලොග වලට නව කේතයක් ලියන්න” බොත්තම ඔබන්න. එය මිනිත්තු 60ක් වලංගුයි.",
+	"setup.codeFromSecret": "SETUP_CODE රහස ඇතුළත් කරන්න.",
 	"setup.passkeyName": "Passkey නම",
 	"setup.defaultName": "මගේ passkey",
 	"setup.button": "Passkey ලියාපදිංචි කරන්න",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "ඔබ වෙනුවෙන් ප්‍රතිලෝම අන්වර්ථ වසම සකසයි: subaddressing සහිත Email Routing, reply+…@ ලිපින මෙම Worker වෙත යවන එක රීතියක්, සහ Email Sending. නැවත ධාවනය කිරීම ආරක්ෂිතයි.",
 	"cf.token": "Cloudflare API ටෝකනය",
-	"cf.tokenHelp": "zone එක සඳහා මෙම අවසර සහිත ටෝකනයක් සාදන්න: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit.",
+	"cf.tokenHelp": "zone එක සඳහා මෙම අවසර සහිත ටෝකනයක් සාදන්න: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. එය මෙම සැකසීම සඳහා පමණක් භාවිත වන අතර ගබඩා නොකෙරේ; එය තබා ගැනීමට CLOUDFLARE_API_TOKEN රහස සකසන්න.",
 	"cf.workerName": "Worker නම",
 	"cf.workerNameHelp": "මෙම Worker යෙදවූ නම.",
 	"cf.run": "ස්වයංක්‍රීයව සකසන්න",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "අකුරු, ඉලක්කම්, තිත්, හයිෆන්, යටි ඉරි සහ ප්ලස් ලකුණු පමණක් භාවිතා කරන්න; ආරම්භය සහ අවසානය අකුරකින් හෝ ඉලක්කමකින් විය යුතුය.",
 	"notice.newBadDomain": "ඔබේ අන්වර්ථ වසම් වලින් එකක් තෝරන්න.",
 	"notice.newFailed": "අන්වර්ථ නාමය සෑදීමට නොහැකි විය. නැවත උත්සාහ කරන්න.",
+	"setup.newCode": "ලොග වලට නව කේතයක් ලියන්න",
+	"notice.setupCodeIssued": "ලොග වලට නව සැකසුම් කේතයක් ලියා ඇත. පෙර කේතය තවදුරටත් ක්‍රියා නොකරයි.",
+	"link.used": "මෙම සබැඳිය දැනටමත් භාවිත කර ඇත. යොමු කළ පණිවිඩයක සෑම සබැඳියක්ම එක් වරක් පමණක් ක්‍රියා කරයි.",
+	"action.preserveMail": "{alias} සිට {target} වෙත දායකත්වය ඉවත් කිරීමේ ඊමේලයක් යවා {sender} වෙතින් දායකත්වයෙන් ඉවත් වන්න. එය අසාර්ථක වුවහොත්, ඒ වෙනුවට යවන්නා අවහිර කෙරේ.",
+	"banner.spoofSubject": "[සත්‍යාපනය නොකළ යවන්නා]",
+	"imp.destinations": "ඔවුන්ගේ යොමු කිරීමේ ලිපින භාවිත කරන්න",
+	"imp.destinationsHelp": "ක්‍රියාවිරහිත: ආනයනය කළ අන්වර්ථ ඔබේ පෙරනිමි ලිපිනයට යොමු වේ, ඒවායේ යොමු කිරීමේ ලිපිනය මෙහි දැනටමත් භාවිතයේ නොමැති නම්. ක්‍රියාත්මක: ආනයනයෙන් ලැබෙන නව යොමු කිරීමේ ලිපින ද භාවිත වේ. සෑම යොමු කිරීමේ ලිපිනයකටම ප්‍රතිලෝම අන්වර්ථ හරහා ඊමේල් යැවිය හැකි බැවින්, ඔබට අයත් ලිපින සඳහා පමණක් මෙය ක්‍රියාත්මක කරන්න.",
+	"imp.newDestinations": "මෙම ආනයනය මගින් එකතු කළ නව යොමු කිරීමේ ලිපින:",
 };
 
 export default dictionary;

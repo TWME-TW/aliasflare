@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias میں خوش آمدید",
 	"setup.intro": "اس ڈیش بورڈ کو محفوظ کرنے کے لیے ایک پاس کی رجسٹر کریں۔ اس کے بعد آپ Mailflare کنکشن کی تفصیلات درج کریں گے۔",
 	"setup.code": "سیٹ اپ کوڈ",
-	"setup.codeFromLogs":
-		"ایک بار استعمال ہونے والا کوڈ اس Worker کے لاگز میں لکھا گیا ہے۔ Cloudflare ڈیش بورڈ → Workers & Pages → mailflare-alias → Observability → Logs کھولیں، یا `npx wrangler tail mailflare-alias` چلائیں اور یہ صفحہ دوبارہ لوڈ کریں۔ یہ 60 منٹ تک درست ہے۔",
-	"setup.codeFromSecret": "SETUP_CODE سیکرٹ درج کریں، یا اس Worker کے لاگز میں موجود کوڈ۔",
+	"setup.codeFromLogs": "اس Worker کے لاگز میں ایک بار استعمال ہونے والا کوڈ لکھا جاتا ہے۔ Cloudflare ڈیش بورڈ → Workers & Pages → mailflare-alias → Observability → Logs کھولیں، یا `npx wrangler tail mailflare-alias` چلائیں، پھر نیچے “لاگز میں نیا کوڈ لکھیں” پر کلک کریں۔ یہ کوڈ 60 منٹ تک درست ہے۔",
+	"setup.codeFromSecret": "SETUP_CODE سیکرٹ درج کریں۔",
 	"setup.passkeyName": "پاس کی کا نام",
 	"setup.defaultName": "میری پاس کی",
 	"setup.button": "پاس کی رجسٹر کریں",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "آپ کے لیے ریورس عرف ڈومین سیٹ اپ کرتا ہے: subaddressing کے ساتھ Email Routing، ایک رول جو reply+…@ ایڈریسز کو اس Worker کو بھیجتا ہے، اور Email Sending۔ اسے دوبارہ چلانا محفوظ ہے۔",
 	"cf.token": "Cloudflare API ٹوکن",
-	"cf.tokenHelp": "زون کے لیے ان اجازتوں کے ساتھ ایک ٹوکن بنائیں: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit۔",
+	"cf.tokenHelp": "زون کے لیے ان اجازتوں کے ساتھ ایک ٹوکن بنائیں: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit۔ یہ ٹوکن صرف اس سیٹ اپ کے لیے استعمال ہوتا ہے اور محفوظ نہیں کیا جاتا؛ اسے رکھنے کے لیے CLOUDFLARE_API_TOKEN سیکرٹ مقرر کریں۔",
 	"cf.workerName": "Worker کا نام",
 	"cf.workerNameHelp": "وہ نام جس سے یہ Worker ڈپلائے کیا گیا تھا۔",
 	"cf.run": "خود بخود سیٹ اپ کریں",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "صرف حروف، ہندسے، نقطے، ہائفن، انڈرسکور اور جمع کے نشان استعمال کریں؛ آغاز اور اختتام حرف یا ہندسے سے ہونا چاہیے۔",
 	"notice.newBadDomain": "اپنے عرف ڈومینز میں سے ایک چنیں۔",
 	"notice.newFailed": "عرف نہیں بن سکا۔ دوبارہ کوشش کریں۔",
+	"setup.newCode": "لاگز میں نیا کوڈ لکھیں",
+	"notice.setupCodeIssued": "لاگز میں سیٹ اپ کا نیا کوڈ لکھ دیا گیا ہے۔ پہلے والا کوڈ اب کام نہیں کرے گا۔",
+	"link.used": "یہ لنک پہلے ہی استعمال ہو چکا ہے۔ فارورڈ کیے گئے پیغام کا ہر لنک صرف ایک بار کام کرتا ہے۔",
+	"action.preserveMail": "{alias} سے {target} کو ان سبسکرائب ای میل بھیج کر {sender} سے رکنیت ختم کریں۔ اگر یہ ناکام ہو تو اس کے بجائے بھیجنے والے کو بلاک کر دیا جاتا ہے۔",
+	"banner.spoofSubject": "[غیر تصدیق شدہ بھیجنے والا]",
+	"imp.destinations": "ان کے فارورڈنگ پتے استعمال کریں",
+	"imp.destinationsHelp": "بند: درآمد شدہ عرف آپ کے ڈیفالٹ پتے پر فارورڈ ہوں گے، جب تک ان کا فارورڈنگ پتا یہاں پہلے سے استعمال نہ ہو رہا ہو۔ آن: درآمد سے آنے والے نئے فارورڈنگ پتے بھی استعمال ہوں گے۔ ہر فارورڈنگ پتا ریورس عرف کے ذریعے ای میل بھیج سکتا ہے، اس لیے یہ آپشن صرف اپنے پتوں کے لیے آن کریں۔",
+	"imp.newDestinations": "اس درآمد سے شامل ہونے والے نئے فارورڈنگ پتے:",
 };
 
 export default dictionary;

@@ -1,31 +1,30 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { signToken } from "../src/crypto";
 import { app } from "../src/index";
 import { saveSettings, loadSettings } from "../src/settings";
 import { testDb } from "./helpers/d1";
+import { noticeOf, signIn, TEST_SECRET } from "./helpers/session";
 
-const SECRET = "test-signing-secret-that-is-long-enough-0123456789";
 let db: D1Database;
 let env: Env;
 
 beforeEach(async () => {
 	db = testDb();
-	env = { DB: db, SIGNING_SECRET: SECRET, REVERSE_ALIAS_DOMAIN: "r.me.test" } as unknown as Env;
+	env = { DB: db, SIGNING_SECRET: TEST_SECRET, REVERSE_ALIAS_DOMAIN: "r.me.test" } as unknown as Env;
 	await saveSettings(db, { ...(await loadSettings(db)), aliasDomains: ["me.test", "other.test"], defaultDestination: "owner@gmail.test", customSuffix: "random_string" });
 });
 
 async function create(fields: Record<string, string>) {
-	const session = await signToken(SECRET, "session", "admin", 600);
+	const cookie = await signIn(db);
 	const response = await app.fetch(
 		new Request("https://alias.test/aliases/new", {
 			method: "POST",
-			headers: { Origin: "https://alias.test", Cookie: `mfa_session=${session}`, "Content-Type": "application/x-www-form-urlencoded" },
+			headers: { Origin: "https://alias.test", Cookie: cookie, "Content-Type": "application/x-www-form-urlencoded" },
 			body: new URLSearchParams(fields).toString(),
 		}),
 		env,
 	);
 	expect(response.status).toBe(302);
-	return decodeURIComponent(new URL(response.headers.get("Location")!, "https://alias.test").searchParams.get("notice") ?? "");
+	return noticeOf(response.headers.get("Location"));
 }
 
 const addresses = async () => (await db.prepare("SELECT address FROM aliases ORDER BY address").all<{ address: string }>()).results.map((row) => row.address);

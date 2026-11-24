@@ -2,13 +2,36 @@
 // Checks src/locales/<code>.ts against src/locales/en.ts: same keys, same {placeholders},
 // the same number of `backticks`, and no string left in English by mistake.
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 
+const CODE = /^[a-z]{2,3}(?:-[A-Z]{2})?$/;
+
+/** Reads a locale file with the TypeScript parser: string literals only, nothing is executed. */
 function load(code) {
-	const text = readFileSync(new URL(`../src/locales/${code}.ts`, import.meta.url), "utf8");
-	const start = text.search(/= \{\r?\n/) + 2;
-	const end = text.lastIndexOf("};");
-	// The dictionary bodies are plain object literals of string literals.
-	return Function(`"use strict"; return (${text.slice(start, end + 1)});`)();
+	if (!CODE.test(code)) throw new Error(`Not a locale code: ${code}`);
+	const path = new URL(`../src/locales/${code}.ts`, import.meta.url);
+	const source = ts.createSourceFile(`${code}.ts`, readFileSync(path, "utf8"), ts.ScriptTarget.ES2022, true);
+	let literal = null;
+	const visit = (node) => {
+		if (!literal && ts.isVariableDeclaration(node) && node.initializer) {
+			let init = node.initializer;
+			while (ts.isAsExpression(init) || ts.isSatisfiesExpression(init) || ts.isParenthesizedExpression(init)) init = init.expression;
+			if (ts.isObjectLiteralExpression(init)) literal = init;
+		}
+		ts.forEachChild(node, visit);
+	};
+	visit(source);
+	if (!literal) throw new Error(`${code}: no dictionary found`);
+	const dict = {};
+	for (const property of literal.properties) {
+		if (!ts.isPropertyAssignment(property)) throw new Error(`${code}: unexpected entry`);
+		const name = property.name;
+		const key = ts.isStringLiteral(name) || ts.isIdentifier(name) ? name.text : null;
+		const value = property.initializer;
+		if (!key || !(ts.isStringLiteral(value) || ts.isNoSubstitutionTemplateLiteral(value))) throw new Error(`${code}: ${key ?? "?"} is not a plain string`);
+		dict[key] = value.text;
+	}
+	return dict;
 }
 
 const en = load("en");

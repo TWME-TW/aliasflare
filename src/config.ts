@@ -62,7 +62,44 @@ export async function saveConfig(db: D1Database, values: Partial<Record<StoredKe
 	if (entries.length) await db.batch(entries.map(([key, value]) => statement.bind(key, value)));
 }
 
+export const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+export const WORKER_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/** The https origin of a URL without credentials, or null. */
+export function validOrigin(value: string): string | null {
+	try {
+		const url = new URL(value);
+		return url.protocol === "https:" && !url.username && !url.password ? url.origin : null;
+	} catch {
+		return null;
+	}
+}
+
+/** A setting from the environment that cannot be used. The Worker refuses to run with it. */
+export class ConfigError extends Error {}
+
+/**
+ * Environment values get the same checks as values entered on the dashboard. A bad one
+ * stops the Worker with a clear error instead of being ignored or sending secrets over http.
+ */
+function checkEnv(env: Env): void {
+	const value = (name: keyof Env) => {
+		const raw = env[name];
+		return typeof raw === "string" ? raw.trim() : "";
+	};
+	const secret = value("SIGNING_SECRET");
+	if (secret && secret.length < 32) throw new ConfigError("SIGNING_SECRET must be at least 32 characters long");
+	for (const name of ["MAILFLARE_URL", "PUBLIC_URL"] as const) {
+		if (value(name) && !validOrigin(value(name))) throw new ConfigError(`${name} must be an https:// URL without a user name or password`);
+	}
+	const domain = value("REVERSE_ALIAS_DOMAIN").toLowerCase();
+	if (domain && !DOMAIN_PATTERN.test(domain)) throw new ConfigError("REVERSE_ALIAS_DOMAIN is not a valid domain name");
+	const worker = value("WORKER_NAME").toLowerCase();
+	if (worker && !WORKER_NAME_PATTERN.test(worker)) throw new ConfigError("WORKER_NAME is not a valid Worker name");
+}
+
 export async function loadConfig(env: Env): Promise<AppConfig> {
+	checkEnv(env);
 	const stored = await readStored(env.DB);
 	const pick = (key: StoredKey): string => {
 		const fromEnv = env[ENV_OVERRIDES[key]];
@@ -71,9 +108,13 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 	};
 	let signingSecret = pick("signingSecret");
 	if (signingSecret.length < 32) {
-		// First run: create the key that signs sessions and links. INSERT OR IGNORE keeps
-		// the first value if two requests race.
-		await env.DB.prepare("INSERT OR IGNORE INTO config (key, value) VALUES ('signingSecret', ?)").bind(randomToken(48)).run();
+		// First run (no SIGNING_SECRET secret): create the key that signs sessions and links.
+		// Only a missing or too short stored key is replaced, so two racing requests agree.
+		await env.DB.prepare(
+			"INSERT INTO config (key, value) VALUES ('signingSecret', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE length(config.value) < 32",
+		)
+			.bind(randomToken(48))
+			.run();
 		signingSecret = (await readStored(env.DB)).signingSecret ?? "";
 	}
 	return {
@@ -83,7 +124,8 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 		reverseDomain: pick("reverseDomain").toLowerCase(),
 		signingSecret,
 		publicUrl: pick("publicUrl").replace(/\/+$/, ""),
-		cloudflareApiToken: pick("cloudflareApiToken"),
+		// Only from the CLOUDFLARE_API_TOKEN secret: a token typed on the dashboard is never stored.
+		cloudflareApiToken: env.CLOUDFLARE_API_TOKEN?.trim() ?? "",
 		workerName: pick("workerName") || "mailflare-alias",
 		mailflareService: env.MAILFLARE_SERVICE,
 	};

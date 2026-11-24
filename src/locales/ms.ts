@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Selamat datang ke mailflare-alias",
 	"setup.intro": "Daftarkan passkey untuk melindungi papan pemuka ini. Selepas itu anda akan memasukkan butiran sambungan Mailflare.",
 	"setup.code": "Kod persediaan",
-	"setup.codeFromLogs":
-		"Kod sekali guna telah ditulis ke dalam log Worker ini. Buka papan pemuka Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, atau jalankan `npx wrangler tail mailflare-alias` kemudian muat semula halaman ini. Kod ini sah selama 60 minit.",
-	"setup.codeFromSecret": "Masukkan rahsia SETUP_CODE, atau kod daripada log Worker ini.",
+	"setup.codeFromLogs": "Kod sekali guna telah ditulis ke dalam log Worker ini. Buka papan pemuka Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, atau jalankan `npx wrangler tail mailflare-alias`, kemudian klik “Tulis kod baharu ke log” di bawah. Kod ini sah selama 60 minit.",
+	"setup.codeFromSecret": "Masukkan rahsia SETUP_CODE.",
 	"setup.passkeyName": "Nama passkey",
 	"setup.defaultName": "Passkey saya",
 	"setup.button": "Daftarkan passkey",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Menyediakan domain alias terbalik untuk anda: Email Routing dengan subaddressing, satu peraturan yang menghantar alamat reply+…@ ke Worker ini, dan Email Sending. Selamat dijalankan semula.",
 	"cf.token": "Token API Cloudflare",
-	"cf.tokenHelp": "Cipta token untuk zon dengan kebenaran ini: Zone Read, Zone Settings Edit, Email Routing Rules Edit dan Email Sending Edit.",
+	"cf.tokenHelp": "Cipta token untuk zon dengan kebenaran ini: Zone Read, Zone Settings Edit, Email Routing Rules Edit dan Email Sending Edit. Token ini hanya digunakan untuk persediaan ini dan tidak disimpan; untuk menyimpannya, tetapkan rahsia CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nama Worker",
 	"cf.workerNameHelp": "Nama yang digunakan semasa Worker ini digunakan.",
 	"cf.run": "Sediakan secara automatik",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Gunakan huruf, digit, titik, sengkang, garis bawah dan tanda tambah sahaja, dan mulakan serta akhiri dengan huruf atau digit.",
 	"notice.newBadDomain": "Pilih salah satu domain alias anda.",
 	"notice.newFailed": "Alias tidak dapat dicipta. Cuba lagi.",
+	"setup.newCode": "Tulis kod baharu ke log",
+	"notice.setupCodeIssued": "Kod persediaan baharu telah ditulis ke log. Kod sebelumnya tidak lagi berfungsi.",
+	"link.used": "Pautan ini telah digunakan. Setiap pautan dalam mesej yang dimajukan hanya berfungsi sekali.",
+	"action.preserveMail": "Nyahlanggan daripada {sender} dengan menghantar e-mel nyahlanggan daripada {alias} ke {target}. Jika gagal, pengirim akan disekat.",
+	"banner.spoofSubject": "[Pengirim tidak disahkan]",
+	"imp.destinations": "Gunakan alamat pemajuan mereka",
+	"imp.destinationsHelp": "Mati: alias yang diimport dimajukan ke alamat lalai anda, melainkan alamat pemajuan mereka sudah digunakan di sini. Hidup: alamat pemajuan baharu daripada import turut digunakan. Setiap alamat pemajuan boleh menghantar mel melalui alias songsang, jadi hidupkan hanya untuk alamat yang kepunyaan anda.",
+	"imp.newDestinations": "Alamat pemajuan baharu yang ditambah oleh import ini:",
 };
 
 export default dictionary;

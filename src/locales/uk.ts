@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Ласкаво просимо до mailflare-alias",
 	"setup.intro": "Зареєструйте ключ доступу, щоб захистити цю панель. Далі ви введете дані підключення до Mailflare.",
 	"setup.code": "Код налаштування",
-	"setup.codeFromLogs":
-		"Одноразовий код записано в журнали цього Worker. Відкрийте панель Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs або виконайте `npx wrangler tail mailflare-alias` і перезавантажте цю сторінку. Код дійсний 60 хвилин.",
-	"setup.codeFromSecret": "Введіть секрет SETUP_CODE або код із журналів цього Worker.",
+	"setup.codeFromLogs": "Одноразовий код записано в журнали цього Worker. Відкрийте панель Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs або виконайте `npx wrangler tail mailflare-alias`, потім натисніть нижче «Записати новий код у журнали». Код дійсний 60 хвилин.",
+	"setup.codeFromSecret": "Введіть секрет SETUP_CODE.",
 	"setup.passkeyName": "Назва ключа доступу",
 	"setup.defaultName": "Мій ключ доступу",
 	"setup.button": "Зареєструвати ключ доступу",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Налаштовує домен зворотних псевдонімів за вас: Email Routing із субадресацією, одне правило, що спрямовує адреси reply+…@ на цей Worker, і Email Sending. Повторний запуск безпечний.",
 	"cf.token": "Токен API Cloudflare",
-	"cf.tokenHelp": "Створіть токен для зони з такими дозволами: Zone Read, Zone Settings Edit, Email Routing Rules Edit та Email Sending Edit.",
+	"cf.tokenHelp": "Створіть токен для зони з такими дозволами: Zone Read, Zone Settings Edit, Email Routing Rules Edit та Email Sending Edit. Він використовується лише для цього налаштування і не зберігається; щоб зберегти його, задайте секрет CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Назва Worker",
 	"cf.workerNameHelp": "Назва, з якою розгорнуто цей Worker.",
 	"cf.run": "Налаштувати автоматично",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Використовуйте лише літери, цифри, крапки, дефіси, знаки підкреслення та плюси; почніть і завершіть літерою або цифрою.",
 	"notice.newBadDomain": "Виберіть один із ваших доменів псевдонімів.",
 	"notice.newFailed": "Не вдалося створити псевдонім. Спробуйте ще раз.",
+	"setup.newCode": "Записати новий код у журнали",
+	"notice.setupCodeIssued": "Новий код налаштування записано в журнали. Попередній код більше не працює.",
+	"link.used": "Це посилання вже використано. Кожне посилання в переспрямованому листі працює лише один раз.",
+	"action.preserveMail": "Відпишіться від {sender}, надіславши з {alias} на {target} лист про відписку. Якщо не вдасться, відправника буде заблоковано.",
+	"banner.spoofSubject": "[Неперевірений відправник]",
+	"imp.destinations": "Використовувати їхні адреси переспрямування",
+	"imp.destinationsHelp": "Вимк.: імпортовані псевдоніми переспрямовуються на вашу адресу за замовчуванням, якщо їхню адресу переспрямування вже не використано тут. Увімк.: також використовуються нові адреси переспрямування з імпорту. Кожна адреса переспрямування може надсилати пошту через зворотні псевдоніми, тож вмикайте це лише для адрес, які належать вам.",
+	"imp.newDestinations": "Нові адреси переспрямування, додані цим імпортом:",
 };
 
 export default dictionary;

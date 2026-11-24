@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Barka da zuwa mailflare-alias",
 	"setup.intro": "Yi rajistar passkey don kare wannan dashboard. Daga nan za ka shigar da bayanan haɗin Mailflare.",
 	"setup.code": "Lambar saiti",
-	"setup.codeFromLogs":
-		"An rubuta lambar amfani sau ɗaya a cikin logs na wannan Worker. Buɗe dashboard na Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, ko ka gudanar da `npx wrangler tail mailflare-alias` sannan ka sake loda wannan shafi. Tana aiki na minti 60.",
-	"setup.codeFromSecret": "Shigar da sirrin SETUP_CODE, ko lambar da ke cikin logs na wannan Worker.",
+	"setup.codeFromLogs": "An rubuta lambar amfani sau ɗaya a cikin logs na wannan Worker. Buɗe dashboard na Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, ko ka gudanar da `npx wrangler tail mailflare-alias`, sannan ka danna “Rubuta sabuwar lamba a cikin logs” da ke ƙasa. Tana aiki na minti 60.",
+	"setup.codeFromSecret": "Shigar da sirrin SETUP_CODE.",
 	"setup.passkeyName": "Sunan passkey",
 	"setup.defaultName": "Passkey ɗina",
 	"setup.button": "Yi rajistar passkey",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Yana saita maka domain na laƙabin juyawa: Email Routing mai subaddressing, doka ɗaya da ke tura adiresoshin reply+…@ zuwa wannan Worker, da Email Sending. Sake gudanar da shi ba shi da haɗari.",
 	"cf.token": "Token na API na Cloudflare",
-	"cf.tokenHelp": "Ƙirƙiri token don zone ɗin tare da waɗannan izini: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit.",
+	"cf.tokenHelp": "Ƙirƙiri token don zone ɗin tare da waɗannan izini: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. Ana amfani da shi don wannan saitin kawai ba a adana shi ba; don ajiye shi, saita sirrin CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Sunan Worker",
 	"cf.workerNameHelp": "Sunan da aka tura wannan Worker da shi.",
 	"cf.run": "Saita kai tsaye",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Yi amfani da haruffa, lambobi, digo, alamar haɗi, ƙasa-ƙasa da alamar ƙari kawai, kuma fara da ƙare da harafi ko lamba.",
 	"notice.newBadDomain": "Zaɓi ɗaya daga cikin domains ɗin laƙabinka.",
 	"notice.newFailed": "Ba a iya ƙirƙirar laƙabin ba. Sake gwadawa.",
+	"setup.newCode": "Rubuta sabuwar lamba a cikin logs",
+	"notice.setupCodeIssued": "An rubuta sabuwar lambar saiti a cikin logs. Lambar da ta gabata ba ta ƙara aiki ba.",
+	"link.used": "An riga an yi amfani da wannan hanyar haɗin. Kowace hanyar haɗi a cikin saƙon da aka tura tana aiki sau ɗaya ne kawai.",
+	"action.preserveMail": "Fita daga rajistar {sender} ta hanyar aika imel na fita daga {alias} zuwa {target}. Idan hakan ya gaza, za a toshe mai aikawa maimakon.",
+	"banner.spoofSubject": "[Mai aika saƙon da ba a tabbatar ba]",
+	"imp.destinations": "Yi amfani da adiresoshin tura saƙo na su",
+	"imp.destinationsHelp": "A kashe: laƙabin da aka shigo da su suna tura saƙo zuwa adireshinka na asali, sai dai idan adireshin turansu yana cikin amfani a nan. A kunna: sabbin adiresoshin tura saƙo daga shigowar ma ana amfani da su. Kowane adireshin tura saƙo zai iya aika saƙo ta laƙabi na baya, don haka kunna wannan ga adiresoshin naka kawai.",
+	"imp.newDestinations": "Sabbin adiresoshin tura saƙo da wannan shigowar ta ƙara:",
 };
 
 export default dictionary;

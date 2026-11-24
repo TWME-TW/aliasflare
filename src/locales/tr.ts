@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias'a hoş geldiniz",
 	"setup.intro": "Bu paneli korumak için bir geçiş anahtarı kaydedin. Ardından Mailflare bağlantı bilgilerini gireceksiniz.",
 	"setup.code": "Kurulum kodu",
-	"setup.codeFromLogs":
-		"Tek kullanımlık bir kod bu Worker'ın günlüklerine yazıldı. Cloudflare panelinde Workers & Pages → mailflare-alias → Observability → Logs bölümünü açın veya `npx wrangler tail mailflare-alias` komutunu çalıştırıp bu sayfayı yeniden yükleyin. Kod 60 dakika geçerlidir.",
-	"setup.codeFromSecret": "SETUP_CODE gizli anahtarını veya bu Worker'ın günlüklerindeki kodu girin.",
+	"setup.codeFromLogs": "Bu Worker'ın günlüklerine tek kullanımlık bir kod yazıldı. Cloudflare panelinde Workers & Pages → mailflare-alias → Observability → Logs bölümünü açın veya `npx wrangler tail mailflare-alias` komutunu çalıştırın, ardından aşağıdaki “Günlüklere yeni kod yaz” düğmesine tıklayın. Kod 60 dakika geçerlidir.",
+	"setup.codeFromSecret": "SETUP_CODE gizli anahtarını girin.",
 	"setup.passkeyName": "Geçiş anahtarı adı",
 	"setup.defaultName": "Geçiş anahtarım",
 	"setup.button": "Geçiş anahtarını kaydet",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Ters takma ad alan adını sizin için kurar: alt adreslemeli Email Routing, reply+…@ adreslerini bu Worker'a gönderen tek bir kural ve Email Sending. Tekrar çalıştırmak güvenlidir.",
 	"cf.token": "Cloudflare API belirteci",
-	"cf.tokenHelp": "Bölge için şu izinlere sahip bir belirteç oluşturun: Zone Read, Zone Settings Edit, Email Routing Rules Edit ve Email Sending Edit.",
+	"cf.tokenHelp": "Bölge için şu izinlere sahip bir belirteç oluşturun: Zone Read, Zone Settings Edit, Email Routing Rules Edit ve Email Sending Edit. Yalnızca bu kurulum için kullanılır ve saklanmaz; saklamak için CLOUDFLARE_API_TOKEN gizli anahtarını ayarlayın.",
 	"cf.workerName": "Worker adı",
 	"cf.workerNameHelp": "Bu Worker'ın dağıtıldığı ad.",
 	"cf.run": "Otomatik kur",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Yalnızca harf, rakam, nokta, kısa çizgi, alt çizgi ve artı işareti kullanın; harf veya rakamla başlayıp bitmelidir.",
 	"notice.newBadDomain": "Takma ad alan adlarınızdan birini seçin.",
 	"notice.newFailed": "Takma ad oluşturulamadı. Lütfen tekrar deneyin.",
+	"setup.newCode": "Günlüklere yeni kod yaz",
+	"notice.setupCodeIssued": "Günlüklere yeni bir kurulum kodu yazıldı. Önceki kod artık çalışmıyor.",
+	"link.used": "Bu bağlantı zaten kullanıldı. İletilen bir iletideki her bağlantı yalnızca bir kez çalışır.",
+	"action.preserveMail": "{alias} adresinden {target} adresine bir abonelik iptal e-postası göndererek {sender} aboneliğinden çıkın. Bu başarısız olursa gönderen bunun yerine engellenir.",
+	"banner.spoofSubject": "[Doğrulanmamış gönderici]",
+	"imp.destinations": "Yönlendirme adreslerini kullan",
+	"imp.destinationsHelp": "Kapalı: İçe aktarılan takma adlar, yönlendirme adresleri burada zaten kullanılmıyorsa varsayılan adresinize yönlendirilir. Açık: İçe aktarmadaki yeni yönlendirme adresleri de kullanılır. Her yönlendirme adresi ters takma adlar üzerinden e-posta gönderebilir, bu yüzden bunu yalnızca size ait adresler için açın.",
+	"imp.newDestinations": "Bu içe aktarmayla eklenen yeni yönlendirme adresleri:",
 };
 
 export default dictionary;

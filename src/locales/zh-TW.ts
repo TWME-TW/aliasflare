@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "歡迎使用 mailflare-alias",
 	"setup.intro": "請先註冊通行金鑰來保護此管理介面，接著再填寫 Mailflare 的連線資訊。",
 	"setup.code": "設定碼",
-	"setup.codeFromLogs":
-		"一次性設定碼已寫入此 Worker 的日誌。請打開 Cloudflare 後台 → Workers & Pages → mailflare-alias → Observability → Logs，或執行 `npx wrangler tail mailflare-alias` 後重新整理本頁。有效時間 60 分鐘。",
-	"setup.codeFromSecret": "請輸入 SETUP_CODE secret，或 Worker 日誌中的設定碼。",
+	"setup.codeFromLogs": "一次性設定碼會寫入此 Worker 的日誌。請打開 Cloudflare 後台 → Workers & Pages → mailflare-alias → Observability → Logs，或執行 `npx wrangler tail mailflare-alias`，然後按下方的「寫入新的設定碼」。每個設定碼有效 60 分鐘。",
+	"setup.codeFromSecret": "請輸入 SETUP_CODE secret。",
 	"setup.passkeyName": "通行金鑰名稱",
 	"setup.defaultName": "我的通行金鑰",
 	"setup.button": "註冊通行金鑰",
@@ -230,7 +229,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "自動設定反向別名網域：開啟 Email Routing 與子地址、建立一條把 reply+…@ 地址送到這個 Worker 的規則，並設定 Email Sending。重複執行也沒關係。",
 	"cf.token": "Cloudflare API token",
-	"cf.tokenHelp": "為該 zone 建立具有以下權限的 token：Zone Read、Zone Settings Edit、Email Routing Rules Edit、Email Sending Edit。",
+	"cf.tokenHelp": "為該 zone 建立具有以下權限的 token：Zone Read、Zone Settings Edit、Email Routing Rules Edit、Email Sending Edit。它只用於這次設定，不會被儲存；若要保留，請設定 CLOUDFLARE_API_TOKEN secret。",
 	"cf.workerName": "Worker 名稱",
 	"cf.workerNameHelp": "部署這個 Worker 時使用的名稱。",
 	"cf.run": "自動設定",
@@ -346,6 +345,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "只能使用英文字母、數字、句點、連字號、底線和加號，且開頭與結尾必須是字母或數字。",
 	"notice.newBadDomain": "請選擇你的其中一個別名網域。",
 	"notice.newFailed": "無法建立別名，請再試一次。",
+	"setup.newCode": "寫入新的設定碼",
+	"notice.setupCodeIssued": "已將新的設定碼寫入日誌，先前的設定碼已失效。",
+	"link.used": "這個連結已經使用過。轉寄信中的每個連結只能使用一次。",
+	"action.preserveMail": "以 {alias} 寄一封退訂信到 {target}，向 {sender} 退訂。如果失敗，會改為封鎖這個寄件者。",
+	"banner.spoofSubject": "[未驗證的寄件者]",
+	"imp.destinations": "使用它們的轉寄地址",
+	"imp.destinationsHelp": "關閉時：匯入的別名會轉寄到你的預設地址，除非它的轉寄地址已經在這裡使用中。開啟時：匯入中新的轉寄地址也會被採用。每個轉寄地址都能透過反向別名寄信，所以只有在這些地址都屬於你時才開啟。",
+	"imp.newDestinations": "這次匯入新增的轉寄地址：",
 };
 
 export default dictionary;

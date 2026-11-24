@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Chào mừng đến với mailflare-alias",
 	"setup.intro": "Hãy đăng ký một passkey để bảo vệ bảng điều khiển này. Tiếp theo bạn sẽ nhập thông tin kết nối Mailflare.",
 	"setup.code": "Mã thiết lập",
-	"setup.codeFromLogs":
-		"Một mã dùng một lần đã được ghi vào nhật ký của Worker này. Hãy mở bảng điều khiển Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, hoặc chạy `npx wrangler tail mailflare-alias` rồi tải lại trang này. Mã có hiệu lực trong 60 phút.",
-	"setup.codeFromSecret": "Nhập secret SETUP_CODE, hoặc mã trong nhật ký của Worker này.",
+	"setup.codeFromLogs": "Một mã dùng một lần đã được ghi vào nhật ký của Worker này. Hãy mở bảng điều khiển Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, hoặc chạy `npx wrangler tail mailflare-alias`, rồi nhấn “Ghi mã mới vào nhật ký” bên dưới. Mã có hiệu lực trong 60 phút.",
+	"setup.codeFromSecret": "Nhập secret SETUP_CODE.",
 	"setup.passkeyName": "Tên passkey",
 	"setup.defaultName": "Passkey của tôi",
 	"setup.button": "Đăng ký passkey",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Thiết lập tên miền bí danh ngược giúp bạn: Email Routing có subaddressing, một quy tắc chuyển các địa chỉ reply+…@ đến Worker này, và Email Sending. Chạy lại là an toàn.",
 	"cf.token": "Token API Cloudflare",
-	"cf.tokenHelp": "Tạo một token cho zone với các quyền sau: Zone Read, Zone Settings Edit, Email Routing Rules Edit và Email Sending Edit.",
+	"cf.tokenHelp": "Tạo một token cho zone với các quyền sau: Zone Read, Zone Settings Edit, Email Routing Rules Edit và Email Sending Edit. Token chỉ dùng cho lần thiết lập này và không được lưu; để giữ lại, hãy đặt secret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Tên Worker",
 	"cf.workerNameHelp": "Tên mà Worker này đã được triển khai.",
 	"cf.run": "Thiết lập tự động",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Chỉ dùng chữ cái, chữ số, dấu chấm, dấu gạch ngang, gạch dưới và dấu cộng; phải bắt đầu và kết thúc bằng chữ cái hoặc chữ số.",
 	"notice.newBadDomain": "Hãy chọn một trong các tên miền bí danh của bạn.",
 	"notice.newFailed": "Không thể tạo bí danh. Vui lòng thử lại.",
+	"setup.newCode": "Ghi mã mới vào nhật ký",
+	"notice.setupCodeIssued": "Mã thiết lập mới đã được ghi vào nhật ký. Mã trước đó không còn hoạt động.",
+	"link.used": "Liên kết này đã được sử dụng. Mỗi liên kết trong thư được chuyển tiếp chỉ dùng được một lần.",
+	"action.preserveMail": "Hủy đăng ký từ {sender} bằng cách gửi email hủy đăng ký từ {alias} đến {target}. Nếu không được, người gửi sẽ bị chặn.",
+	"banner.spoofSubject": "[Người gửi chưa xác minh]",
+	"imp.destinations": "Dùng địa chỉ chuyển tiếp của họ",
+	"imp.destinationsHelp": "Tắt: bí danh đã nhập sẽ chuyển tiếp đến địa chỉ mặc định của bạn, trừ khi địa chỉ chuyển tiếp của chúng đã được dùng ở đây. Bật: các địa chỉ chuyển tiếp mới từ lần nhập cũng được dùng. Mọi địa chỉ chuyển tiếp đều có thể gửi thư qua bí danh ngược, nên chỉ bật cho các địa chỉ thuộc về bạn.",
+	"imp.newDestinations": "Địa chỉ chuyển tiếp mới được thêm bởi lần nhập này:",
 };
 
 export default dictionary;

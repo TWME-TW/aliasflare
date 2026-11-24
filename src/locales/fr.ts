@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Bienvenue dans mailflare-alias",
 	"setup.intro": "Enregistrez une clé d'accès pour protéger ce tableau de bord. Vous saisirez ensuite les informations de connexion à Mailflare.",
 	"setup.code": "Code de configuration",
-	"setup.codeFromLogs":
-		"Un code à usage unique a été écrit dans les journaux de ce Worker. Ouvrez le tableau de bord Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, ou exécutez `npx wrangler tail mailflare-alias` puis rechargez cette page. Il est valable 60 minutes.",
-	"setup.codeFromSecret": "Saisissez le secret SETUP_CODE, ou le code figurant dans les journaux de ce Worker.",
+	"setup.codeFromLogs": "Un code à usage unique a été écrit dans les journaux de ce Worker. Ouvrez le tableau de bord Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, ou exécutez `npx wrangler tail mailflare-alias`, puis cliquez sur « Écrire un nouveau code dans les journaux » ci-dessous. Il est valable 60 minutes.",
+	"setup.codeFromSecret": "Saisissez le secret SETUP_CODE.",
 	"setup.passkeyName": "Nom de la clé d'accès",
 	"setup.defaultName": "Ma clé d'accès",
 	"setup.button": "Enregistrer la clé d'accès",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Configure le domaine des alias inversés pour vous : Email Routing avec sous-adressage, une règle qui envoie les adresses reply+…@ à ce Worker, et Email Sending. Vous pouvez la relancer sans risque.",
 	"cf.token": "Jeton d'API Cloudflare",
-	"cf.tokenHelp": "Créez un jeton pour la zone avec ces autorisations : Zone Read, Zone Settings Edit, Email Routing Rules Edit et Email Sending Edit.",
+	"cf.tokenHelp": "Créez un jeton pour la zone avec ces autorisations : Zone Read, Zone Settings Edit, Email Routing Rules Edit et Email Sending Edit. Il n'est utilisé que pour cette configuration et n'est pas enregistré ; pour le conserver, définissez le secret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nom du Worker",
 	"cf.workerNameHelp": "Le nom avec lequel ce Worker a été déployé.",
 	"cf.run": "Configurer automatiquement",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Utilisez uniquement des lettres, chiffres, points, tirets, tirets bas et signes plus, en commençant et en finissant par une lettre ou un chiffre.",
 	"notice.newBadDomain": "Choisissez l'un de vos domaines d'alias.",
 	"notice.newFailed": "L'alias n'a pas pu être créé. Réessayez.",
+	"setup.newCode": "Écrire un nouveau code dans les journaux",
+	"notice.setupCodeIssued": "Un nouveau code de configuration a été écrit dans les journaux. L'ancien code ne fonctionne plus.",
+	"link.used": "Ce lien a déjà été utilisé. Chaque lien d'un message transféré ne fonctionne qu'une fois.",
+	"action.preserveMail": "Désabonnez-vous de {sender} en envoyant un e-mail de désabonnement depuis {alias} vers {target}. Si cela échoue, l'expéditeur est bloqué à la place.",
+	"banner.spoofSubject": "[Expéditeur non vérifié]",
+	"imp.destinations": "Utiliser leurs adresses de transfert",
+	"imp.destinationsHelp": "Désactivé : les alias importés transfèrent vers votre adresse par défaut, sauf si leur adresse de transfert est déjà utilisée ici. Activé : les nouvelles adresses de transfert de l'import sont aussi utilisées. Chaque adresse de transfert peut envoyer du courrier via des alias inverses ; n'activez donc cette option que pour les adresses qui vous appartiennent.",
+	"imp.newDestinations": "Nouvelles adresses de transfert ajoutées par cet import :",
 };
 
 export default dictionary;

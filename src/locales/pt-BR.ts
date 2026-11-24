@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Boas-vindas ao mailflare-alias",
 	"setup.intro": "Registre uma chave de acesso para proteger este painel. Em seguida, você informará os dados de conexão do Mailflare.",
 	"setup.code": "Código de configuração",
-	"setup.codeFromLogs":
-		"Um código de uso único foi gravado nos logs deste Worker. Abra o painel da Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, ou execute `npx wrangler tail mailflare-alias` e recarregue esta página. Ele é válido por 60 minutos.",
-	"setup.codeFromSecret": "Informe o segredo SETUP_CODE ou o código dos logs deste Worker.",
+	"setup.codeFromLogs": "Um código de uso único foi gravado nos logs deste Worker. Abra o painel da Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, ou execute `npx wrangler tail mailflare-alias`, e depois clique em “Gravar novo código nos logs” abaixo. Ele é válido por 60 minutos.",
+	"setup.codeFromSecret": "Informe o segredo SETUP_CODE.",
 	"setup.passkeyName": "Nome da chave de acesso",
 	"setup.defaultName": "Minha chave de acesso",
 	"setup.button": "Registrar chave de acesso",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Configura o domínio de alias reverso para você: Email Routing com subendereçamento, uma regra que envia os endereços reply+…@ para este Worker e o Email Sending. Executar novamente é seguro.",
 	"cf.token": "Token de API da Cloudflare",
-	"cf.tokenHelp": "Crie um token para a zona com estas permissões: Zone Read, Zone Settings Edit, Email Routing Rules Edit e Email Sending Edit.",
+	"cf.tokenHelp": "Crie um token para a zona com estas permissões: Zone Read, Zone Settings Edit, Email Routing Rules Edit e Email Sending Edit. Ele é usado apenas nesta configuração e não é armazenado; para mantê-lo, defina o segredo CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nome do Worker",
 	"cf.workerNameHelp": "O nome com que este Worker foi implantado.",
 	"cf.run": "Configurar automaticamente",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Use apenas letras, números, pontos, hífens, sublinhados e sinais de mais, começando e terminando com letra ou número.",
 	"notice.newBadDomain": "Escolha um dos seus domínios de alias.",
 	"notice.newFailed": "Não foi possível criar o alias. Tente novamente.",
+	"setup.newCode": "Gravar novo código nos logs",
+	"notice.setupCodeIssued": "Um novo código de configuração foi gravado nos logs. O código anterior não funciona mais.",
+	"link.used": "Este link já foi usado. Cada link em uma mensagem encaminhada funciona apenas uma vez.",
+	"action.preserveMail": "Cancele a inscrição em {sender} enviando um e-mail de cancelamento de {alias} para {target}. Se falhar, o remetente é bloqueado.",
+	"banner.spoofSubject": "[Remetente não verificado]",
+	"imp.destinations": "Usar os endereços de encaminhamento deles",
+	"imp.destinationsHelp": "Desativado: os aliases importados encaminham para seu endereço padrão, a menos que o endereço de encaminhamento deles já esteja em uso aqui. Ativado: os novos endereços de encaminhamento da importação também são usados. Cada endereço de encaminhamento pode enviar e-mails por aliases reversos, então ative isso apenas para endereços que sejam seus.",
+	"imp.newDestinations": "Novos endereços de encaminhamento adicionados por esta importação:",
 };
 
 export default dictionary;

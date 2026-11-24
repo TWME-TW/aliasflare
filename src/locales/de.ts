@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Willkommen bei mailflare-alias",
 	"setup.intro": "Registriere einen Passkey, um dieses Dashboard zu schützen. Danach gibst du die Verbindungsdaten für Mailflare ein.",
 	"setup.code": "Einrichtungscode",
-	"setup.codeFromLogs":
-		"Ein einmaliger Code wurde in die Logs dieses Workers geschrieben. Öffne das Cloudflare-Dashboard → Workers & Pages → mailflare-alias → Observability → Logs oder führe `npx wrangler tail mailflare-alias` aus und lade diese Seite neu. Der Code ist 60 Minuten gültig.",
-	"setup.codeFromSecret": "Gib das Secret SETUP_CODE oder den Code aus den Logs dieses Workers ein.",
+	"setup.codeFromLogs": "Ein einmaliger Code wurde in die Logs dieses Workers geschrieben. Öffne das Cloudflare-Dashboard → Workers & Pages → mailflare-alias → Observability → Logs oder führe `npx wrangler tail mailflare-alias` aus und klicke dann unten auf „Neuen Code in die Logs schreiben“. Der Code ist 60 Minuten gültig.",
+	"setup.codeFromSecret": "Gib das Secret SETUP_CODE ein.",
 	"setup.passkeyName": "Name des Passkeys",
 	"setup.defaultName": "Mein Passkey",
 	"setup.button": "Passkey registrieren",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Richtet die Domain für Reverse-Aliasse für dich ein: Email Routing mit Subaddressing, eine Regel, die reply+…@-Adressen an diesen Worker sendet, und Email Sending. Du kannst es ohne Risiko erneut ausführen.",
 	"cf.token": "Cloudflare-API-Token",
-	"cf.tokenHelp": "Erstelle ein Token für die Zone mit diesen Berechtigungen: Zone Read, Zone Settings Edit, Email Routing Rules Edit und Email Sending Edit.",
+	"cf.tokenHelp": "Erstelle ein Token für die Zone mit diesen Berechtigungen: Zone Read, Zone Settings Edit, Email Routing Rules Edit und Email Sending Edit. Es wird nur für dieses Setup verwendet und nicht gespeichert; zum Behalten setze das Secret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Worker-Name",
 	"cf.workerNameHelp": "Der Name, mit dem dieser Worker bereitgestellt wurde.",
 	"cf.run": "Automatisch einrichten",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Verwende nur Buchstaben, Ziffern, Punkte, Bindestriche, Unterstriche und Pluszeichen, und beginne und ende mit einem Buchstaben oder einer Ziffer.",
 	"notice.newBadDomain": "Wähle eine deiner Alias-Domains.",
 	"notice.newFailed": "Der Alias konnte nicht erstellt werden. Versuche es erneut.",
+	"setup.newCode": "Neuen Code in die Logs schreiben",
+	"notice.setupCodeIssued": "Ein neuer Setup-Code wurde in die Logs geschrieben. Der vorherige Code funktioniert nicht mehr.",
+	"link.used": "Dieser Link wurde bereits verwendet. Jeder Link in einer weitergeleiteten Nachricht funktioniert nur einmal.",
+	"action.preserveMail": "Melde dich von {sender} ab, indem du von {alias} an {target} eine Abmeldung sendest. Schlägt das fehl, wird stattdessen der Absender blockiert.",
+	"banner.spoofSubject": "[Nicht verifizierter Absender]",
+	"imp.destinations": "Deren Weiterleitungsadressen verwenden",
+	"imp.destinationsHelp": "Aus: Importierte Aliasse werden an deine Standardadresse weitergeleitet, es sei denn, deren Weiterleitungsadresse wird hier bereits verwendet. Ein: Neue Weiterleitungsadressen aus dem Import werden ebenfalls verwendet. Jede Weiterleitungsadresse kann über Reverse-Aliasse Mails senden, daher nur für eigene Adressen einschalten.",
+	"imp.newDestinations": "Durch diesen Import hinzugefügte neue Weiterleitungsadressen:",
 };
 
 export default dictionary;

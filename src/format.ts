@@ -51,9 +51,18 @@ export function sanitizeDisplayName(name: string | null | undefined): string {
 const RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
 export function randomToken(length: number): string {
-	const bytes = crypto.getRandomValues(new Uint8Array(length));
+	// Rejection sampling: bytes past the last whole multiple of the alphabet are skipped, so
+	// every character is equally likely.
+	const size = RANDOM_ALPHABET.length;
+	const limit = 256 - (256 % size);
 	let out = "";
-	for (const byte of bytes) out += RANDOM_ALPHABET[byte % RANDOM_ALPHABET.length];
+	while (out.length < length) {
+		for (const byte of crypto.getRandomValues(new Uint8Array(length * 2))) {
+			if (byte >= limit) continue;
+			out += RANDOM_ALPHABET[byte % size];
+			if (out.length === length) break;
+		}
+	}
 	return out;
 }
 

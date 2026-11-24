@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias मध्ये आपले स्वागत आहे",
 	"setup.intro": "हा डॅशबोर्ड सुरक्षित ठेवण्यासाठी एक पासकी नोंदवा. त्यानंतर तुम्ही Mailflare कनेक्शनचा तपशील भराल.",
 	"setup.code": "सेटअप कोड",
-	"setup.codeFromLogs":
-		"एकदाच वापरता येणारा कोड या Worker च्या लॉगमध्ये लिहिला आहे. Cloudflare डॅशबोर्ड → Workers & Pages → mailflare-alias → Observability → Logs उघडा, किंवा `npx wrangler tail mailflare-alias` चालवा आणि हे पेज पुन्हा लोड करा. तो 60 मिनिटे वैध असतो.",
-	"setup.codeFromSecret": "SETUP_CODE सीक्रेट टाका, किंवा या Worker च्या लॉगमधील कोड टाका.",
+	"setup.codeFromLogs": "या Worker च्या लॉगमध्ये एकदाच वापरता येणारा कोड लिहिला जातो. Cloudflare डॅशबोर्ड → Workers & Pages → mailflare-alias → Observability → Logs उघडा, किंवा `npx wrangler tail mailflare-alias` चालवा, नंतर खाली “लॉगमध्ये नवीन कोड लिहा” दाबा. तो 60 मिनिटे वैध असतो.",
+	"setup.codeFromSecret": "SETUP_CODE सीक्रेट टाका.",
 	"setup.passkeyName": "पासकीचे नाव",
 	"setup.defaultName": "माझी पासकी",
 	"setup.button": "पासकी नोंदवा",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "तुमच्यासाठी रिव्हर्स-उपनाव डोमेन सेट करते: subaddressing सह Email Routing, reply+…@ पत्ते या Worker कडे पाठवणारा एक नियम, आणि Email Sending. पुन्हा चालवणे सुरक्षित आहे.",
 	"cf.token": "Cloudflare API टोकन",
-	"cf.tokenHelp": "झोनसाठी या परवानग्यांसह टोकन तयार करा: Zone Read, Zone Settings Edit, Email Routing Rules Edit आणि Email Sending Edit.",
+	"cf.tokenHelp": "झोनसाठी या परवानग्यांसह टोकन तयार करा: Zone Read, Zone Settings Edit, Email Routing Rules Edit आणि Email Sending Edit. हे टोकन फक्त या सेटअपसाठी वापरले जाते आणि जतन केले जात नाही; ते ठेवण्यासाठी CLOUDFLARE_API_TOKEN सीक्रेट सेट करा.",
 	"cf.workerName": "Worker चे नाव",
 	"cf.workerNameHelp": "ज्या नावाने हा Worker डिप्लॉय केला होता ते.",
 	"cf.run": "आपोआप सेट करा",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "फक्त अक्षरे, अंक, ठिपके, हायफन, अंडरस्कोअर आणि प्लस चिन्ह वापरा; सुरुवात आणि शेवट अक्षर किंवा अंकाने असावा.",
 	"notice.newBadDomain": "तुमच्या उपनाव डोमेनपैकी एक निवडा.",
 	"notice.newFailed": "उपनाव तयार होऊ शकले नाही. पुन्हा प्रयत्न करा.",
+	"setup.newCode": "लॉगमध्ये नवीन कोड लिहा",
+	"notice.setupCodeIssued": "लॉगमध्ये नवीन सेटअप कोड लिहिला गेला आहे. आधीचा कोड आता चालणार नाही.",
+	"link.used": "ही लिंक आधीच वापरली गेली आहे. फॉरवर्ड केलेल्या संदेशातील प्रत्येक लिंक एकदाच चालते.",
+	"action.preserveMail": "{alias} वरून {target} ला सदस्यता रद्द करण्याचा ईमेल पाठवून {sender} कडील सदस्यता रद्द करा. तसे न झाल्यास प्रेषकाला ब्लॉक केले जाते.",
+	"banner.spoofSubject": "[सत्यापित न केलेला प्रेषक]",
+	"imp.destinations": "त्यांचे फॉरवर्डिंग पत्ते वापरा",
+	"imp.destinationsHelp": "बंद: आयात केलेली उपनावे तुमच्या डीफॉल्ट पत्त्यावर फॉरवर्ड होतात, जोपर्यंत त्यांचा फॉरवर्डिंग पत्ता येथे आधीच वापरात नाही. चालू: आयातीतील नवीन फॉरवर्डिंग पत्तेही वापरले जातात. प्रत्येक फॉरवर्डिंग पत्ता रिव्हर्स उपनावांद्वारे मेल पाठवू शकतो, त्यामुळे जे पत्ते तुमचे आहेत त्यांच्यासाठीच हे चालू करा.",
+	"imp.newDestinations": "या आयातीद्वारे जोडलेले नवीन फॉरवर्डिंग पत्ते:",
 };
 
 export default dictionary;

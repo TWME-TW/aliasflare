@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "مرحبًا بك في mailflare-alias",
 	"setup.intro": "سجّل مفتاح مرور لحماية هذه اللوحة. بعد ذلك ستدخل بيانات الاتصال بـ Mailflare.",
 	"setup.code": "رمز الإعداد",
-	"setup.codeFromLogs":
-		"تمت كتابة رمز لمرة واحدة في سجلات هذا الـ Worker. افتح لوحة Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs، أو شغّل `npx wrangler tail mailflare-alias` ثم أعد تحميل هذه الصفحة. الرمز صالح لمدة 60 دقيقة.",
-	"setup.codeFromSecret": "أدخل السر SETUP_CODE، أو الرمز الموجود في سجلات هذا الـ Worker.",
+	"setup.codeFromLogs": "كُتب رمز لمرة واحدة في سجلات هذا الـ Worker. افتح لوحة Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs، أو شغّل `npx wrangler tail mailflare-alias`، ثم اضغط “كتابة رمز جديد في السجلات” أدناه. الرمز صالح لمدة 60 دقيقة.",
+	"setup.codeFromSecret": "أدخل السر SETUP_CODE.",
 	"setup.passkeyName": "اسم مفتاح المرور",
 	"setup.defaultName": "مفتاح المرور الخاص بي",
 	"setup.button": "تسجيل مفتاح المرور",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "يعدّ نطاق الأسماء المستعارة العكسية نيابةً عنك: Email Routing مع العناوين الفرعية، وقاعدة واحدة ترسل عناوين reply+…@ إلى هذا الـ Worker، وEmail Sending. يمكن تشغيله مرة أخرى بأمان.",
 	"cf.token": "رمز Cloudflare API",
-	"cf.tokenHelp": "أنشئ رمزًا للنطاق (zone) بهذه الصلاحيات: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit.",
+	"cf.tokenHelp": "أنشئ رمزًا للنطاق (zone) بهذه الصلاحيات: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. يُستخدم لهذا الإعداد فقط ولا يُحفظ؛ للاحتفاظ به، اضبط السر CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "اسم الـ Worker",
 	"cf.workerNameHelp": "الاسم الذي نُشر به هذا الـ Worker.",
 	"cf.run": "الإعداد تلقائيًا",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "استخدم الحروف والأرقام والنقاط والشرطات والشرطات السفلية وعلامات الجمع فقط، على أن يبدأ الاسم وينتهي بحرف أو رقم.",
 	"notice.newBadDomain": "اختر أحد نطاقات أسمائك المستعارة.",
 	"notice.newFailed": "تعذر إنشاء الاسم المستعار. حاول مرة أخرى.",
+	"setup.newCode": "كتابة رمز جديد في السجلات",
+	"notice.setupCodeIssued": "كُتب رمز إعداد جديد في السجلات. الرمز السابق لم يعد صالحًا.",
+	"link.used": "هذا الرابط استُخدم من قبل. كل رابط في الرسالة المُعاد توجيهها يعمل مرة واحدة فقط.",
+	"action.preserveMail": "لإلغاء الاشتراك من {sender}، أرسل بريد إلغاء اشتراك من {alias} إلى {target}. إذا فشل ذلك، يتم حظر المرسل بدلًا من ذلك.",
+	"banner.spoofSubject": "[مرسل غير موثّق]",
+	"imp.destinations": "استخدم عناوين إعادة التوجيه الخاصة بها",
+	"imp.destinationsHelp": "إيقاف: تُعاد توجيه الأسماء المستعارة المستوردة إلى عنوانك الافتراضي، إلا إذا كان عنوان إعادة التوجيه الخاص بها مستخدمًا هنا بالفعل. تشغيل: تُستخدم أيضًا عناوين إعادة التوجيه الجديدة من الاستيراد. يمكن لكل عنوان إعادة توجيه إرسال البريد عبر الأسماء المستعارة العكسية، لذا فعّل هذا الخيار فقط للعناوين التي تملكها.",
+	"imp.newDestinations": "عناوين إعادة التوجيه الجديدة التي أضافها هذا الاستيراد:",
 };
 
 export default dictionary;

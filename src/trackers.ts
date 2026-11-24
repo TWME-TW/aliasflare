@@ -13,6 +13,8 @@ const TRACKING_PARAMS = new Set([
 ]);
 const TRACKING_PARAM_PREFIXES = ["utm_", "pk_", "mtm_", "hmb_", "ga_", "_ga"];
 
+const MAX_SRC_LENGTH = 2048;
+
 /** URL patterns of known open-tracking pixels, whatever their declared size. */
 const TRACKER_URL_PATTERNS: RegExp[] = [
 	/list-manage\.com\/track\/open/i,
@@ -20,26 +22,26 @@ const TRACKER_URL_PATTERNS: RegExp[] = [
 	/mandrillapp\.com\/track\/open/i,
 	/\/track\/open(\.php)?\b/i,
 	/\.hubspotemail\.net\//i,
-	/hubspotlinks\.com\/.*\/(e|o)\b/i,
+	/hubspotlinks\.com\/[^?#\s]{0,300}\/(e|o)\b/i,
 	/\bopen\.convertkit-mail\d*\.com\//i,
 	/\bmktoresp\.com\//i,
 	/\bexct\.net\/open/i,
 	/\brs6\.net\/on\.jsp/i,
 	/\bmailtrack\.io\//i,
 	/\bmltrk\.io\//i,
-	/\bstreak\.com\/.*\/(pixel|open)/i,
+	/\bstreak\.com\/[^?#\s]{0,300}\/(pixel|open)/i,
 	/\bt\.yesware\.com\//i,
 	/\bbl-1\.com\//i, // Bananatag
 	/\bmixmax\.com\/(api\/)?track/i,
-	/\bsuperhuman\.com\/.*\.(gif|png)/i,
+	/\bsuperhuman\.com\/[^?#\s]{0,300}\.(gif|png)/i,
 	/\bemltrk\.com\//i,
 	/\bpixel\.(mailchimp|wp|facebook)\.com\//i,
 	/\bopen\.substack\.com\//i,
 	/\bemail\.mg\.[^/]+\/o\//i, // Mailgun
 	/\bsparkpostmail\.com\/q\//i,
-	/\bpostmarkapp\.com\/.*\/open/i,
+	/\bpostmarkapp\.com\/[^?#\s]{0,300}\/open/i,
 	/\bcustomeriomail\.com\/e\/o\//i,
-	/\bklclick\d*\.com\/.*\/open/i,
+	/\bklclick\d*\.com\/[^?#\s]{0,300}\/open/i,
 	/\/(open|opened|pixel|beacon)\.(gif|png|jpg)\b/i,
 ];
 
@@ -72,7 +74,9 @@ function pixelSize(value: string | null): number | null {
 
 /** True for an image that exists only to report an open. */
 export function isTrackerImage(attributes: { src: string | null; width: string | null; height: string | null; style: string | null }): boolean {
-	const { src, width, height, style } = attributes;
+	const { width, height, style } = attributes;
+	// Patterns only look at the start of the address, which keeps a huge src cheap to test.
+	const src = attributes.src?.slice(0, MAX_SRC_LENGTH) ?? null;
 	if (src && TRACKER_URL_PATTERNS.some((pattern) => pattern.test(src))) return true;
 	const w = pixelSize(width);
 	const h = pixelSize(height);

@@ -53,6 +53,8 @@ export type ImportResult = {
 	contacts: number;
 	/** Aliases left out because their domain was not chosen, by domain. */
 	skippedDomains: { domain: string; count: number }[];
+	/** Forwarding addresses the import added that were not in use here before. */
+	newDestinations: string[];
 };
 
 export class ImportError extends Error {
@@ -65,6 +67,10 @@ export class ImportError extends Error {
 }
 
 const MAX_ALIASES = 10_000;
+/** Pages fetched from one service, whatever the pages hold, so a bad server cannot loop forever. */
+const MAX_PAGES = 1_000;
+const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+const MAX_DETAILS_BYTES = 8 * 1024;
 /** Contact pages fetched from SimpleLogin per import, to stay well inside Workers' subrequest limit. */
 const MAX_CONTACT_FETCHES = 2_000;
 
@@ -133,8 +139,11 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 		}
 		if (response.status === 401 || response.status === 403) throw new ImportError("auth");
 		if (!response.ok) throw new ImportError("fetch", `HTTP ${response.status}`);
+		if (Number(response.headers.get("Content-Length") ?? 0) > MAX_RESPONSE_BYTES) throw new ImportError("format", "response too large");
+		const text = await response.text();
+		if (text.length > MAX_RESPONSE_BYTES) throw new ImportError("format", "response too large");
 		try {
-			return await response.json();
+			return JSON.parse(text);
 		} catch {
 			throw new ImportError("format");
 		}
@@ -144,7 +153,7 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 /** SimpleLogin: GET /api/v2/aliases?page_id=N, 20 per page, until a page comes back empty. */
 export async function fetchSimpleLogin(base: string, apiKey: string): Promise<ImportedAlias[]> {
 	const out: ImportedAlias[] = [];
-	for (let page = 0; out.length < MAX_ALIASES; page += 1) {
+	for (let page = 0; out.length < MAX_ALIASES && page < MAX_PAGES; page += 1) {
 		const body = (await getJson(`${base}/api/v2/aliases?page_id=${page}`, { Authentication: apiKey })) as { aliases?: unknown[] };
 		if (!Array.isArray(body?.aliases)) throw new ImportError("format");
 		if (body.aliases.length === 0) break;
@@ -196,7 +205,7 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 		const active = alias.forwarded + alias.blocked + alias.replied > 0 || alias.details.latest_activity !== undefined;
 		if (alias.sourceId === undefined || !active) continue;
 		const contacts: ImportedContact[] = [];
-		for (let page = 0; fetches < MAX_CONTACT_FETCHES; page += 1) {
+		for (let page = 0; fetches < MAX_CONTACT_FETCHES && page < MAX_PAGES; page += 1) {
 			fetches += 1;
 			const body = (await getJson(`${base}/api/aliases/${alias.sourceId}/contacts?page_id=${page}`, { Authentication: apiKey })) as { contacts?: unknown[] };
 			if (!Array.isArray(body?.contacts) || body.contacts.length === 0) break;
@@ -222,7 +231,7 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 /** addy.io: GET /api/v1/aliases?page[size]=100&page[number]=N until meta.last_page. Deleted aliases are left out. */
 export async function fetchAddy(base: string, apiKey: string): Promise<ImportedAlias[]> {
 	const out: ImportedAlias[] = [];
-	for (let page = 1; out.length < MAX_ALIASES; page += 1) {
+	for (let page = 1; out.length < MAX_ALIASES && page <= MAX_PAGES; page += 1) {
 		const body = (await getJson(`${base}/api/v1/aliases?page%5Bsize%5D=100&page%5Bnumber%5D=${page}`, {
 			Authorization: `Bearer ${apiKey}`,
 			"X-Requested-With": "XMLHttpRequest",
@@ -376,6 +385,13 @@ export function selectByDomain(aliases: ImportedAlias[], domains: string[], reve
 	};
 }
 
+/** Imported details as JSON, or a short note when they are too large to keep. */
+function detailsJson(details: Record<string, unknown>): string | null {
+	if (!Object.keys(details).length) return null;
+	const json = JSON.stringify(details);
+	return json.length <= MAX_DETAILS_BYTES ? json : JSON.stringify({ note: "details too large to keep" });
+}
+
 /**
  * Saves the chosen aliases. New aliases take every imported setting. Aliases that already exist
  * keep their own settings, gain a note or name they did not have, keep the earlier creation date,
@@ -388,8 +404,27 @@ export async function importAliases(
 	source: ImportSource,
 	selection: Selection,
 	found: number,
+	options: { keepDestinations?: boolean } = {},
 ): Promise<ImportResult> {
 	const list = selection.chosen;
+	// Forwarding addresses already in use here. Others from the import are only taken when asked:
+	// every forwarding address can write through reverse aliases and appears in the apps.
+	const known = new Set<string>([settings.defaultDestination].filter(Boolean).map((email) => email.toLowerCase()));
+	const { results: used } = await db
+		.prepare("SELECT DISTINCT destination FROM aliases WHERE destination IS NOT NULL AND imported_from IS NULL AND deleted_at IS NULL")
+		.all<{ destination: string }>();
+	for (const row of used) known.add(row.destination.toLowerCase());
+	const ownDomain = (domain: string) => domain === reverseDomain || settings.aliasDomains.includes(domain);
+	const newDestinations = new Set<string>();
+	const destinationFor = (alias: ImportedAlias): string | null => {
+		const destination = alias.destination?.toLowerCase();
+		if (!destination || destination === alias.email || ownDomain(domainOf(destination))) return null;
+		if (destination === settings.defaultDestination.toLowerCase()) return null;
+		if (known.has(destination)) return destination;
+		if (!options.keepDestinations) return null;
+		newDestinations.add(destination);
+		return destination;
+	};
 	const existing = new Set<string>();
 	for (let i = 0; i < list.length; i += 90) {
 		const chunk = list.slice(i, i + 90);
@@ -423,7 +458,7 @@ export async function importAliases(
 		alias.lastBlockAt,
 		alias.lastReplyAt,
 		alias.lastSentAt,
-		Object.keys(alias.details).length ? JSON.stringify(alias.details) : null,
+		detailsJson(alias.details),
 	];
 	const statements: D1PreparedStatement[] = list.map((alias) => {
 		if (existing.has(alias.email)) {
@@ -436,8 +471,7 @@ export async function importAliases(
 				)
 				.bind(alias.note, alias.name, alias.createdAt, ...history(alias), timestamp, alias.email);
 		}
-		const destination =
-			alias.destination && alias.destination !== settings.defaultDestination && domainOf(alias.destination) !== reverseDomain ? alias.destination : null;
+		const destination = destinationFor(alias);
 		return db
 			.prepare(
 				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, pinned, num_id, uid, created_at, updated_at,
@@ -498,5 +532,6 @@ export async function importAliases(
 		updated: list.filter((alias) => existing.has(alias.email)).length,
 		contacts,
 		skippedDomains: selection.skippedDomains,
+		newDestinations: [...newDestinations].sort(),
 	};
 }

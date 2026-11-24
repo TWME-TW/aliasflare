@@ -21,9 +21,8 @@ export const en = {
 	"setup.welcome": "Welcome to mailflare-alias",
 	"setup.intro": "Register a passkey to protect this dashboard. You will enter the Mailflare connection details next.",
 	"setup.code": "Setup code",
-	"setup.codeFromLogs":
-		"A one-time code was written to this Worker's logs. Open the Cloudflare dashboard → Workers & Pages → mailflare-alias → Observability → Logs, or run `npx wrangler tail mailflare-alias` and reload this page. It is valid for 60 minutes.",
-	"setup.codeFromSecret": "Enter the SETUP_CODE secret, or the code from this Worker's logs.",
+	"setup.codeFromLogs": "A one-time code is written to this Worker's logs. Open the Cloudflare dashboard → Workers & Pages → mailflare-alias → Observability → Logs, or run `npx wrangler tail mailflare-alias`, then press “Write a new code to the logs” below. A code is valid for 60 minutes.",
+	"setup.codeFromSecret": "Enter the SETUP_CODE secret.",
 	"setup.passkeyName": "Passkey name",
 	"setup.defaultName": "My passkey",
 	"setup.button": "Register passkey",
@@ -253,7 +252,7 @@ export const en = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Sets up the reverse-alias domain for you: Email Routing with subaddressing, one rule that sends reply+…@ addresses to this Worker, and Email Sending. Running it again is safe.",
 	"cf.token": "Cloudflare API token",
-	"cf.tokenHelp": "Create a token for the zone with these permissions: Zone Read, Zone Settings Edit, Email Routing Rules Edit and Email Sending Edit.",
+	"cf.tokenHelp": "Create a token for the zone with these permissions: Zone Read, Zone Settings Edit, Email Routing Rules Edit and Email Sending Edit. It is used for this setup only and is not stored; to keep one, set the CLOUDFLARE_API_TOKEN secret.",
 	"cf.workerName": "Worker name",
 	"cf.workerNameHelp": "The name this Worker was deployed with.",
 	"cf.run": "Set up automatically",
@@ -369,6 +368,14 @@ export const en = {
 	"notice.newBadPrefix": "Use only letters, digits, dots, hyphens, underscores and plus signs, starting and ending with a letter or digit.",
 	"notice.newBadDomain": "Choose one of your alias domains.",
 	"notice.newFailed": "The alias could not be created. Try again.",
+	"setup.newCode": "Write a new code to the logs",
+	"notice.setupCodeIssued": "A new setup code was written to the logs. The earlier code no longer works.",
+	"link.used": "This link was already used. Each link in a forwarded message works once.",
+	"action.preserveMail": "Unsubscribe from {sender} by sending an unsubscribe email from {alias} to {target}. If that fails, the sender is blocked instead.",
+	"banner.spoofSubject": "[Unverified sender]",
+	"imp.destinations": "Use their forwarding addresses",
+	"imp.destinationsHelp": "Off: imported aliases forward to your default address, unless their forwarding address is already in use here. On: new forwarding addresses from the import are used as well. Every forwarding address can send mail through reverse aliases, so only turn this on for addresses that are yours.",
+	"imp.newDestinations": "New forwarding addresses added by this import:",
 };
 
 export type MessageKey = keyof typeof en;

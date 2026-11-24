@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "ยินดีต้อนรับสู่ mailflare-alias",
 	"setup.intro": "ลงทะเบียนพาสคีย์เพื่อปกป้องแดชบอร์ดนี้ จากนั้นคุณจะกรอกรายละเอียดการเชื่อมต่อ Mailflare",
 	"setup.code": "รหัสตั้งค่า",
-	"setup.codeFromLogs":
-		"รหัสใช้ครั้งเดียวถูกเขียนลงในบันทึกของ Worker นี้ เปิดแดชบอร์ด Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs หรือรัน `npx wrangler tail mailflare-alias` แล้วโหลดหน้านี้ใหม่ รหัสมีอายุ 60 นาที",
-	"setup.codeFromSecret": "กรอกค่าลับ SETUP_CODE หรือรหัสจากบันทึกของ Worker นี้",
+	"setup.codeFromLogs": "รหัสใช้ครั้งเดียวจะถูกเขียนลงในบันทึกของ Worker นี้ เปิดแดชบอร์ด Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs หรือรัน `npx wrangler tail mailflare-alias` แล้วกด “เขียนรหัสใหม่ลงในบันทึก” ด้านล่าง รหัสมีอายุ 60 นาที",
+	"setup.codeFromSecret": "กรอกค่าลับ SETUP_CODE",
 	"setup.passkeyName": "ชื่อพาสคีย์",
 	"setup.defaultName": "พาสคีย์ของฉัน",
 	"setup.button": "ลงทะเบียนพาสคีย์",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "ตั้งค่าโดเมนนามแฝงย้อนกลับให้คุณ: Email Routing พร้อม subaddressing กฎหนึ่งข้อที่ส่งที่อยู่ reply+…@ มายัง Worker นี้ และ Email Sending การรันซ้ำปลอดภัย",
 	"cf.token": "โทเค็น API ของ Cloudflare",
-	"cf.tokenHelp": "สร้างโทเค็นสำหรับโซนที่มีสิทธิ์ดังนี้: Zone Read, Zone Settings Edit, Email Routing Rules Edit และ Email Sending Edit",
+	"cf.tokenHelp": "สร้างโทเค็นสำหรับโซนที่มีสิทธิ์ดังนี้: Zone Read, Zone Settings Edit, Email Routing Rules Edit และ Email Sending Edit ใช้เฉพาะการตั้งค่านี้ ไม่ถูกเก็บไว้ หากต้องการเก็บไว้ ให้ตั้งค่าลับ CLOUDFLARE_API_TOKEN",
 	"cf.workerName": "ชื่อ Worker",
 	"cf.workerNameHelp": "ชื่อที่ใช้ตอนปรับใช้ Worker นี้",
 	"cf.run": "ตั้งค่าอัตโนมัติ",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "ใช้ได้เฉพาะตัวอักษร ตัวเลข จุด ขีดกลาง ขีดล่าง และเครื่องหมายบวก โดยต้องขึ้นต้นและลงท้ายด้วยตัวอักษรหรือตัวเลข",
 	"notice.newBadDomain": "โปรดเลือกหนึ่งในโดเมนนามแฝงของคุณ",
 	"notice.newFailed": "ไม่สามารถสร้างนามแฝงได้ โปรดลองอีกครั้ง",
+	"setup.newCode": "เขียนรหัสใหม่ลงในบันทึก",
+	"notice.setupCodeIssued": "เขียนรหัสตั้งค่าใหม่ลงในบันทึกแล้ว รหัสก่อนหน้าใช้ไม่ได้อีกต่อไป",
+	"link.used": "ลิงก์นี้ถูกใช้ไปแล้ว ลิงก์แต่ละลิงก์ในอีเมลที่ส่งต่อใช้ได้เพียงครั้งเดียว",
+	"action.preserveMail": "ยกเลิกการสมัครรับจาก {sender} โดยส่งอีเมลยกเลิกการสมัครจาก {alias} ไปยัง {target} หากไม่สำเร็จ ระบบจะบล็อกผู้ส่งแทน",
+	"banner.spoofSubject": "[ผู้ส่งที่ยังไม่ได้รับการยืนยัน]",
+	"imp.destinations": "ใช้ที่อยู่สำหรับส่งต่อของนามแฝงเหล่านั้น",
+	"imp.destinationsHelp": "ปิด: นามแฝงที่นำเข้าจะส่งต่อไปยังที่อยู่เริ่มต้นของคุณ เว้นแต่ที่อยู่สำหรับส่งต่อของนามแฝงนั้นถูกใช้อยู่แล้วที่นี่ เปิด: ที่อยู่สำหรับส่งต่อใหม่จากการนำเข้าจะถูกใช้ด้วย ที่อยู่สำหรับส่งต่อทุกที่สามารถส่งอีเมลผ่านนามแฝงย้อนกลับได้ ดังนั้นให้เปิดเฉพาะกับที่อยู่ที่เป็นของคุณเท่านั้น",
+	"imp.newDestinations": "ที่อยู่สำหรับส่งต่อใหม่ที่การนำเข้านี้เพิ่มเข้ามา:",
 };
 
 export default dictionary;

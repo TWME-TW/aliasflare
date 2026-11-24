@@ -56,16 +56,21 @@ async function call(config: MailflareConfig, path: string, init: RequestInit = {
 	return response;
 }
 
+/** Larger messages are not forwarded: Email Sending would refuse them anyway. */
+export const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
+
 let cachedAccountId: { key: string; id: string } | null = null;
 
 async function jmapAccountId(config: MailflareConfig): Promise<string> {
-	if (cachedAccountId?.key === config.apiKey) return cachedAccountId.id;
+	// Keyed by where and how Mailflare is reached as well, so a changed URL never reuses an id.
+	const key = `${config.service ? "binding" : "url"}|${config.baseUrl}|${config.apiKey}`;
+	if (cachedAccountId?.key === key) return cachedAccountId.id;
 	const session = (await (await call(config, "/jmap/session")).json()) as {
 		primaryAccounts?: Record<string, string>;
 	};
 	const id = session.primaryAccounts?.[JMAP_MAIL];
 	if (!id) throw new Error("Mailflare's JMAP session has no mail account");
-	cachedAccountId = { key: config.apiKey, id };
+	cachedAccountId = { key, id };
 	return id;
 }
 
@@ -77,14 +82,15 @@ export async function getStoredMessage(config: MailflareConfig, messageId: strin
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			using: [JMAP_CORE, JMAP_MAIL],
-			methodCalls: [["Email/get", { accountId, ids: [messageId], properties: ["id", "mailboxIds", "blobId"] }, "0"]],
+			methodCalls: [["Email/get", { accountId, ids: [messageId], properties: ["id", "mailboxIds", "blobId", "size"] }, "0"]],
 		}),
 	});
 	const body = (await response.json()) as { methodResponses?: [string, Record<string, unknown>, string][] };
 	const [name, result] = body.methodResponses?.[0] ?? [];
 	if (name !== "Email/get" || !result) throw new Error(`Mailflare JMAP Email/get failed: ${JSON.stringify(result ?? body).slice(0, 300)}`);
-	const email = (result.list as { mailboxIds?: Record<string, boolean>; blobId?: string }[] | undefined)?.[0];
+	const email = (result.list as { mailboxIds?: Record<string, boolean>; blobId?: string; size?: number }[] | undefined)?.[0];
 	if (!email?.blobId) throw new MailflareError(`Message ${messageId} was not found in Mailflare`, 404);
+	if ((email.size ?? 0) > MAX_MESSAGE_BYTES) throw new MailflareError(`Message ${messageId} is larger than ${MAX_MESSAGE_BYTES} bytes`, 413);
 	// Mailbox ids look like "<mailbox>", "<mailbox>~inbox" or "<mailbox>~f~<folder>".
 	const firstMailbox = Object.keys(email.mailboxIds ?? {})[0];
 	const mailboxId = firstMailbox?.split("~")[0];
@@ -94,7 +100,33 @@ export async function getStoredMessage(config: MailflareConfig, messageId: strin
 		config,
 		`/jmap/download/${encodeURIComponent(accountId)}/${encodeURIComponent(email.blobId)}/message.eml?type=message/rfc822`,
 	);
-	return { mailboxId, raw: await download.arrayBuffer() };
+	return { mailboxId, raw: await readCapped(download, MAX_MESSAGE_BYTES) };
+}
+
+/** Reads a response body, stopping with a 413 MailflareError past `max` bytes. */
+async function readCapped(response: Response, max: number): Promise<ArrayBuffer> {
+	if (Number(response.headers.get("Content-Length") ?? 0) > max) throw new MailflareError(`The message is larger than ${max} bytes`, 413);
+	if (!response.body) return new ArrayBuffer(0);
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > max) {
+			await reader.cancel();
+			throw new MailflareError(`The message is larger than ${max} bytes`, 413);
+		}
+		chunks.push(value);
+	}
+	const bytes = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return bytes.buffer;
 }
 
 /** Sends through Mailflare, which stores the message in the mailbox's Sent folder. */

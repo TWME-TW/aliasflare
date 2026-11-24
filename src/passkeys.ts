@@ -8,7 +8,7 @@ import {
 	type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
-import { safeEqual } from "./crypto";
+import { digestEqual, safeEqual } from "./crypto";
 import { newId, now } from "./db";
 import { randomToken } from "./format";
 
@@ -79,17 +79,14 @@ async function takeChallenge(db: D1Database, id: string | undefined, purpose: st
  * The one-time code that authorizes registering the first passkey. It is written to the
  * Worker's logs, so only someone with access to the Cloudflare account can read it.
  */
-export async function issueSetupCode(db: D1Database): Promise<{ created: boolean; expiresAt: number }> {
+export async function issueSetupCode(db: D1Database, replace = false): Promise<{ created: boolean; expiresAt: number }> {
 	const existing = await db
 		.prepare("SELECT challenge, expires_at FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? LIMIT 1")
 		.bind(now())
 		.first<{ challenge: string; expires_at: number }>();
-	if (existing) {
-		// Log it again on every visit, so it can be found by whoever starts watching the logs now.
-		const minutes = Math.max(1, Math.round((existing.expires_at - now()) / 60));
-		console.log(`[mailflare-alias] Setup code: ${existing.challenge} (valid for ${minutes} more minutes)`);
-		return { created: false, expiresAt: existing.expires_at };
-	}
+	// The code is logged once, when it is made, so the logs hold one copy per code. Whoever
+	// missed it asks for a new one from the setup page.
+	if (existing && !replace) return { created: false, expiresAt: existing.expires_at };
 	const code = randomToken(10).toUpperCase();
 	const expiresAt = now() + SETUP_CODE_TTL_SECONDS;
 	await db.batch([
@@ -103,14 +100,19 @@ export async function issueSetupCode(db: D1Database): Promise<{ created: boolean
 export async function checkSetupCode(env: Env, code: string): Promise<boolean> {
 	const entered = code.trim().toUpperCase();
 	if (!entered) return false;
-	if (env.SETUP_CODE && safeEqual(entered, env.SETUP_CODE.trim().toUpperCase())) return true;
+	// A SETUP_CODE secret replaces the logged code entirely, so a code that was in the logs
+	// earlier stops working once the secret is set.
+	const fixed = env.SETUP_CODE?.trim();
+	if (fixed) return digestEqual(entered, fixed.toUpperCase());
 	const row = await env.DB.prepare("SELECT challenge FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? LIMIT 1")
 		.bind(now())
 		.first<{ challenge: string }>();
 	return !!row && safeEqual(entered, row.challenge);
 }
 
-export async function registrationOptions(db: D1Database, rp: RelyingParty) {
+export type RegistrationPurpose = "register" | "setup_register";
+
+export async function registrationOptions(db: D1Database, rp: RelyingParty, purpose: RegistrationPurpose = "register") {
 	const existing = await listPasskeys(db);
 	const options = await generateRegistrationOptions({
 		rpName: RP_NAME,
@@ -121,7 +123,7 @@ export async function registrationOptions(db: D1Database, rp: RelyingParty) {
 		excludeCredentials: existing.map((row) => ({ id: row.id, transports: transportsOf(row) })),
 		authenticatorSelection: { residentKey: "required", userVerification: "required" },
 	});
-	const challengeId = await storeChallenge(db, "register", options.challenge);
+	const challengeId = await storeChallenge(db, purpose, options.challenge);
 	return { options, challengeId };
 }
 
@@ -131,8 +133,9 @@ export async function completeRegistration(
 	challengeId: string | undefined,
 	response: RegistrationResponseJSON,
 	name: string,
+	purpose: RegistrationPurpose = "register",
 ): Promise<PasskeyRow | null> {
-	const expectedChallenge = await takeChallenge(db, challengeId, "register");
+	const expectedChallenge = await takeChallenge(db, challengeId, purpose);
 	if (!expectedChallenge) return null;
 	const verification = await verifyRegistrationResponse({
 		response,
@@ -152,11 +155,14 @@ export async function completeRegistration(
 		created_at: now(),
 		last_used_at: null,
 	};
-	await db
-		.prepare("INSERT INTO passkeys (id, public_key, counter, transports, name, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+	// The first passkey is only added while there is none, in the same statement, so two
+	// setup attempts at once cannot both register one.
+	const firstOnly = purpose === "setup_register" ? " WHERE NOT EXISTS (SELECT 1 FROM passkeys)" : "";
+	const inserted = await db
+		.prepare(`INSERT INTO passkeys (id, public_key, counter, transports, name, created_at) SELECT ?, ?, ?, ?, ?, ?${firstOnly}`)
 		.bind(row.id, row.public_key, row.counter, row.transports, row.name, row.created_at)
 		.run();
-	return row;
+	return inserted.meta.changes > 0 ? row : null;
 }
 
 export async function authenticationOptions(db: D1Database, rp: RelyingParty) {

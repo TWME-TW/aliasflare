@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "欢迎使用 mailflare-alias",
 	"setup.intro": "请先注册通行密钥来保护此管理界面，然后再填写 Mailflare 的连接信息。",
 	"setup.code": "设置码",
-	"setup.codeFromLogs":
-		"一次性设置码已写入此 Worker 的日志。请打开 Cloudflare 控制台 → Workers & Pages → mailflare-alias → Observability → Logs，或运行 `npx wrangler tail mailflare-alias` 后刷新本页。有效期 60 分钟。",
-	"setup.codeFromSecret": "请输入 SETUP_CODE secret，或 Worker 日志中的设置码。",
+	"setup.codeFromLogs": "一次性设置码已写入此 Worker 的日志。请打开 Cloudflare 控制台 → Workers & Pages → mailflare-alias → Observability → Logs，或运行 `npx wrangler tail mailflare-alias`，然后点击下方的“写入新的设置码”。有效期 60 分钟。",
+	"setup.codeFromSecret": "请输入 SETUP_CODE secret。",
 	"setup.passkeyName": "通行密钥名称",
 	"setup.defaultName": "我的通行密钥",
 	"setup.button": "注册通行密钥",
@@ -230,7 +229,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "自动设置反向别名域名：开启 Email Routing 与子地址、创建一条把 reply+…@ 地址发送到此 Worker 的规则，并设置 Email Sending。可以重复执行。",
 	"cf.token": "Cloudflare API token",
-	"cf.tokenHelp": "为该 zone 创建具有以下权限的 token：Zone Read、Zone Settings Edit、Email Routing Rules Edit、Email Sending Edit。",
+	"cf.tokenHelp": "为该 zone 创建具有以下权限的 token：Zone Read、Zone Settings Edit、Email Routing Rules Edit、Email Sending Edit。该 token 仅用于本次设置，不会被保存；若要保留，请设置 CLOUDFLARE_API_TOKEN secret。",
 	"cf.workerName": "Worker 名称",
 	"cf.workerNameHelp": "部署此 Worker 时使用的名称。",
 	"cf.run": "自动设置",
@@ -346,6 +345,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "仅可使用英文字母、数字、点、连字符、下划线和加号，且必须以字母或数字开头和结尾。",
 	"notice.newBadDomain": "请选择你的别名域名之一。",
 	"notice.newFailed": "无法创建别名，请重试。",
+	"setup.newCode": "写入新的设置码",
+	"notice.setupCodeIssued": "已将新的设置码写入日志，先前的设置码已失效。",
+	"link.used": "此链接已被使用。转发邮件中的每个链接只能使用一次。",
+	"action.preserveMail": "以 {alias} 向 {target} 发送一封退订邮件，以退订 {sender}。若失败，则改为屏蔽该发件人。",
+	"banner.spoofSubject": "[未验证的发件人]",
+	"imp.destinations": "使用其转发地址",
+	"imp.destinationsHelp": "关闭时：导入的别名会转发到你的默认地址，除非其转发地址已在此处使用。开启时：导入中新的转发地址也会被采用。每个转发地址都可以通过反向别名发送邮件，因此只在这些地址属于你时开启。",
+	"imp.newDestinations": "本次导入新增的转发地址：",
 };
 
 export default dictionary;

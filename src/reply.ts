@@ -101,6 +101,26 @@ export function singleSender(rawHeaders: string, parsedFrom: string | undefined)
 	return from;
 }
 
+/** Signed block, turn-off and unsubscribe links of this service, with any host in front. */
+const SIGNED_LINK = /https?:\/\/[^\s"'<>]+\/(?:action|unsubscribe)\/(?:(?:block|disable)~)?fw_[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+/gi;
+
+export function stripSignedLinks(body: string): string {
+	return body.replace(SIGNED_LINK, "[link removed]");
+}
+
+/** Drops the forwarding banner from quoted HTML (where the mail client kept its attribute). */
+async function removeBanner(html: string): Promise<string> {
+	if (typeof HTMLRewriter === "undefined" || !html.includes("data-mailflare-alias-banner")) return html;
+	return new HTMLRewriter()
+		.on("[data-mailflare-alias-banner]", {
+			element(element) {
+				element.remove();
+			},
+		})
+		.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
+		.text();
+}
+
 function headerSection(raw: Uint8Array): string {
 	// Headers end at the first blank line; 64 KiB is far more than any real header block.
 	const head = new TextDecoder().decode(raw.subarray(0, 65536));
@@ -163,8 +183,10 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 
-	let html = email.html ?? undefined;
-	let text = email.text ?? undefined;
+	// A quoted forward carries the banner with its block / turn-off links; they are the
+	// owner's, so neither the banner nor any signed link may reach the correspondent.
+	let html = email.html ? await removeBanner(stripSignedLinks(email.html)) : undefined;
+	let text = email.text ? stripSignedLinks(email.text) : undefined;
 	if (settings.reverseAliasReplacement) {
 		const body = `${html ?? ""}\n${text ?? ""}`;
 		const reverseLocals = findAddressesOnDomain(body, reverseDomain)

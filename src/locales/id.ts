@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Selamat datang di mailflare-alias",
 	"setup.intro": "Daftarkan passkey untuk melindungi dasbor ini. Setelah itu Anda akan memasukkan detail koneksi Mailflare.",
 	"setup.code": "Kode penyiapan",
-	"setup.codeFromLogs":
-		"Kode sekali pakai telah ditulis ke log Worker ini. Buka dasbor Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, atau jalankan `npx wrangler tail mailflare-alias` lalu muat ulang halaman ini. Kode berlaku selama 60 menit.",
-	"setup.codeFromSecret": "Masukkan secret SETUP_CODE, atau kode dari log Worker ini.",
+	"setup.codeFromLogs": "Kode sekali pakai telah ditulis ke log Worker ini. Buka dasbor Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs, atau jalankan `npx wrangler tail mailflare-alias`, lalu klik “Tulis kode baru ke log” di bawah. Kode berlaku selama 60 menit.",
+	"setup.codeFromSecret": "Masukkan secret SETUP_CODE.",
 	"setup.passkeyName": "Nama passkey",
 	"setup.defaultName": "Passkey saya",
 	"setup.button": "Daftarkan passkey",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Menyiapkan domain alias balik untuk Anda: Email Routing dengan subaddressing, satu aturan yang mengirim alamat reply+…@ ke Worker ini, dan Email Sending. Aman dijalankan ulang.",
 	"cf.token": "Token API Cloudflare",
-	"cf.tokenHelp": "Buat token untuk zona dengan izin berikut: Zone Read, Zone Settings Edit, Email Routing Rules Edit, dan Email Sending Edit.",
+	"cf.tokenHelp": "Buat token untuk zona dengan izin berikut: Zone Read, Zone Settings Edit, Email Routing Rules Edit, dan Email Sending Edit. Token hanya dipakai untuk penyiapan ini dan tidak disimpan; untuk menyimpannya, atur secret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nama Worker",
 	"cf.workerNameHelp": "Nama yang dipakai saat Worker ini di-deploy.",
 	"cf.run": "Siapkan otomatis",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Gunakan hanya huruf, angka, titik, tanda hubung, garis bawah, dan tanda plus, dan awali serta akhiri dengan huruf atau angka.",
 	"notice.newBadDomain": "Pilih salah satu domain alias Anda.",
 	"notice.newFailed": "Alias tidak dapat dibuat. Coba lagi.",
+	"setup.newCode": "Tulis kode baru ke log",
+	"notice.setupCodeIssued": "Kode penyiapan baru telah ditulis ke log. Kode sebelumnya tidak berlaku lagi.",
+	"link.used": "Tautan ini sudah digunakan. Setiap tautan dalam pesan yang diteruskan hanya bisa digunakan sekali.",
+	"action.preserveMail": "Berhenti berlangganan dari {sender} dengan mengirim email berhenti langganan dari {alias} ke {target}. Jika gagal, pengirim akan diblokir.",
+	"banner.spoofSubject": "[Pengirim tidak terverifikasi]",
+	"imp.destinations": "Gunakan alamat penerusan mereka",
+	"imp.destinationsHelp": "Nonaktif: alias yang diimpor diteruskan ke alamat default Anda, kecuali alamat penerusannya sudah dipakai di sini. Aktif: alamat penerusan baru dari impor juga dipakai. Setiap alamat penerusan dapat mengirim surel melalui alias terbalik, jadi aktifkan ini hanya untuk alamat milik Anda.",
+	"imp.newDestinations": "Alamat penerusan baru yang ditambahkan oleh impor ini:",
 };
 
 export default dictionary;

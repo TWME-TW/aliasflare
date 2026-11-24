@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Witaj w mailflare-alias",
 	"setup.intro": "Zarejestruj klucz dostępu, aby zabezpieczyć ten panel. Potem podasz dane połączenia z Mailflare.",
 	"setup.code": "Kod konfiguracji",
-	"setup.codeFromLogs":
-		"Jednorazowy kod został zapisany w logach tego Workera. Otwórz panel Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs albo uruchom `npx wrangler tail mailflare-alias` i odśwież tę stronę. Kod jest ważny przez 60 minut.",
-	"setup.codeFromSecret": "Wpisz sekret SETUP_CODE lub kod z logów tego Workera.",
+	"setup.codeFromLogs": "Jednorazowy kod został zapisany w logach tego Workera. Otwórz panel Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs albo uruchom `npx wrangler tail mailflare-alias`, a następnie kliknij poniżej „Zapisz nowy kod w logach”. Kod jest ważny przez 60 minut.",
+	"setup.codeFromSecret": "Wpisz sekret SETUP_CODE.",
 	"setup.passkeyName": "Nazwa klucza dostępu",
 	"setup.defaultName": "Mój klucz dostępu",
 	"setup.button": "Zarejestruj klucz dostępu",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Konfiguruje za Ciebie domenę aliasów zwrotnych: Email Routing z subaddressing, jedną regułę kierującą adresy reply+…@ do tego Workera oraz Email Sending. Ponowne uruchomienie jest bezpieczne.",
 	"cf.token": "Token API Cloudflare",
-	"cf.tokenHelp": "Utwórz token dla strefy z tymi uprawnieniami: Zone Read, Zone Settings Edit, Email Routing Rules Edit i Email Sending Edit.",
+	"cf.tokenHelp": "Utwórz token dla strefy z tymi uprawnieniami: Zone Read, Zone Settings Edit, Email Routing Rules Edit i Email Sending Edit. Jest używany tylko do tej konfiguracji i nie jest zapisywany; aby go zachować, ustaw sekret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nazwa Workera",
 	"cf.workerNameHelp": "Nazwa, pod którą wdrożono tego Workera.",
 	"cf.run": "Skonfiguruj automatycznie",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Użyj tylko liter, cyfr, kropek, myślników, podkreśleń i znaków plus; nazwa musi zaczynać się i kończyć literą lub cyfrą.",
 	"notice.newBadDomain": "Wybierz jedną z domen aliasów.",
 	"notice.newFailed": "Nie udało się utworzyć aliasu. Spróbuj ponownie.",
+	"setup.newCode": "Zapisz nowy kod w logach",
+	"notice.setupCodeIssued": "Nowy kod konfiguracji został zapisany w logach. Poprzedni kod przestał działać.",
+	"link.used": "Ten link został już użyty. Każdy link w przekazanej wiadomości działa tylko raz.",
+	"action.preserveMail": "Wypisz się z {sender}, wysyłając z {alias} na adres {target} wiadomość o wypisaniu. Jeśli się nie uda, nadawca zostanie zablokowany.",
+	"banner.spoofSubject": "[Niezweryfikowany nadawca]",
+	"imp.destinations": "Użyj ich adresów przekierowania",
+	"imp.destinationsHelp": "Wyłączone: zaimportowane aliasy przekierowują na Twój domyślny adres, chyba że ich adres przekierowania jest już tutaj używany. Włączone: używane są też nowe adresy przekierowania z importu. Każdy adres przekierowania może wysyłać pocztę przez aliasy zwrotne, więc włączaj to tylko dla adresów, które są Twoje.",
+	"imp.newDestinations": "Nowe adresy przekierowania dodane przez ten import:",
 };
 
 export default dictionary;

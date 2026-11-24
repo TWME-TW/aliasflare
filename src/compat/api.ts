@@ -71,9 +71,14 @@ api.use("*", async (c, next) => {
 		return c.json({ error: "Sign in with an API key. Create one on the API keys page of mailflare-alias." }, 403);
 	}
 	const key = presentedKey(c.req.raw.headers);
+	// Every request counts against a per-address limit before the key is looked up, so a
+	// flood of guesses never reaches D1. Failed keys also count against the stricter one.
+	const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+	if (c.env.API_RATE_LIMIT && !(await c.env.API_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
+		return c.json({ error: "Too many requests", message: "Too Many Attempts." }, 429);
+	}
 	const valid = key ? await verifyApiKey(c.env.DB, key) : null;
 	if (!valid) {
-		const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
 		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
 			return c.json({ error: "Too many attempts", message: "Too Many Attempts." }, 429);
 		}

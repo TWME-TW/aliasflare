@@ -1,18 +1,23 @@
 import PostalMime, { type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { signToken } from "./crypto";
-import { ensureAlias, ensureContact, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
+import { ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
 import { domainOf, ensureAngle, extractEmail, formatSenderName, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
 import { translator } from "./i18n";
 import { getStoredMessage, mailflareConfig, MailflareError } from "./mailflare";
+import { LINK_TTL_SECONDS } from "./unsubscribe";
 import { firstAuthenticationResults } from "./reply";
 import { loadSettings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
 
 export const LOOP_HEADER = "X-Mailflare-Alias";
-const LINK_TTL_SECONDS = 60 * 60 * 24 * 365 * 2;
 const STALE_PROCESSING_SECONDS = 120;
 const MAX_REFERENCES = 10;
+/** A message that failed this many times is given up on, so Mailflare stops retrying it. */
+const MAX_ATTEMPTS = 5;
+const MAX_ATTACHMENTS = 50;
+const MAX_UNSUBSCRIBE_LENGTH = 4096;
+const MAX_NAME_LENGTH = 120;
 
 export type InboundEvent = {
 	messageId: string;
@@ -32,7 +37,7 @@ async function claim(db: D1Database, messageId: string, aliasAddress: string): P
 	const id = newId("fw");
 	const inserted = await db
 		.prepare(
-			"INSERT INTO forwards (id, mailflare_message_id, alias_address, status, created_at, updated_at) VALUES (?, ?, ?, 'processing', ?, ?) ON CONFLICT (mailflare_message_id) DO NOTHING",
+			"INSERT INTO forwards (id, mailflare_message_id, alias_address, status, attempts, created_at, updated_at) VALUES (?, ?, ?, 'processing', 1, ?, ?) ON CONFLICT (mailflare_message_id) DO NOTHING",
 		)
 		.bind(id, messageId, aliasAddress, timestamp, timestamp)
 		.run();
@@ -41,9 +46,10 @@ async function claim(db: D1Database, messageId: string, aliasAddress: string): P
 	const existing = await db.prepare("SELECT * FROM forwards WHERE mailflare_message_id = ?").bind(messageId).first<ForwardRow>();
 	if (!existing) return { status: 409, result: "busy" };
 	if (existing.status === "sent" || existing.status === "skipped") return { status: 200, result: `duplicate (${existing.status})` };
+	if (existing.status === "failed" && (existing.attempts ?? 0) >= MAX_ATTEMPTS) return { status: 200, result: `gave up after ${MAX_ATTEMPTS} attempts` };
 	const reclaimed = await db
 		.prepare(
-			"UPDATE forwards SET status = 'processing', error = NULL, updated_at = ? WHERE id = ? AND (status = 'failed' OR (status = 'processing' AND updated_at < ?))",
+			"UPDATE forwards SET status = 'processing', error = NULL, attempts = attempts + 1, updated_at = ? WHERE id = ? AND (status = 'failed' OR (status = 'processing' AND updated_at < ?))",
 		)
 		.bind(timestamp, existing.id, timestamp - STALE_PROCESSING_SECONDS)
 		.run();
@@ -113,6 +119,10 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 
 	try {
 		const settings = await loadSettings(db);
+		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
+		const known = await getAlias(db, aliasAddress);
+		if (known?.deleted_at) return await skip("the alias was deleted");
+		if (known?.forward_mode === "none") return await skip("forwarding is off for this alias");
 		const stored = await getStoredMessage(mailflareConfig(config), event.messageId);
 		const alias = await ensureAlias(db, aliasAddress, stored.mailboxId, {
 			forwardEnabled: settings.autoForwardNewAliases,
@@ -129,18 +139,28 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 
 		const senderEmail = extractEmail(email.from?.address ?? event.from ?? null);
 		if (!senderEmail || domainOf(senderEmail) === reverseDomain) return await skip("no usable sender");
-		const contact = await ensureContact(db, aliasAddress, senderEmail, email.from?.name || null, settings.includeSenderInReverseAlias);
 		await finish(db, forwardId, {
-			contact_id: contact.id,
 			original_message_id: ensureAngle(email.messageId),
-			original_unsubscribe: usableUnsubscribe(headerValue(email, "List-Unsubscribe")),
+			original_unsubscribe: usableUnsubscribe(headerValue(email, "List-Unsubscribe"))?.slice(0, MAX_UNSUBSCRIBE_LENGTH) ?? null,
 			original_unsubscribe_post: /^\s*List-Unsubscribe=One-Click\s*$/i.test(headerValue(email, "List-Unsubscribe-Post") ?? "") ? 1 : 0,
 			subject: email.subject?.slice(0, 500) ?? null,
 		});
-		if (contact.blocked) return await skip("sender is blocked");
-		const blocked = await matchBlocklist(db, senderEmail);
-		if (blocked) return await skip(`blocklist: ${blocked.value}`);
+		// Filters run before a contact is made, so a blocked sender gets no reverse alias. The
+		// envelope sender is checked too: the From header alone is the sender's to choose.
+		const envelopeSender = extractEmail(event.from ?? null);
+		for (const candidate of new Set([senderEmail, envelopeSender].filter((value): value is string => !!value))) {
+			const blocked = await matchBlocklist(db, candidate);
+			if (blocked) return await skip(`blocklist: ${blocked.value}`);
+		}
 		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias");
+		if (email.attachments.length > MAX_ATTACHMENTS) return await skip(`${email.attachments.length} attachments (at most ${MAX_ATTACHMENTS})`);
+
+		const spoofed = dmarcFailedAtCloudflare(firstAuthenticationResults(rawHeaderSection(stored.raw)));
+		// A display name from a message that failed DMARC is not trusted to rename a contact.
+		const senderName = spoofed ? null : email.from?.name?.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, MAX_NAME_LENGTH) || null;
+		const contact = await ensureContact(db, aliasAddress, senderEmail, senderName, settings.includeSenderInReverseAlias);
+		await finish(db, forwardId, { contact_id: contact.id });
+		if (contact.blocked) return await skip("sender is blocked");
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
 		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
@@ -157,7 +177,7 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 					sender: contact.name ? `${sanitizeDisplayName(contact.name)} <${contact.email}>` : contact.email,
 					blockUrl: `${origin}/action/${await sign("action", `block~${forwardId}`)}`,
 					disableUrl: `${origin}/action/${await sign("action", `disable~${forwardId}`)}`,
-					spoofWarning: dmarcFailedAtCloudflare(firstAuthenticationResults(rawHeaderSection(stored.raw))),
+					spoofWarning: spoofed,
 				}
 			: null;
 		const body = await transformForward(
@@ -175,11 +195,13 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 		if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
 		if (references.length) headers.References = references.join(" ");
 
+		// The banner can be hidden by the message's own CSS; a subject prefix cannot.
+		const subject = email.subject?.trim() || "(no subject)";
 		const result = await env.EMAIL.send({
 			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
 			to: destination,
 			replyTo: reverseAddress,
-			subject: email.subject?.trim() || "(no subject)",
+			subject: spoofed ? `${translator(settings.language)("banner.spoofSubject")} ${subject}` : subject,
 			headers,
 			...(body.html ? { html: body.html } : {}),
 			text: body.text ?? (body.html ? undefined : ""),
@@ -203,8 +225,11 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await finish(db, forwardId, { status: "failed", error: message.slice(0, 1000) });
-		// A message Mailflare no longer has will never succeed; anything else is worth a retry.
-		if (error instanceof MailflareError && error.status === 404) return { status: 200, result: "failed: message not found" };
+		// A message Mailflare no longer has, or one too large to send, will never succeed.
+		if (error instanceof MailflareError && (error.status === 404 || error.status === 413)) {
+			await finish(db, forwardId, { status: "skipped" });
+			return { status: 200, result: `skipped: ${message.slice(0, 200)}` };
+		}
 		console.error("Forward failed", event.messageId, message);
 		return { status: 500, result: "failed" };
 	}

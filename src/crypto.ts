@@ -45,6 +45,15 @@ export function safeEqual(left: string, right: string): boolean {
 	return diff === 0;
 }
 
+/**
+ * Compares two secrets of any length in constant time: both are hashed first, so the time
+ * taken reveals neither their contents nor their lengths.
+ */
+export async function digestEqual(left: string, right: string): Promise<boolean> {
+	const [a, b] = await Promise.all([left, right].map((value) => crypto.subtle.digest("SHA-256", encoder.encode(value))));
+	return safeEqual(toHex(new Uint8Array(a!)), toHex(new Uint8Array(b!)));
+}
+
 /** Verifies Mailflare's webhook signature: hex HMAC-SHA256 of the raw body. */
 export async function verifyWebhookSignature(secret: string, body: string, signature: string | null): Promise<boolean> {
 	if (!signature) return false;

@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "mailflare-alias에 오신 것을 환영합니다",
 	"setup.intro": "이 대시보드를 보호할 패스키를 등록하세요. 다음 단계에서 Mailflare 연결 정보를 입력합니다.",
 	"setup.code": "설정 코드",
-	"setup.codeFromLogs":
-		"일회용 코드가 이 Worker의 로그에 기록되었습니다. Cloudflare 대시보드 → Workers & Pages → mailflare-alias → Observability → Logs를 열거나 `npx wrangler tail mailflare-alias`를 실행한 뒤 이 페이지를 새로고침하세요. 코드는 60분 동안 유효합니다.",
-	"setup.codeFromSecret": "SETUP_CODE 시크릿 또는 이 Worker의 로그에 있는 코드를 입력하세요.",
+	"setup.codeFromLogs": "일회용 코드가 이 Worker의 로그에 기록되었습니다. Cloudflare 대시보드 → Workers & Pages → mailflare-alias → Observability → Logs를 열거나 `npx wrangler tail mailflare-alias`를 실행한 뒤, 아래의 “로그에 새 코드 기록”을 누르세요. 코드는 60분 동안 유효합니다.",
+	"setup.codeFromSecret": "SETUP_CODE 시크릿을 입력하세요.",
 	"setup.passkeyName": "패스키 이름",
 	"setup.defaultName": "내 패스키",
 	"setup.button": "패스키 등록",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "역방향 별칭 도메인을 자동으로 설정합니다. 서브어드레싱이 켜진 Email Routing, reply+…@ 주소를 이 Worker로 보내는 규칙 하나, 그리고 Email Sending입니다. 다시 실행해도 안전합니다.",
 	"cf.token": "Cloudflare API 토큰",
-	"cf.tokenHelp": "다음 권한으로 해당 영역(zone)의 토큰을 만드세요: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit.",
+	"cf.tokenHelp": "다음 권한으로 해당 영역(zone)의 토큰을 만드세요: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. 이 토큰은 이번 설정에만 사용되며 저장되지 않습니다. 보관하려면 CLOUDFLARE_API_TOKEN 시크릿을 설정하세요.",
 	"cf.workerName": "Worker 이름",
 	"cf.workerNameHelp": "이 Worker를 배포할 때 사용한 이름입니다.",
 	"cf.run": "자동으로 설정",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "문자, 숫자, 점, 하이픈, 밑줄, 플러스 기호만 사용할 수 있으며, 문자 또는 숫자로 시작하고 끝나야 합니다.",
 	"notice.newBadDomain": "별칭 도메인 중 하나를 선택하세요.",
 	"notice.newFailed": "별칭을 만들지 못했습니다. 다시 시도하세요.",
+	"setup.newCode": "로그에 새 코드 기록",
+	"notice.setupCodeIssued": "새 설정 코드가 로그에 기록되었습니다. 이전 코드는 더 이상 작동하지 않습니다.",
+	"link.used": "이 링크는 이미 사용되었습니다. 전달된 메시지의 각 링크는 한 번만 사용할 수 있습니다.",
+	"action.preserveMail": "{alias}에서 {target}으로 구독 취소 이메일을 보내 {sender}의 구독을 취소합니다. 실패하면 대신 발신자를 차단합니다.",
+	"banner.spoofSubject": "[확인되지 않은 발신자]",
+	"imp.destinations": "전달 주소 사용",
+	"imp.destinationsHelp": "끔: 가져온 별칭은 전달 주소가 이미 여기서 사용 중이 아니라면 기본 주소로 전달됩니다. 켬: 가져오기에서 새로 발견된 전달 주소도 사용합니다. 모든 전달 주소는 역별칭을 통해 메일을 보낼 수 있으므로, 본인의 주소인 경우에만 켜세요.",
+	"imp.newDestinations": "이번 가져오기로 추가된 전달 주소:",
 };
 
 export default dictionary;

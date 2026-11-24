@@ -17,9 +17,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "Добро пожаловать в mailflare-alias",
 	"setup.intro": "Зарегистрируйте ключ доступа, чтобы защитить эту панель. Затем вы введёте данные подключения к Mailflare.",
 	"setup.code": "Код настройки",
-	"setup.codeFromLogs":
-		"Одноразовый код записан в логи этого Worker. Откройте панель Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs или выполните `npx wrangler tail mailflare-alias` и перезагрузите эту страницу. Код действителен 60 минут.",
-	"setup.codeFromSecret": "Введите секрет SETUP_CODE или код из логов этого Worker.",
+	"setup.codeFromLogs": "Одноразовый код записан в логи этого Worker. Откройте панель Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs или выполните `npx wrangler tail mailflare-alias`, затем нажмите ниже «Записать новый код в логи». Код действителен 60 минут.",
+	"setup.codeFromSecret": "Введите секрет SETUP_CODE.",
 	"setup.passkeyName": "Название ключа доступа",
 	"setup.defaultName": "Мой ключ доступа",
 	"setup.button": "Зарегистрировать ключ доступа",
@@ -236,7 +235,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "Настраивает за вас домен обратных алиасов: Email Routing с subaddressing, одно правило, отправляющее адреса reply+…@ на этот Worker, и Email Sending. Повторный запуск безопасен.",
 	"cf.token": "Токен API Cloudflare",
-	"cf.tokenHelp": "Создайте токен для зоны со следующими разрешениями: Zone Read, Zone Settings Edit, Email Routing Rules Edit и Email Sending Edit.",
+	"cf.tokenHelp": "Создайте токен для зоны со следующими разрешениями: Zone Read, Zone Settings Edit, Email Routing Rules Edit и Email Sending Edit. Он используется только для этой настройки и не сохраняется; чтобы сохранить его, задайте секрет CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Имя Worker",
 	"cf.workerNameHelp": "Имя, под которым был развёрнут этот Worker.",
 	"cf.run": "Настроить автоматически",
@@ -352,6 +351,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "Используйте только буквы, цифры, точки, дефисы, подчёркивания и плюсы; начинаться и заканчиваться должны буквой или цифрой.",
 	"notice.newBadDomain": "Выберите один из своих доменов алиасов.",
 	"notice.newFailed": "Не удалось создать алиас. Попробуйте ещё раз.",
+	"setup.newCode": "Записать новый код в логи",
+	"notice.setupCodeIssued": "Новый код настройки записан в логи. Предыдущий код больше не действителен.",
+	"link.used": "Эта ссылка уже использована. Каждая ссылка в пересланном письме работает только один раз.",
+	"action.preserveMail": "Отпишитесь от {sender}, отправив письмо об отписке с {alias} на {target}. Если отправить не удастся, отправитель будет заблокирован.",
+	"banner.spoofSubject": "[Непроверенный отправитель]",
+	"imp.destinations": "Использовать их адреса пересылки",
+	"imp.destinationsHelp": "Выкл.: импортированные алиасы пересылаются на ваш адрес по умолчанию, если их адрес пересылки уже используется здесь. Вкл.: также используются новые адреса пересылки из импорта. Каждый адрес пересылки может отправлять почту через обратные алиасы, поэтому включайте это только для адресов, которые принадлежат вам.",
+	"imp.newDestinations": "Новые адреса пересылки, добавленные этим импортом:",
 };
 
 export default dictionary;

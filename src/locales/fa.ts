@@ -19,9 +19,8 @@ const dictionary: Dictionary = {
 	"setup.welcome": "به mailflare-alias خوش آمدید",
 	"setup.intro": "برای محافظت از این داشبورد یک پس‌کی ثبت کنید. سپس اطلاعات اتصال به Mailflare را وارد خواهید کرد.",
 	"setup.code": "کد راه‌اندازی",
-	"setup.codeFromLogs":
-		"یک کد یک‌بارمصرف در گزارش‌های این Worker نوشته شد. داشبورد Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs را باز کنید، یا `npx wrangler tail mailflare-alias` را اجرا کنید و این صفحه را دوباره بارگذاری کنید. این کد ۶۰ دقیقه اعتبار دارد.",
-	"setup.codeFromSecret": "مقدار SETUP_CODE را وارد کنید، یا کدی را که در گزارش‌های این Worker هست.",
+	"setup.codeFromLogs": "یک کد یک‌بارمصرف در گزارش‌های این Worker نوشته می‌شود. داشبورد Cloudflare → Workers & Pages → mailflare-alias → Observability → Logs را باز کنید، یا `npx wrangler tail mailflare-alias` را اجرا کنید، سپس پایین روی “نوشتن کد جدید در گزارش‌ها” بزنید. این کد ۶۰ دقیقه اعتبار دارد.",
+	"setup.codeFromSecret": "مقدار SETUP_CODE را وارد کنید.",
 	"setup.passkeyName": "نام پس‌کی",
 	"setup.defaultName": "پس‌کی من",
 	"setup.button": "ثبت پس‌کی",
@@ -251,7 +250,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare",
 	"cf.help": "دامنه نام مستعار معکوس را برایتان راه‌اندازی می‌کند: Email Routing با subaddressing، یک قانون که نشانی‌های reply+…@ را به این Worker می‌فرستد، و Email Sending. اجرای دوباره آن بی‌خطر است.",
 	"cf.token": "توکن API ‏Cloudflare",
-	"cf.tokenHelp": "برای این zone توکنی با این دسترسی‌ها بسازید: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit.",
+	"cf.tokenHelp": "برای این zone توکنی با این دسترسی‌ها بسازید: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. این توکن فقط برای این راه‌اندازی استفاده می‌شود و ذخیره نمی‌شود؛ برای نگه‌داشتن آن، سیکرت CLOUDFLARE_API_TOKEN را تنظیم کنید.",
 	"cf.workerName": "نام Worker",
 	"cf.workerNameHelp": "نامی که این Worker با آن مستقر شده است.",
 	"cf.run": "راه‌اندازی خودکار",
@@ -367,6 +366,14 @@ const dictionary: Dictionary = {
 	"notice.newBadPrefix": "فقط از حروف، ارقام، نقطه، خط تیره، زیرخط و علامت جمع استفاده کنید و نام باید با حرف یا رقم شروع و تمام شود.",
 	"notice.newBadDomain": "یکی از دامنه‌های نام مستعار خود را انتخاب کنید.",
 	"notice.newFailed": "نام مستعار ساخته نشد. دوباره امتحان کنید.",
+	"setup.newCode": "نوشتن کد جدید در گزارش‌ها",
+	"notice.setupCodeIssued": "کد راه‌اندازی جدیدی در گزارش‌ها نوشته شد. کد قبلی دیگر کار نمی‌کند.",
+	"link.used": "این پیوند قبلاً استفاده شده است. هر پیوند در پیام ارسال‌شده فقط یک بار کار می‌کند.",
+	"action.preserveMail": "برای لغو اشتراک از {sender}، یک ایمیل لغو اشتراک از {alias} به {target} بفرستید. اگر این کار شکست خورد، فرستنده به‌جای آن مسدود می‌شود.",
+	"banner.spoofSubject": "[فرستنده تأییدنشده]",
+	"imp.destinations": "از نشانی‌های ارسال آن‌ها استفاده شود",
+	"imp.destinationsHelp": "خاموش: نام‌های مستعار واردشده به نشانی پیش‌فرض شما فرستاده می‌شوند، مگر اینکه نشانی ارسالشان از قبل اینجا استفاده شود. روشن: نشانی‌های ارسال جدید این واردسازی هم استفاده می‌شوند. هر نشانی ارسال می‌تواند از طریق نام‌های مستعار معکوس ایمیل بفرستد، پس این گزینه را فقط برای نشانی‌های خودتان روشن کنید.",
+	"imp.newDestinations": "نشانی‌های ارسال جدیدی که این واردسازی اضافه کرد:",
 };
 
 export default dictionary;

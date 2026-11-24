@@ -133,6 +133,11 @@ export function negotiateLocale(acceptLanguage: string | null | undefined): Loca
 
 export type Translate = ((key: MessageKey, params?: Record<string, string | number>) => string) & { locale: Locale };
 
+/** True for a notice message key; notices travel in URLs as keys, never as text. */
+export function isNoticeKey(value: unknown): value is MessageKey {
+	return typeof value === "string" && value.startsWith("notice.") && Object.hasOwn(en, value);
+}
+
 export function translator(locale: Locale): Translate {
 	const dictionary: Dictionary = LOCALES[locale];
 	const t = ((key: MessageKey, params?: Record<string, string | number>) => {
