@@ -21,6 +21,7 @@ import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
 import { domainOf, extractEmail, normalizeEmail, reverseAddress } from "./format";
 import { handleInbound, type InboundEvent } from "./forward";
+import { defaultImportDomains, fetchAddy, fetchSimpleLogin, ImportError, importAliases, parseAliasCsv, type ImportedAlias } from "./importer";
 import { isLocale, LANG_COOKIE, negotiateLocale, translator, type MessageKey } from "./i18n";
 import {
 	authenticationOptions,
@@ -42,6 +43,7 @@ import {
 	connectionPage,
 	dashboardPage,
 	FAVICON_SVG,
+	importPage,
 	loginPage,
 	messagePage,
 	passkeysPage,
@@ -252,7 +254,7 @@ app.post("/logout", (c) => {
 });
 
 // Everything below is the dashboard and needs a signed-in passkey session.
-for (const path of ["/", "/settings", "/connection", "/blocklist", "/blocklist/*", "/passkeys", "/passkeys/*", "/api-keys", "/api-keys/*", "/aliases/*"]) {
+for (const path of ["/", "/settings", "/connection", "/blocklist", "/blocklist/*", "/passkeys", "/passkeys/*", "/api-keys", "/api-keys/*", "/import", "/import/*", "/aliases/*"]) {
 	app.use(path, requireAdmin);
 }
 
@@ -425,6 +427,67 @@ app.post("/blocklist", async (c) => {
 app.post("/blocklist/:id/delete", async (c) => {
 	await c.env.DB.prepare("DELETE FROM blocklist WHERE id = ?").bind(c.req.param("id")).run();
 	return redirectWithNotice(c, "/blocklist", "notice.unblocked");
+});
+
+// ---------- import from SimpleLogin / addy.io ----------
+
+const IMPORT_SOURCES = {
+	simplelogin: { label: "SimpleLogin", server: "https://app.simplelogin.io", fetch: fetchSimpleLogin },
+	addy: { label: "addy.io", server: "https://app.addy.io", fetch: fetchAddy },
+	csv: { label: "CSV", server: "", fetch: null },
+} as const;
+
+app.get("/import", async (c) => {
+	const settings = await loadSettings(c.env.DB);
+	return c.html(importPage(c.get("t"), { domains: await defaultImportDomains(c.env.DB, settings) }));
+});
+
+app.post("/import/:source", async (c) => {
+	const t = c.get("t");
+	const sourceName = c.req.param("source");
+	if (!Object.hasOwn(IMPORT_SOURCES, sourceName)) return c.notFound();
+	const source = IMPORT_SOURCES[sourceName as keyof typeof IMPORT_SOURCES];
+	const settings = await loadSettings(c.env.DB);
+	const form = await c.req.parseBody();
+	const domains = (typeof form.domains === "string" ? form.domains : "")
+		.split(/[\s,]+/)
+		.map((domain) => domain.trim().toLowerCase())
+		.filter((domain) => DOMAIN_PATTERN.test(domain));
+	const render = async (extra: { error?: string; result?: Awaited<ReturnType<typeof importAliases>> }) =>
+		c.html(
+			importPage(t, { domains: domains.length ? domains : await defaultImportDomains(c.env.DB, settings), source: source.label, ...extra }),
+			extra.error ? 400 : 200,
+		);
+	if (!domains.length) return render({ error: t("imp.err.noDomains") });
+
+	let server = "";
+	let aliases: ImportedAlias[];
+	try {
+		if (source.fetch) {
+			const apiKey = typeof form.apiKey === "string" ? form.apiKey.trim() : "";
+			if (!apiKey) return render({ error: t("imp.err.auth") });
+			const url = new URL(typeof form.server === "string" && form.server.trim() ? form.server.trim() : source.server);
+			if (url.protocol !== "https:") return render({ error: t("imp.err.badServer") });
+			server = url.origin;
+			aliases = await source.fetch(server, apiKey);
+		} else {
+			const file = form.file;
+			if (!(file instanceof File) || file.size === 0) return render({ error: t("imp.err.empty") });
+			if (file.size > 5_000_000) return render({ error: t("imp.err.format") });
+			aliases = parseAliasCsv(await file.text());
+		}
+	} catch (error) {
+		if (error instanceof TypeError) return render({ error: t("imp.err.badServer") });
+		if (!(error instanceof ImportError)) throw error;
+		const message =
+			error.reason === "fetch"
+				? t("imp.err.fetch", { server, detail: error.message })
+				: t(error.reason === "auth" ? "imp.err.auth" : error.reason === "empty" ? "imp.err.empty" : "imp.err.format");
+		return render({ error: message });
+	}
+	const result = await importAliases(c.env.DB, settings, c.get("config").reverseDomain, aliases, domains);
+	console.log(JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length }));
+	return render({ result });
 });
 
 async function renderApiKeys(c: C, extra: { newKey?: string; notice?: string } = {}) {

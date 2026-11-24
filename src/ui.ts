@@ -6,6 +6,7 @@ import { reverseAddress, SENDER_FORMATS } from "./format";
 import { LOCALE_LIST, LOCALES, textDirection, type MessageKey, type Translate } from "./i18n";
 import type { ApiKeyRow } from "./apikeys";
 import type { SetupStep } from "./cloudflare";
+import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
 import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
 
@@ -86,6 +87,8 @@ form.inline { display:inline; margin:0; }
 .pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--muted); }
 .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
 .notice { padding:12px 18px; border-radius:16px; margin:0; background:var(--nav-active); color:var(--nav-active-text); }
+.notice.bad { background:#fce8e6; color:#b3261e; }
+@media (prefers-color-scheme: dark) { .notice.bad { background:#601410; color:#f2b8b5; } }
 .error { color:var(--danger); margin:10px 0 0; }
 ol.steps { padding-inline-start:20px; margin:8px 0 0; } ol.steps li { margin:6px 0; }
 ul.results { list-style:none; padding:0; margin:12px 0; display:grid; gap:8px; } ul.results .muted { word-break:break-word; }
@@ -139,6 +142,7 @@ const ICONS = {
 	connection: `<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>`,
 	passkeys: `<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>`,
 	apiKeys: `<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>`,
+	import: `<path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/>`,
 	signOut: `<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>`,
 	globe: `<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/>`,
 } as const;
@@ -186,7 +190,7 @@ ${options.nav
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="mailflare-alias">
-${link("/", "nav.aliases", "aliases")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
+${link("/", "nav.aliases", "aliases")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
 ${languageMenu(t, options.path)}
 <p class="powered">mailflare-alias · <a href="https://github.com/TWME-TW/mailflare-alias">GitHub</a></p>
 </nav>
@@ -613,5 +617,66 @@ ${keys.map(
 </section>
 </main>`,
 		{ t, nav: true, current: "/api-keys", path: "/api-keys" },
+	);
+}
+
+export function importPage(
+	t: Translate,
+	input: { domains: string[]; result?: ImportResult; error?: string; source?: string },
+): Html {
+	const { domains, result, error, source } = input;
+	const keyField = (id: string, help: MessageKey) => html`<label for="${id}-key">${t("imp.apiKey")}</label>
+<input id="${id}-key" name="apiKey" type="password" autocomplete="off" spellcheck="false" required />
+<p class="help">${t(help)}</p>`;
+	const serverField = (id: string, value: string) => html`<details><summary>${t("imp.server")}</summary>
+<input name="server" type="url" value="${value}" aria-label="${t("imp.server")}" />
+<p class="help">${t("imp.serverHelp")}</p></details>`;
+	const domainsField = html`<input type="hidden" name="domains" value="${domains.join(" ")}" data-domains />`;
+	return page(
+		t("imp.title"),
+		html`<main>
+${error ? html`<p class="notice bad" role="alert">${error}</p>` : ""}
+${result
+	? html`<section><h2>${t("imp.resultTitle", { source: source ?? "" })}</h2>
+<p class="notice" role="status">${t("imp.done", { found: String(result.found), created: String(result.created), updated: String(result.updated) })}</p>
+${result.skippedDomains.length
+	? html`<p>${t("imp.skipped")}</p><ul class="results">${result.skippedDomains.map(
+			(item) => html`<li><code>${item.domain}</code> <span class="muted">${t("imp.count", { count: String(item.count) })}</span></li>`,
+		)}</ul><p class="help">${t("imp.skippedHelp")}</p>`
+	: ""}
+<p><a href="/">${t("imp.viewAliases")} →</a></p></section>`
+	: ""}
+<section>
+<h2>${t("imp.title")}</h2>
+<p class="help">${t("imp.help")}</p>
+<label for="imp-domains">${t("imp.domains")}</label>
+<textarea id="imp-domains" rows="3" spellcheck="false" data-domains-source>${domains.join("\n")}</textarea>
+<p class="help">${t("imp.domainsHelp")}</p>
+</section>
+<section>
+<h2>${t("imp.fromSimplelogin")}</h2>
+<form method="post" action="/import/simplelogin" data-import>
+${keyField("sl", "imp.slKeyHelp")}${serverField("sl", "https://app.simplelogin.io")}${domainsField}
+<p><button class="primary">${t("imp.button")}</button></p>
+</form>
+</section>
+<section>
+<h2>${t("imp.fromAddy")}</h2>
+<form method="post" action="/import/addy" data-import>
+${keyField("addy", "imp.addyKeyHelp")}${serverField("addy", "https://app.addy.io")}${domainsField}
+<p><button class="primary">${t("imp.button")}</button></p>
+</form>
+</section>
+<section>
+<h2>${t("imp.fromCsv")}</h2>
+<form method="post" action="/import/csv" enctype="multipart/form-data" data-import>
+<label for="imp-file">${t("imp.file")}</label>
+<input id="imp-file" name="file" type="file" accept=".csv,text/csv" required />
+<p class="help">${t("imp.csvHelp")}</p>${domainsField}
+<p><button class="primary">${t("imp.button")}</button></p>
+</form>
+</section>
+</main>`,
+		{ t, nav: true, current: "/import", path: "/import" },
 	);
 }

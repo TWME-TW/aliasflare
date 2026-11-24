@@ -36,6 +36,7 @@ Mailflare keeps your mail. mailflare-alias forwards a copy to the inbox you alre
 
 **Apps and browser extensions**
 - **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. From there you can list, search, create, pin, enable, disable and delete aliases, change their notes and destinations, and manage reverse aliases (SimpleLogin contacts).
+- **Import from SimpleLogin or addy.io**, with their API key or alias export (CSV). Notes, display names, on/off state, pins and forwarding addresses come along. Only aliases on domains you choose are imported, and importing again is safe.
 - **New aliases from the apps** go on your *alias domains*. Formats are words (`maple.otter42`), random characters or a UUID, or a custom prefix.
 
 **Dashboard**
@@ -156,6 +157,12 @@ The page shows what each step did. Running it again is safe.
 
 Keys can manage aliases but cannot change settings. Only a hash of each key is stored.
 
+### 6. Optional: import from SimpleLogin or addy.io
+
+On **Import**, list the domains to bring over, then either paste a SimpleLogin or addy.io API key or upload their alias export (CSV). The key is used once and not saved.
+
+Only aliases on your own domains are worth importing. Aliases on SimpleLogin's or addy.io's domains keep receiving mail there, so leave those domains out. Before mail to an imported alias can arrive, move its domain's MX to Cloudflare, add the domain to Mailflare and give it a catch-all.
+
 ### Environment overrides
 
 Every connection setting can also come from a variable or secret, which then wins over the dashboard:
@@ -179,7 +186,8 @@ Every connection setting can also come from a variable or secret, which then win
 ## Limitations
 
 - Replies go through Mailflare's send API, which accepts up to 10 attachments, and inline images arrive as attachments. A reply with more attachments bounces back to you with an explanation.
-- An alias appears after it first receives mail, unless an app creates it first.
+- An alias appears after it first receives mail, unless an app creates it or it is imported.
+- Import does not bring over contacts or reverse aliases, PGP keys, or more than the first forwarding address of an alias.
 - Through the apps, PGP, labels, usernames, custom domains and account settings are not available. Deleting an alias stops forwarding; Mailflare still receives its mail.
 - Forwarded copies need Cloudflare Email Sending. Resend and SES are not supported yet.
 

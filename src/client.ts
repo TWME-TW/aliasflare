@@ -112,6 +112,17 @@ export const APP_SCRIPT = `(() => {
     select.addEventListener("change", () => select.form && select.form.requestSubmit());
   }
 
+  // Import forms carry the domains chosen in the shared box above them.
+  const domainSource = document.querySelector("[data-domains-source]");
+  for (const form of document.querySelectorAll("form[data-import]")) {
+    form.addEventListener("submit", () => {
+      const hidden = form.querySelector("[data-domains]");
+      if (hidden && domainSource) hidden.value = domainSource.value;
+      const button = form.querySelector("button");
+      if (button) button.disabled = true;
+    });
+  }
+
   // Settings save as soon as something changes; a short message confirms it.
   const toast = document.querySelector("[data-toast]");
   let toastTimer = 0;
