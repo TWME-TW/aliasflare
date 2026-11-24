@@ -9,7 +9,7 @@ import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
-import { CUSTOM_SUFFIXES, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
+import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -544,12 +544,6 @@ ${checkbox("addyApi", settings.addyApi, t("set.addyApi"), t("set.addyApiHelp", {
 <select id="randomAliasFormat" name="randomAliasFormat">
 ${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings.randomAliasFormat === format ? "selected" : ""}>${t(`set.format.${format}`)}</option>`)}
 </select>
-
-<label for="customSuffix">${t("set.customSuffix")}</label>
-<select id="customSuffix" name="customSuffix">
-${CUSTOM_SUFFIXES.map((suffix) => html`<option value="${suffix}" ${settings.customSuffix === suffix ? "selected" : ""}>${t(`set.suffix.${suffix}`)}</option>`)}
-</select>
-<p class="help">${t("set.customSuffixHelp")}</p>
 
 ${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.appSettingsHelp"))}
 

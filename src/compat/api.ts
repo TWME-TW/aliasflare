@@ -27,7 +27,6 @@ import {
 	latestContact,
 	listAliasViews,
 	listDestinations,
-	randomSuffix,
 	resolveDestination,
 	restoreAlias,
 	totals,
@@ -205,14 +204,14 @@ async function suffixes(c: C) {
 	const secret = c.get("config").signingSecret;
 	const out = [];
 	for (const domain of c.get("settings").aliasDomains) {
-		for (const suffix of [`${randomSuffix(c.get("settings").customSuffix)}@${domain}`, `@${domain}`]) {
-			out.push({
-				suffix,
-				signed_suffix: await signToken(secret, "sl-suffix", btoa(suffix).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_"), 6 * 3600),
-				is_custom: true,
-				is_premium: false,
-			});
-		}
+		// Only the plain domain: no random tail, so each alias domain is listed once.
+		const suffix = `@${domain}`;
+		out.push({
+			suffix,
+			signed_suffix: await signToken(secret, "sl-suffix", btoa(suffix).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_"), 6 * 3600),
+			is_custom: true,
+			is_premium: false,
+		});
 	}
 	return out;
 }
@@ -402,7 +401,8 @@ function slSetting(settings: Settings) {
 		notification: false,
 		random_alias_default_domain: settings.aliasDomains[0] ?? "",
 		sender_format: settings.senderFormat,
-		random_alias_suffix: settings.customSuffix,
+		// Custom aliases take no random suffix here; apps still expect the field.
+		random_alias_suffix: "word",
 	};
 }
 api.get("/setting", (c) => c.json(slSetting(c.get("settings"))));
@@ -419,8 +419,8 @@ api.patch("/setting", async (c) => {
 		else throw new ClientError(400, "Invalid alias_generator");
 	}
 	if (body.random_alias_suffix !== undefined) {
+		// Accepted for apps that send it, but there is no suffix to change.
 		if (body.random_alias_suffix !== "word" && body.random_alias_suffix !== "random_string") throw new ClientError(400, "Invalid random_alias_suffix");
-		update.customSuffix = body.random_alias_suffix;
 	}
 	if (body.random_alias_default_domain !== undefined) {
 		const domain = typeof body.random_alias_default_domain === "string" ? body.random_alias_default_domain.trim().toLowerCase() : "";

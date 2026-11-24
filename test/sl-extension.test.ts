@@ -37,6 +37,9 @@ describe("SimpleLogin browser extension", () => {
 		expect(typeof data.prefix_suggestion).toBe("string");
 		expect(data.suffixes.length).toBeGreaterThan(0);
 		expect(data.suffixes[0]).toHaveLength(2);
+		// One plain "@domain" per alias domain, no random tails.
+		expect(data.suffixes.every(([suffix]) => /^@[a-z0-9.-]+$/.test(suffix))).toBe(true);
+		expect(new Set(data.suffixes.map(([suffix]) => suffix)).size).toBe(data.suffixes.length);
 
 		const mailboxes = await call("GET", "/api/mailboxes");
 		expect(mailboxes.status).toBe(200);

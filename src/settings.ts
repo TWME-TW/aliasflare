@@ -13,9 +13,6 @@ export function isRandomAliasFormat(value: unknown): value is RandomAliasFormat 
 	return RANDOM_ALIAS_FORMATS.includes(value as RandomAliasFormat);
 }
 
-/** The word or random characters between a custom alias prefix and its domain (SimpleLogin's suffix). */
-export type CustomSuffix = "word" | "random_string";
-export const CUSTOM_SUFFIXES: CustomSuffix[] = ["word", "random_string"];
 
 const DOMAIN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
@@ -37,9 +34,8 @@ export type Settings = {
 	/** Domains new aliases can be created on. Mailflare must accept mail for any address there (a catch-all). */
 	aliasDomains: string[];
 	randomAliasFormat: RandomAliasFormat;
-	customSuffix: CustomSuffix;
 	/**
-	 * Let apps change the settings their own settings screens show: alias format, suffix, default
+	 * Let apps change the settings their own settings screens show: alias format, default
 	 * domain, sender format, default mailbox and the blocklist. Connection, API and keys stay here.
 	 */
 	appSettings: boolean;
@@ -59,7 +55,6 @@ export const DEFAULT_SETTINGS: Settings = {
 	addyApi: false,
 	aliasDomains: [],
 	randomAliasFormat: "random_words",
-	customSuffix: "word",
 	appSettings: true,
 };
 
@@ -90,7 +85,6 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 			? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, 20)
 			: [],
 		randomAliasFormat: isRandomAliasFormat(raw.randomAliasFormat) ? raw.randomAliasFormat : DEFAULT_SETTINGS.randomAliasFormat,
-		customSuffix: CUSTOM_SUFFIXES.includes(raw.customSuffix as CustomSuffix) ? (raw.customSuffix as CustomSuffix) : DEFAULT_SETTINGS.customSuffix,
 		appSettings: typeof raw.appSettings === "boolean" ? raw.appSettings : DEFAULT_SETTINGS.appSettings,
 	};
 }

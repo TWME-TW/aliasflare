@@ -476,7 +476,6 @@ app.post("/settings", async (c) => {
 		addyApi: form.addyApi === "1",
 		aliasDomains,
 		randomAliasFormat: form.randomAliasFormat,
-		customSuffix: form.customSuffix,
 		appSettings: form.appSettings === "1",
 		senderFormat: form.senderFormat,
 		reverseAliasReplacement: form.reverseAliasReplacement === "1",
