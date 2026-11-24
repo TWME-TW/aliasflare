@@ -369,7 +369,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} 'ਤੇ ਰਿਵਰਸ ਉਪਨਾਮ",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "ਜ਼ੋਨ (Zone)",
-	"cf.tokenScope": "ਇਹ ਸਾਰੀਆਂ ਜ਼ੋਨ ਇਜਾਜ਼ਤਾਂ (Zone) ਹਨ, ਅਕਾਊਂਟ ਇਜਾਜ਼ਤਾਂ (Account) ਨਹੀਂ: ਟੋਕਨ ਫਾਰਮ ਵਿੱਚ ਪਹਿਲੇ ਮੀਨੂ ਤੋਂ Zone ਚੁਣੋ, ਫਿਰ ਇਜਾਜ਼ਤ, ਫਿਰ ਪਹੁੰਚ ਪੱਧਰ। Zone Resources ਹੇਠ Include → Specific zone ਚੁਣੋ ਅਤੇ ਹਰੇਕ alias ਡੋਮੇਨ ਦਾ ਜ਼ੋਨ ਜੋੜੋ, ਤਾਂ ਜੋ ਟੋਕਨ ਹੋਰ ਕੁਝ ਨਾ ਬਦਲ ਸਕੇ।",
+	"cf.tokenScope": "ਟੋਕਨ ਫਾਰਮ ਦੇ ਪਹਿਲੇ ਮੀਨੂ ਵਿੱਚ, ਹਰ ਇਜਾਜ਼ਤ ਦੇ ਸਾਹਮਣੇ ਦਿਖਾਇਆ ਗਿਆ ਸਕੋਪ ਚੁਣੋ। ਜ਼ੋਨ ਇਜਾਜ਼ਤਾਂ ਲਈ Zone Resources ਹੇਠ Include → Specific zone ਚੁਣੋ ਅਤੇ ਹਰ alias ਡੋਮੇਨ ਦਾ ਜ਼ੋਨ ਜੋੜੋ, ਤਾਂ ਜੋ ਟੋਕਨ ਕੋਈ ਹੋਰ ਡੋਮੇਨ ਨਾ ਬਦਲ ਸਕੇ। Email Sending ਅਕਾਊਂਟ ਇਜਾਜ਼ਤ ਹੈ: Account Resources ਹੇਠ ਆਪਣਾ ਅਕਾਊਂਟ ਸ਼ਾਮਲ ਕਰੋ।",
+	"cf.scopeAccount": "ਅਕਾਊਂਟ (Account)",
 };
 
 export default dictionary;

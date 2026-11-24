@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "alias inversos en {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zona (Zone)",
-	"cf.tokenScope": "Todos estos son permisos de zona (Zone), no de cuenta (Account): en el formulario del token, elige Zone en el primer menú, luego el permiso y después el nivel de acceso. En Zone Resources, elige Include → Specific zone y añade la zona de cada dominio alias, de modo que el token no pueda cambiar nada más.",
+	"cf.tokenScope": "En el primer menú del formulario del token, elige el ámbito que aparece delante de cada permiso. Para los permisos de zona, en Zone Resources elige Include → Specific zone y añade la zona de cada dominio alias, para que el token no pueda cambiar ningún otro dominio. Email Sending es un permiso de cuenta: en Account Resources, incluye tu cuenta.",
+	"cf.scopeAccount": "Cuenta (Account)",
 };
 
 export default dictionary;

@@ -354,7 +354,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} 上的反向别名",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "区域（Zone）",
-	"cf.tokenScope": "这些都是区域权限（Zone），而非账户权限（Account）：在令牌表单中，先在第一个菜单选择 Zone，再选择权限，然后选择访问级别。在 Zone Resources 下，选择 Include → Specific zone，并添加每个别名域名所在的区域，使该令牌无法更改其他内容。",
+	"cf.tokenScope": "在令牌表单的第一个菜单中，选择每项权限前面显示的范围。区域权限请在 Zone Resources 下选择 Include → Specific zone，并添加每个别名域名所在的区域，使该令牌无法更改其他域名。Email Sending 是账户权限：请在 Account Resources 下包含你的账户。",
+	"cf.scopeAccount": "账户（Account）",
 };
 
 export default dictionary;

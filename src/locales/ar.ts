@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "الأسماء المستعارة العكسية على {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "منطقة (Zone)",
-	"cf.tokenScope": "كل هذه أذونات للمنطقة (Zone) وليست أذونات حساب (Account): في نموذج الرمز، اختر Zone من القائمة الأولى، ثم الإذن، ثم مستوى الوصول. ضمن Zone Resources، اختر Include → Specific zone وأضف منطقة كل نطاق بديل، حتى لا يتمكن الرمز من تغيير أي شيء آخر.",
+	"cf.tokenScope": "في القائمة الأولى من نموذج الرمز، اختر النطاق الظاهر أمام كل إذن. لأذونات المنطقة، ضمن Zone Resources اختر Include → Specific zone وأضف منطقة كل نطاق بديل، حتى لا يتمكن الرمز من تغيير أي نطاق آخر. Email Sending إذن على مستوى الحساب: ضمن Account Resources، أدرج حسابك.",
+	"cf.scopeAccount": "حساب (Account)",
 };
 
 export default dictionary;

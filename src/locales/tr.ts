@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} üzerindeki ters takma adlar",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "bölge (Zone)",
-	"cf.tokenScope": "Bunların tümü bölge izinleri (Zone), hesap izinleri (Account) değildir: token formunda ilk menüden Zone seçin, ardından izni, sonra erişim düzeyini seçin. Zone Resources altında Include → Specific zone seçeneğini belirleyin ve her takma ad alan adının bölgesini ekleyin; böylece token başka hiçbir şeyi değiştiremez.",
+	"cf.tokenScope": "Token formunun ilk menüsünde, her iznin önünde gösterilen kapsamı seçin. Bölge izinleri için Zone Resources altında Include → Specific zone seçeneğini belirleyin ve her takma ad alan adının bölgesini ekleyin; böylece token başka hiçbir alan adını değiştiremez. Email Sending bir hesap iznidir: Account Resources altında hesabınızı ekleyin.",
+	"cf.scopeAccount": "hesap (Account)",
 };
 
 export default dictionary;

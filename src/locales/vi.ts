@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "bí danh ngược trên {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "vùng (Zone)",
-	"cf.tokenScope": "Tất cả đều là quyền vùng (Zone), không phải quyền tài khoản (Account): trong biểu mẫu token, chọn Zone ở menu đầu tiên, rồi chọn quyền, sau đó chọn mức truy cập. Trong Zone Resources, chọn Include → Specific zone và thêm vùng của từng miền bí danh, để token không thể thay đổi gì khác.",
+	"cf.tokenScope": "Trong menu đầu tiên của biểu mẫu token, chọn phạm vi được hiển thị trước mỗi quyền. Với quyền vùng, trong Zone Resources, chọn Include → Specific zone và thêm vùng của từng miền bí danh, để token không thể thay đổi miền khác. Email Sending là quyền tài khoản: trong Account Resources, hãy bao gồm tài khoản của bạn.",
+	"cf.scopeAccount": "tài khoản (Account)",
 };
 
 export default dictionary;

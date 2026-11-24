@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "lakabu za kinyume kwenye {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "Zote hizi ni ruhusa za zone (Zone), si ruhusa za account (Account): kwenye fomu ya token, chagua Zone kwenye menyu ya kwanza, kisha ruhusa, kisha kiwango cha ufikiaji. Chini ya Zone Resources, chagua Include → Specific zone na uongeze zone ya kila domain ya alias, ili token isiweze kubadilisha kitu kingine.",
+	"cf.tokenScope": "Kwenye menyu ya kwanza ya fomu ya token, chagua scope inayoonyeshwa mbele ya kila ruhusa. Kwa ruhusa za zone, chini ya Zone Resources chagua Include → Specific zone na uongeze zone ya kila domain ya alias, ili token isiweze kubadilisha domain nyingine. Email Sending ni ruhusa ya account: chini ya Account Resources, jumuisha account yako.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

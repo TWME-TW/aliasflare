@@ -369,7 +369,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse}-ലെ റിവേഴ്സ് അപരനാമങ്ങൾ",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "ഇവയെല്ലാം zone അനുമതികൾ (Zone) ആണ്, account അനുമതികൾ (Account) അല്ല: ടോക്കൺ ഫോമിൽ ആദ്യ മെനുവിൽ Zone തിരഞ്ഞെടുക്കുക, പിന്നെ അനുമതി, പിന്നെ ആക്സസ് നില. Zone Resources-ന് കീഴിൽ Include → Specific zone തിരഞ്ഞെടുത്ത് ഓരോ alias ഡൊമെയ്‌നിന്റെയും zone ചേർക്കുക, അങ്ങനെ ടോക്കണിന് മറ്റൊന്നും മാറ്റാനാകില്ല.",
+	"cf.tokenScope": "ടോക്കൺ ഫോമിലെ ആദ്യ മെനുവിൽ, ഓരോ അനുമതിക്ക് മുന്നിലും കാണിക്കുന്ന scope തിരഞ്ഞെടുക്കുക. zone അനുമതികൾക്കായി Zone Resources-ന് കീഴിൽ Include → Specific zone തിരഞ്ഞെടുത്ത് ഓരോ alias ഡൊമെയ്‌നിന്റെയും zone ചേർക്കുക, അങ്ങനെ ടോക്കണിന് മറ്റൊരു ഡൊമെയ്‌നും മാറ്റാനാകില്ല. Email Sending ഒരു account അനുമതിയാണ്: Account Resources-ന് കീഴിൽ നിങ്ങളുടെ account ഉൾപ്പെടുത്തുക.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

@@ -90,9 +90,9 @@ npx wrangler deploy
 - Zone → Zone Settings → Edit
 - Zone → DNS → Edit
 - Zone → Email Routing Rules → Edit
-- Zone → Email Sending → Edit
+- **Account** → Email Sending → Edit
 
-All of them are **zone** permissions (pick *Zone* in the first menu), not account permissions. Under *Zone Resources*, choose *Include → Specific zone* and add each alias domain's zone, so the token can change nothing else.
+The first four are **zone** permissions: under *Zone Resources*, choose *Include → Specific zone* and add each alias domain's zone, so the token can change no other domain. Email Sending is an **account** permission: under *Account Resources*, include your account.
 
 For each domain this enables Email Routing and points the catch-all at the Worker, enables Email Routing on `r.<domain>` with subaddressing and a rule for `reply@r.<domain>`, and onboards both for Email Sending. A catch-all that already sends mail somewhere else is left unchanged. Running it again is safe. The token is used once and not stored.
 

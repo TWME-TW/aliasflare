@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "laƙabin juyawa a kan {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "Duk waɗannan izinin zone ne (Zone), ba izinin account ba (Account): a cikin fom ɗin token, zaɓi Zone a menu na farko, sannan izini, sannan matakin shiga. A ƙarƙashin Zone Resources, zaɓi Include → Specific zone kuma ƙara zone na kowane alias domain, don token ɗin ya kasa canja wani abu.",
+	"cf.tokenScope": "A menu na farko na fom ɗin token, zaɓi scope da ake nunawa a gaban kowane izini. Don izinin zone, a ƙarƙashin Zone Resources zaɓi Include → Specific zone kuma ƙara zone na kowane alias domain, don token ɗin ya kasa canja wani domain. Email Sending izinin account ne: a ƙarƙashin Account Resources, haɗa account ɗinka.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

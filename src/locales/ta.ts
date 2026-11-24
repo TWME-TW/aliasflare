@@ -369,7 +369,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse}-இல் தலைகீழ் மாற்றுப்பெயர்கள்",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "இவை அனைத்தும் zone அனுமதிகள் (Zone), account அனுமதிகள் (Account) அல்ல: டோக்கன் படிவத்தில் முதல் மெனுவில் Zone ஐத் தேர்ந்தெடுக்கவும், பின்னர் அனுமதி, பின்னர் அணுகல் நிலை. Zone Resources இன் கீழ் Include → Specific zone ஐத் தேர்ந்தெடுத்து, ஒவ்வொரு alias டொமைனின் zone ஐயும் சேர்க்கவும், இதனால் டோக்கன் வேறு எதையும் மாற்ற முடியாது.",
+	"cf.tokenScope": "டோக்கன் படிவத்தின் முதல் மெனுவில், ஒவ்வொரு அனுமதிக்கும் முன் காட்டப்படும் scope ஐத் தேர்ந்தெடுக்கவும். zone அனுமதிகளுக்கு Zone Resources இன் கீழ் Include → Specific zone ஐத் தேர்ந்தெடுத்து, ஒவ்வொரு alias டொமைனின் zone ஐயும் சேர்க்கவும், இதனால் டோக்கன் வேறு எந்த டொமைனையும் மாற்ற முடியாது. Email Sending என்பது account அனுமதி: Account Resources இன் கீழ் உங்கள் account ஐச் சேர்க்கவும்.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

@@ -354,7 +354,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "反向別名位於 {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "區域（Zone）",
-	"cf.tokenScope": "這些都是區域（Zone）權限，不是帳號（Account）權限：在 token 表單的第一個選單選 Zone，再選權限名稱和存取等級。在 Zone Resources 選 Include → Specific zone，逐一加入每個別名網域的區域，讓這個 token 不能更動其他東西。",
+	"cf.tokenScope": "在 token 表單的第一個選單，選擇每個權限前面標示的範圍。區域權限請在 Zone Resources 選 Include → Specific zone，逐一加入每個別名網域的區域，讓 token 不能更動其他網域。Email Sending 是帳號權限：請在 Account Resources 加入你的帳號。",
+	"cf.scopeAccount": "帳號（Account）",
 };
 
 export default dictionary;

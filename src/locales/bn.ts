@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse}-এ রিভার্স অ্যালিয়াস",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "জোন (Zone)",
-	"cf.tokenScope": "এগুলো সবই জোন অনুমতি (Zone), অ্যাকাউন্ট অনুমতি (Account) নয়: টোকেন ফর্মে প্রথম মেনুতে Zone বেছে নিন, তারপর অনুমতি, তারপর অ্যাক্সেস স্তর। Zone Resources-এর অধীনে Include → Specific zone বেছে নিন এবং প্রতিটি alias ডোমেনের জোন যোগ করুন, যাতে টোকেন অন্য কিছু পরিবর্তন করতে না পারে।",
+	"cf.tokenScope": "টোকেন ফর্মের প্রথম মেনুতে প্রতিটি অনুমতির সামনে দেখানো স্কোপ বেছে নিন। জোন অনুমতির জন্য Zone Resources-এর অধীনে Include → Specific zone বেছে নিন এবং প্রতিটি alias ডোমেইনের জোন যোগ করুন, যাতে টোকেন অন্য কোনো ডোমেইন পরিবর্তন করতে না পারে। Email Sending একটি অ্যাকাউন্ট অনুমতি: Account Resources-এর অধীনে আপনার অ্যাকাউন্ট যোগ করুন।",
+	"cf.scopeAccount": "অ্যাকাউন্ট (Account)",
 };
 
 export default dictionary;

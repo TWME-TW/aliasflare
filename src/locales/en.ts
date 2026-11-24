@@ -377,7 +377,8 @@ export const en = {
 	"cf.reverseIs": "reverse aliases on {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "All of these are zone permissions, not account permissions: in the token form, pick Zone in the first menu, then the permission, then the access level. Under Zone Resources, choose Include → Specific zone and add the zone of each alias domain, so the token can change nothing else.",
+	"cf.tokenScope": "Pick the scope shown in front of each permission in the first menu of the token form. For the zone permissions, under Zone Resources choose Include → Specific zone and add the zone of each alias domain, so the token can change no other domain. Email Sending is an account permission: under Account Resources, include your account.",
+	"cf.scopeAccount": "Account",
 };
 
 export type MessageKey = keyof typeof en;

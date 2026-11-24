@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} پر ریورس عرف",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "یہ تمام zone اجازتیں (Zone) ہیں، account اجازتیں (Account) نہیں: ٹوکن فارم میں پہلے مینو سے Zone منتخب کریں، پھر اجازت، پھر رسائی کی سطح۔ Zone Resources کے تحت Include → Specific zone منتخب کریں اور ہر alias ڈومین کا zone شامل کریں، تاکہ ٹوکن کچھ اور تبدیل نہ کر سکے۔",
+	"cf.tokenScope": "ٹوکن فارم کے پہلے مینو میں، ہر اجازت کے سامنے دکھایا گیا scope منتخب کریں۔ zone اجازتوں کے لیے Zone Resources کے تحت Include → Specific zone منتخب کریں اور ہر alias ڈومین کا zone شامل کریں، تاکہ ٹوکن کوئی اور ڈومین تبدیل نہ کر سکے۔ Email Sending ایک account اجازت ہے: Account Resources کے تحت اپنا account شامل کریں۔",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

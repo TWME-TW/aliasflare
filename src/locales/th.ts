@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "นามแฝงย้อนกลับบน {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "โซน (Zone)",
-	"cf.tokenScope": "ทั้งหมดนี้เป็นสิทธิ์ระดับโซน (Zone) ไม่ใช่สิทธิ์ระดับบัญชี (Account): ในฟอร์มโทเค็น ให้เลือก Zone ในเมนูแรก จากนั้นเลือกสิทธิ์ และระดับการเข้าถึง ภายใต้ Zone Resources ให้เลือก Include → Specific zone แล้วเพิ่มโซนของแต่ละโดเมนนามแฝง เพื่อให้โทเค็นไม่สามารถเปลี่ยนแปลงสิ่งอื่นได้",
+	"cf.tokenScope": "ในเมนูแรกของฟอร์มโทเค็น ให้เลือกขอบเขตที่แสดงอยู่หน้าสิทธิ์แต่ละรายการ สำหรับสิทธิ์ระดับโซน ภายใต้ Zone Resources ให้เลือก Include → Specific zone และเพิ่มโซนของแต่ละโดเมนนามแฝง เพื่อให้โทเค็นไม่สามารถเปลี่ยนโดเมนอื่นได้ Email Sending เป็นสิทธิ์ระดับบัญชี: ภายใต้ Account Resources ให้รวมบัญชีของคุณ",
+	"cf.scopeAccount": "บัญชี (Account)",
 };
 
 export default dictionary;

@@ -81,9 +81,9 @@ npx wrangler deploy
 - Zone → Zone Settings → Edit
 - Zone → DNS → Edit
 - Zone → Email Routing Rules → Edit
-- Zone → Email Sending → Edit
+- **Account** → Email Sending → Edit
 
-這些都是**區域（Zone）**權限，不是帳號（Account）權限：在第一個選單選 *Zone*。在 *Zone Resources* 選 *Include → Specific zone*，逐一加入每個別名網域的區域，讓 token 不能更動其他東西。
+前四項是**區域（Zone）**權限：在 *Zone Resources* 選 *Include → Specific zone*，逐一加入每個別名網域的區域，讓 token 不能更動其他網域。Email Sending 是**帳號（Account）**權限：在 *Account Resources* 加入你的帳號。
 
 每個網域都會：啟用 Email Routing 並把 catch-all 指向 Worker；在 `r.<網域>` 啟用 Email Routing、開啟子地址，並建立 `reply@r.<網域>` 規則；兩者都加入 Email Sending。已經把信送往其他地方的 catch-all 不會被更改。重複執行是安全的，token 只用一次、不會儲存。
 

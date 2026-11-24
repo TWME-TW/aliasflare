@@ -92,6 +92,7 @@ form.inline { display:inline; margin:0; }
 .perms { list-style:none; padding:0; margin:10px 0 0; display:grid; gap:6px; }
 .perms li { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; }
 .pill.scope { background:var(--nav-active); color:var(--nav-active-text); }
+.pill.scope.account { background:var(--warn-soft); color:var(--text); }
 .perm-name { font-weight:600; color:var(--text); }
 .perm-level { font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; padding:1px 8px; border-radius:6px; background:var(--ok-soft); color:var(--ok); }
 .notice { padding:12px 18px; border-radius:16px; margin:0; background:var(--nav-active); color:var(--nav-active-text); }
@@ -540,13 +541,13 @@ ${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.app
 	);
 }
 
-/** What the Cloudflare token needs, as the token form names it: every one is a zone permission. */
-const TOKEN_PERMISSIONS: [string, string][] = [
-	["Zone", "Read"],
-	["Zone Settings", "Edit"],
-	["DNS", "Edit"],
-	["Email Routing Rules", "Edit"],
-	["Email Sending", "Edit"],
+/** What the Cloudflare token needs, as the token form names it, with the scope each one is granted on. */
+const TOKEN_PERMISSIONS: ["zone" | "account", string, string][] = [
+	["zone", "Zone", "Read"],
+	["zone", "Zone Settings", "Edit"],
+	["zone", "DNS", "Edit"],
+	["zone", "Email Routing Rules", "Edit"],
+	["account", "Email Sending", "Edit"],
 ];
 
 export function connectionPage(
@@ -596,7 +597,7 @@ ${cloudflare.domains.length
 </fieldset>
 ${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.tokenHelp"))}
 <ul class="perms">${TOKEN_PERMISSIONS.map(
-	([name, level]) => html`<li><span class="pill scope">${t("cf.scopeZone")}</span><span class="perm-name">${name}</span><span class="perm-level">${level}</span></li>`,
+	([scope, name, level]) => html`<li><span class="pill scope ${scope}">${t(scope === "zone" ? "cf.scopeZone" : "cf.scopeAccount")}</span><span class="perm-name">${name}</span><span class="perm-level">${level}</span></li>`,
 )}</ul>
 <p class="help">${t("cf.tokenScope")}</p>
 <label for="workerName">${t("cf.workerName")}</label>

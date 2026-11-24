@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "alias inversés sur {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "Il s'agit d'autorisations de zone (Zone), et non de compte (Account) : dans le formulaire du jeton, choisissez Zone dans le premier menu, puis l'autorisation, puis le niveau d'accès. Sous Zone Resources, choisissez Include → Specific zone et ajoutez la zone de chaque domaine alias, afin que le jeton ne puisse rien modifier d'autre.",
+	"cf.tokenScope": "Dans le premier menu du formulaire du jeton, choisissez le périmètre affiché devant chaque autorisation. Pour les autorisations de zone, sous Zone Resources, choisissez Include → Specific zone et ajoutez la zone de chaque domaine alias, afin que le jeton ne puisse modifier aucun autre domaine. Email Sending est une autorisation de compte : sous Account Resources, incluez votre compte.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

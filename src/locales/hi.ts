@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} पर रिवर्स उपनाम",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "ज़ोन (Zone)",
-	"cf.tokenScope": "ये सभी ज़ोन अनुमतियाँ (Zone) हैं, खाता अनुमतियाँ (Account) नहीं: टोकन फ़ॉर्म में पहले मेनू में Zone चुनें, फिर अनुमति, फिर एक्सेस स्तर। Zone Resources के तहत Include → Specific zone चुनें और हर उपनाम (alias) डोमेन का ज़ोन जोड़ें, ताकि टोकन और कुछ न बदल सके।",
+	"cf.tokenScope": "टोकन फ़ॉर्म के पहले मेनू में, हर अनुमति के सामने दिखाया गया स्कोप चुनें। ज़ोन अनुमतियों के लिए Zone Resources के तहत Include → Specific zone चुनें और हर उपनाम (alias) डोमेन का ज़ोन जोड़ें, ताकि टोकन कोई और डोमेन न बदल सके। Email Sending एक खाता अनुमति है: Account Resources के तहत अपना खाता शामिल करें।",
+	"cf.scopeAccount": "खाता (Account)",
 };
 
 export default dictionary;

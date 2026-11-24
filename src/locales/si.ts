@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} හි ප්‍රතිලෝම අන්වර්ථ",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "කලාපය (Zone)",
-	"cf.tokenScope": "මේවා සියල්ලම කලාප අවසර (Zone) වන අතර ගිණුම් අවසර (Account) නොවේ: ටෝකන පෝරමයේ පළමු මෙනුවෙන් Zone තෝරන්න, ඉන්පසු අවසරය, ඉන්පසු ප්‍රවේශ මට්ටම. Zone Resources යටතේ Include → Specific zone තෝරා, සෑම alias වසමකම කලාපය එකතු කරන්න, එවිට ටෝකනයට වෙනත් කිසිවක් වෙනස් කළ නොහැක.",
+	"cf.tokenScope": "ටෝකන් පෝරමයේ පළමු මෙනුවේ, සෑම අවසරයක් ඉදිරියෙන්ම පෙන්වන විෂය පථය තෝරන්න. කලාප අවසර සඳහා Zone Resources යටතේ Include → Specific zone තෝරා, සෑම alias වසමකම කලාපය එකතු කරන්න, එවිට ටෝකනයට වෙනත් වසමක් වෙනස් කළ නොහැක. Email Sending යනු ගිණුම් අවසරයකි: Account Resources යටතේ ඔබේ ගිණුම ඇතුළත් කරන්න.",
+	"cf.scopeAccount": "ගිණුම (Account)",
 };
 
 export default dictionary;

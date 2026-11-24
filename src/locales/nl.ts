@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "omgekeerde aliassen op {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "zone (Zone)",
-	"cf.tokenScope": "Dit zijn allemaal zonerechten (Zone), geen accountrechten (Account): kies in het tokenformulier in het eerste menu Zone, dan het recht en vervolgens het toegangsniveau. Kies onder Zone Resources Include → Specific zone en voeg de zone van elk aliasdomein toe, zodat het token niets anders kan wijzigen.",
+	"cf.tokenScope": "Kies in het eerste menu van het tokenformulier het bereik dat voor elk recht wordt getoond. Kies voor de zonerechten onder Zone Resources Include → Specific zone en voeg de zone van elk aliasdomein toe, zodat het token geen ander domein kan wijzigen. Email Sending is een accountrecht: neem onder Account Resources je account op.",
+	"cf.scopeAccount": "account (Account)",
 };
 
 export default dictionary;

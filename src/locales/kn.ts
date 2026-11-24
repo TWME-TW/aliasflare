@@ -369,7 +369,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} ನಲ್ಲಿರುವ ರಿವರ್ಸ್ ಅಲಿಯಾಸ್‌ಗಳು",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "ಇವೆಲ್ಲವೂ zone ಅನುಮತಿಗಳು (Zone), account ಅನುಮತಿಗಳು (Account) ಅಲ್ಲ: ಟೋಕನ್ ಫಾರ್ಮ್‌ನಲ್ಲಿ ಮೊದಲ ಮೆನುವಿನಲ್ಲಿ Zone ಆರಿಸಿ, ನಂತರ ಅನುಮತಿ, ನಂತರ ಪ್ರವೇಶ ಮಟ್ಟ. Zone Resources ಅಡಿಯಲ್ಲಿ Include → Specific zone ಆರಿಸಿ ಮತ್ತು ಪ್ರತಿ alias ಡೊಮೇನ್‌ನ zone ಸೇರಿಸಿ, ಇದರಿಂದ ಟೋಕನ್ ಬೇರೆ ಯಾವುದನ್ನೂ ಬದಲಾಯಿಸಲಾಗದು.",
+	"cf.tokenScope": "ಟೋಕನ್ ಫಾರ್ಮ್‌ನ ಮೊದಲ ಮೆನುವಿನಲ್ಲಿ, ಪ್ರತಿ ಅನುಮತಿಯ ಮುಂದೆ ತೋರಿಸಿರುವ scope ಆರಿಸಿ. zone ಅನುಮತಿಗಳಿಗಾಗಿ Zone Resources ಅಡಿಯಲ್ಲಿ Include → Specific zone ಆರಿಸಿ ಮತ್ತು ಪ್ರತಿ alias ಡೊಮೇನ್‌ನ zone ಸೇರಿಸಿ, ಇದರಿಂದ ಟೋಕನ್ ಬೇರೆ ಯಾವುದೇ ಡೊಮೇನ್ ಬದಲಾಯಿಸಲಾಗದು. Email Sending ಒಂದು account ಅನುಮತಿ: Account Resources ಅಡಿಯಲ್ಲಿ ನಿಮ್ಮ account ಸೇರಿಸಿ.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

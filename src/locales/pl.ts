@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "aliasy zwrotne na {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "strefa (Zone)",
-	"cf.tokenScope": "To są uprawnienia strefy (Zone), a nie uprawnienia konta (Account): w formularzu tokenu wybierz Zone w pierwszym menu, następnie uprawnienie, a potem poziom dostępu. W sekcji Zone Resources wybierz Include → Specific zone i dodaj strefę każdej domeny aliasu, aby token nie mógł zmienić niczego innego.",
+	"cf.tokenScope": "W pierwszym menu formularza tokenu wybierz zakres wyświetlany przed każdym uprawnieniem. Dla uprawnień strefy w sekcji Zone Resources wybierz Include → Specific zone i dodaj strefę każdej domeny aliasu, aby token nie mógł zmienić innej domeny. Email Sending to uprawnienie konta: w sekcji Account Resources dołącz swoje konto.",
+	"cf.scopeAccount": "konto (Account)",
 };
 
 export default dictionary;

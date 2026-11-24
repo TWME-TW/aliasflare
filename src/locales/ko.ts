@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse}의 역방향 별칭",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "영역（Zone）",
-	"cf.tokenScope": "이 항목들은 모두 계정 권한(Account)이 아니라 영역 권한(Zone)입니다. 토큰 양식의 첫 번째 메뉴에서 Zone을 고른 다음 권한, 그다음 액세스 수준을 선택하세요. Zone Resources에서 Include → Specific zone을 선택하고 각 별칭 도메인의 영역을 추가하여 토큰이 다른 것을 변경할 수 없도록 하세요.",
+	"cf.tokenScope": "토큰 양식의 첫 번째 메뉴에서 각 권한 앞에 표시된 범위를 선택하세요. 영역 권한은 Zone Resources에서 Include → Specific zone을 선택하고 각 별칭 도메인의 영역을 추가하여, 토큰이 다른 도메인을 변경하지 못하도록 하세요. Email Sending은 계정 권한입니다. Account Resources에서 계정을 포함하세요.",
+	"cf.scopeAccount": "계정（Account）",
 };
 
 export default dictionary;

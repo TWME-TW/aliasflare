@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "alias balik di {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "zona (Zone)",
-	"cf.tokenScope": "Semua ini adalah izin zona (Zone), bukan izin akun (Account): di formulir token, pilih Zone di menu pertama, lalu izinnya, lalu tingkat aksesnya. Di bagian Zone Resources, pilih Include → Specific zone dan tambahkan zona dari setiap domain alias, agar token tidak dapat mengubah yang lain.",
+	"cf.tokenScope": "Di menu pertama formulir token, pilih cakupan yang ditampilkan di depan setiap izin. Untuk izin zona, di bagian Zone Resources pilih Include → Specific zone dan tambahkan zona dari setiap domain alias, agar token tidak dapat mengubah domain lain. Email Sending adalah izin akun: di bagian Account Resources, sertakan akun Anda.",
+	"cf.scopeAccount": "akun (Account)",
 };
 
 export default dictionary;

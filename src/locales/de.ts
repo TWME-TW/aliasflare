@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "Reverse-Aliasse auf {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "Dies sind alles Zone-Berechtigungen, keine Account-Berechtigungen: Wähle im Token-Formular im ersten Menü Zone, dann die Berechtigung und anschließend die Zugriffsstufe. Wähle unter Zone Resources die Option Include → Specific zone und füge die Zone jeder Alias-Domain hinzu, damit das Token nichts anderes ändern kann.",
+	"cf.tokenScope": "Wähle im ersten Menü des Token-Formulars den Bereich, der vor jeder Berechtigung angezeigt wird. Für die Zone-Berechtigungen wähle unter Zone Resources Include → Specific zone und füge die Zone jeder Alias-Domain hinzu, damit das Token keine andere Domain ändern kann. Email Sending ist eine Account-Berechtigung: Füge unter Account Resources dein Konto hinzu.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;

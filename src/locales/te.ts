@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse}పై రివర్స్ మారుపేర్లు",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "జోన్ (Zone)",
-	"cf.tokenScope": "ఇవన్నీ జోన్ అనుమతులు (Zone), ఖాతా అనుమతులు (Account) కావు: టోకెన్ ఫారమ్‌లో మొదటి మెనూలో Zone ఎంచుకోండి, తర్వాత అనుమతి, తర్వాత యాక్సెస్ స్థాయి. Zone Resources కింద Include → Specific zone ఎంచుకుని, ప్రతి alias డొమైన్ యొక్క జోన్‌ను జోడించండి, తద్వారా టోకెన్ మరేదీ మార్చలేదు.",
+	"cf.tokenScope": "టోకెన్ ఫారమ్‌లోని మొదటి మెనూలో ప్రతి అనుమతికి ముందు చూపే స్కోప్‌ను ఎంచుకోండి. జోన్ అనుమతుల కోసం Zone Resources కింద Include → Specific zone ఎంచుకుని, ప్రతి alias డొమైన్ యొక్క జోన్‌ను జోడించండి, తద్వారా టోకెన్ మరే ఇతర డొమైన్‌ను మార్చలేదు. Email Sending అనేది ఖాతా అనుమతి: Account Resources కింద మీ ఖాతాను చేర్చండి.",
+	"cf.scopeAccount": "ఖాతా (Account)",
 };
 
 export default dictionary;

@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "обратные алиасы на {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Зона (Zone)",
-	"cf.tokenScope": "Это права зоны (Zone), а не права аккаунта (Account): в форме токена в первом меню выберите Zone, затем право, затем уровень доступа. В разделе Zone Resources выберите Include → Specific zone и добавьте зону каждого alias-домена, чтобы токен не мог менять ничего другого.",
+	"cf.tokenScope": "В первом меню формы токена выберите область, указанную перед каждым правом. Для прав зоны в разделе Zone Resources выберите Include → Specific zone и добавьте зону каждого alias-домена, чтобы токен не мог менять другие домены. Email Sending — это право аккаунта: в разделе Account Resources включите свой аккаунт.",
+	"cf.scopeAccount": "Аккаунт (Account)",
 };
 
 export default dictionary;

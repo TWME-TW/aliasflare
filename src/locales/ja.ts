@@ -354,7 +354,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "{reverse} 上のリバースエイリアス",
 	"cf.step.catchall": "キャッチオール",
 	"cf.scopeZone": "ゾーン（Zone）",
-	"cf.tokenScope": "これらはすべてゾーン権限（Zone）であり、アカウント権限（Account）ではありません。トークンのフォームでは、最初のメニューで Zone を選択し、次に権限、続けてアクセスレベルを選びます。Zone Resources で Include → Specific zone を選び、各エイリアスドメインのゾーンを追加してください。これにより、トークンが他の何も変更できなくなります。",
+	"cf.tokenScope": "トークンフォームの最初のメニューで、各権限の前に表示されているスコープを選択してください。ゾーン権限は、Zone Resources で Include → Specific zone を選び、各エイリアスドメインのゾーンを追加してください。これによりトークンは他のドメインを変更できなくなります。Email Sending はアカウント権限です。Account Resources で、あなたのアカウントを含めてください。",
+	"cf.scopeAccount": "アカウント（Account）",
 };
 
 export default dictionary;

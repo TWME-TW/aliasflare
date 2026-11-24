@@ -360,7 +360,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "зворотні псевдоніми на {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Зона (Zone)",
-	"cf.tokenScope": "Усі ці дозволи стосуються зони (Zone), а не облікового запису (Account): у формі токена в першому меню оберіть Zone, потім дозвіл, потім рівень доступу. У розділі Zone Resources оберіть Include → Specific zone і додайте зону кожного alias-домену, щоб токен не міг змінити нічого іншого.",
+	"cf.tokenScope": "У першому меню форми токена оберіть область, позначену перед кожним дозволом. Для дозволів зони в розділі Zone Resources оберіть Include → Specific zone і додайте зону кожного alias-домену, щоб токен не міг змінити інші домени. Email Sending — це дозвіл облікового запису: у розділі Account Resources додайте свій обліковий запис.",
+	"cf.scopeAccount": "Обліковий запис (Account)",
 };
 
 export default dictionary;

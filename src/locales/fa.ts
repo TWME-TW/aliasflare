@@ -375,7 +375,8 @@ const dictionary: Dictionary = {
 	"cf.reverseIs": "نام‌های مستعار معکوس روی {reverse}",
 	"cf.step.catchall": "Catch-all",
 	"cf.scopeZone": "Zone",
-	"cf.tokenScope": "همه این‌ها دسترسی‌های zone (Zone) هستند، نه دسترسی‌های account (Account): در فرم توکن، در اولین منو Zone را انتخاب کنید، سپس دسترسی و بعد سطح دسترسی. زیر Zone Resources گزینه Include → Specific zone را انتخاب کنید و zone هر دامنهٔ alias را اضافه کنید تا توکن نتواند چیز دیگری را تغییر دهد.",
+	"cf.tokenScope": "در اولین منوی فرم توکن، scope نشان‌داده‌شده جلوی هر دسترسی را انتخاب کنید. برای دسترسی‌های zone، زیر Zone Resources گزینه Include → Specific zone را انتخاب کنید و zone هر دامنهٔ alias را اضافه کنید تا توکن نتواند دامنهٔ دیگری را تغییر دهد. Email Sending یک دسترسی account است: زیر Account Resources، account خود را اضافه کنید.",
+	"cf.scopeAccount": "Account",
 };
 
 export default dictionary;
