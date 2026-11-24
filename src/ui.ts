@@ -128,6 +128,7 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	td input[type=text], td input[type=email], td select { max-width:none; font-size:16px; }
 }
 .mobile-only { display:none; }
+form.note input { width:100%; min-width:12ch; }
 .toast { position:fixed; inset-inline:0; bottom:24px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); z-index:10;
 	padding:12px 20px; border-radius:12px; background:#323232; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
 .toast.bad { background:var(--danger); color:#fff; }
@@ -195,6 +196,7 @@ ${languageMenu(t, options.path)}
 <p class="powered">mailflare-alias · <a href="https://github.com/TWME-TW/mailflare-alias">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
+<div class="toast" role="status" aria-live="polite" data-toast hidden></div>
 </div>`
 	: html`<header class="topbar">${brand}</header>${body}<footer class="page">${languageMenu(t, options.path)}</footer>`}
 <script src="/assets/app.js"></script>
@@ -302,7 +304,10 @@ ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return html`<tr>
 <td data-label="${t("dash.colAlias")}"><a href="${base}"><code>${alias.address}</code></a></td>
-<td data-label="${t("dash.colNote")}" class="muted">${alias.note ?? ""}</td>
+<td data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
+<input type="hidden" name="back" value="list" />
+<input type="text" name="note" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
+<noscript><button>${t("common.save")}</button></noscript></form></td>
 <td data-label="${t("dash.colForwardTo")}"><form class="row" method="post" action="${base}/destination">
 <input type="email" name="destination" value="${alias.destination ?? ""}" placeholder="${settings.defaultDestination || t("dash.default")}" aria-label="${t("dash.colForwardTo")}" />
 <button>${t("common.save")}</button></form></td>
@@ -391,7 +396,6 @@ ${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings
 <noscript><p><button class="primary">${t("settings.saveButton")}</button></p></noscript>
 </section>
 </form>
-<div class="toast" role="status" aria-live="polite" data-toast hidden></div>
 </main>`,
 		{ t, nav: true, current: "/settings", path: "/settings" },
 	);
@@ -542,9 +546,9 @@ ${noticeBox(notice)}
 <section>
 <h2><code>${alias.address}</code></h2>
 <p class="help">${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ${t(`mode.${alias.forward_mode}`)}</p>
-<form method="post" action="${base}/note">
+<form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <label for="note">${t("alias.note")}</label>
-<div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" /><button>${t("common.save")}</button></div>
+<div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" /><noscript><button>${t("common.save")}</button></noscript></div>
 </form>
 <form method="post" action="${base}/contacts">
 <label for="email">${t("alias.writeNew")}</label>
@@ -552,6 +556,7 @@ ${noticeBox(notice)}
 <p class="help">${t("alias.writeNewHelp", { alias: alias.address })}</p>
 </form>
 </section>
+${importedHistory(t, alias)}
 <section>
 <h2>${t("alias.contacts")}</h2>
 ${contacts.length === 0
@@ -638,7 +643,7 @@ export function importPage(
 ${error ? html`<p class="notice bad" role="alert">${error}</p>` : ""}
 ${result
 	? html`<section><h2>${t("imp.resultTitle", { source: source ?? "" })}</h2>
-<p class="notice" role="status">${t("imp.done", { found: String(result.found), created: String(result.created), updated: String(result.updated) })}</p>
+<p class="notice" role="status">${t("imp.done", { found: String(result.found), created: String(result.created), updated: String(result.updated) })}${result.contacts ? html` ${t("imp.doneContacts", { count: String(result.contacts) })}` : ""}</p>
 ${result.skippedDomains.length
 	? html`<p>${t("imp.skipped")}</p><ul class="results">${result.skippedDomains.map(
 			(item) => html`<li><code>${item.domain}</code> <span class="muted">${t("imp.count", { count: String(item.count) })}</span></li>`,
@@ -656,7 +661,9 @@ ${result.skippedDomains.length
 <section>
 <h2>${t("imp.fromSimplelogin")}</h2>
 <form method="post" action="/import/simplelogin" data-import>
-${keyField("sl", "imp.slKeyHelp")}${serverField("sl", "https://app.simplelogin.io")}${domainsField}
+${keyField("sl", "imp.slKeyHelp")}
+${checkbox("contacts", true, t("imp.contacts"), t("imp.contactsHelp"))}
+${serverField("sl", "https://app.simplelogin.io")}${domainsField}
 <p><button class="primary">${t("imp.button")}</button></p>
 </form>
 </section>
@@ -679,4 +686,44 @@ ${keyField("addy", "imp.addyKeyHelp")}${serverField("addy", "https://app.addy.io
 </main>`,
 		{ t, nav: true, current: "/import", path: "/import" },
 	);
+}
+
+const IMPORT_SOURCE_NAMES: Record<string, string> = { simplelogin: "SimpleLogin", addy: "addy.io", csv: "CSV" };
+
+/** What an imported alias brought from SimpleLogin or addy.io: counts, dates and other details. */
+function importedHistory(t: Translate, alias: AliasRow): Html | string {
+	if (!alias.imported_from) return "";
+	let details: Record<string, unknown> = {};
+	try {
+		details = alias.imported_details ? (JSON.parse(alias.imported_details) as Record<string, unknown>) : {};
+	} catch {
+		// Shown without details.
+	}
+	const list = (value: unknown) => (Array.isArray(value) ? value.map(String).join(", ") : "");
+	const latest = details.latest_activity as { action?: string; at?: number; contact?: string; contact_name?: string } | undefined;
+	const rows: [MessageKey, number, number | null][] = [
+		["hist.forwarded", alias.imported_forwarded, alias.imported_last_forward_at],
+		["hist.blocked", alias.imported_blocked, alias.imported_last_block_at],
+		["hist.replied", alias.imported_replied, alias.imported_last_reply_at],
+		["hist.sent", alias.imported_sent, alias.imported_last_sent_at],
+	];
+	const extra: [MessageKey, string][] = [
+		["hist.mailboxes", list(details.mailboxes ?? details.recipients)],
+		["hist.labels", list(details.labels)],
+		["hist.pgp", typeof details.pgp === "string" ? details.pgp : ""],
+		["hist.sourceId", details.id === undefined ? "" : String(details.id)],
+	];
+	const source = IMPORT_SOURCE_NAMES[alias.imported_from] ?? alias.imported_from;
+	return html`<section>
+<h2>${t("hist.title")}</h2>
+<p class="help">${t("hist.from", { source, date: when(alias.imported_at, t.locale) })}${alias.imported_from === "csv" ? "" : html` ${t("hist.help", { source })}`}</p>
+<p>${t("hist.created")}: ${when(alias.created_at, t.locale)}</p>
+<table class="rt"><thead><tr><th></th><th>${t("hist.colCount")}</th><th>${t("hist.colLast")}</th></tr></thead><tbody>
+${rows.map(([key, total, last]) => html`<tr><th scope="row">${t(key)}</th><td data-label="${t("hist.colCount")}">${total}</td><td data-label="${t("hist.colLast")}">${when(last, t.locale)}</td></tr>`)}
+</tbody></table>
+${latest?.action
+	? html`<p>${t("hist.latest")}: ${latest.action}${latest.contact ? html` · ${latest.contact_name ? `${latest.contact_name} ` : ""}<code>${latest.contact}</code>` : ""} · ${when(latest.at ?? null, t.locale)}</p>`
+	: ""}
+${extra.filter(([, value]) => value).map(([key, value]) => html`<p>${t(key)}: <code>${value}</code></p>`)}
+</section>`;
 }

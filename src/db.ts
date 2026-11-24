@@ -31,6 +31,18 @@ export type AliasRow = {
 	deleted_at: number | null;
 	created_at: number;
 	updated_at: number;
+	/** History from SimpleLogin or addy.io when the alias was imported (migration 0005). */
+	imported_from: string | null;
+	imported_at: number | null;
+	imported_forwarded: number;
+	imported_blocked: number;
+	imported_replied: number;
+	imported_sent: number;
+	imported_last_forward_at: number | null;
+	imported_last_block_at: number | null;
+	imported_last_reply_at: number | null;
+	imported_last_sent_at: number | null;
+	imported_details: string | null;
 };
 
 export type ContactRow = {
@@ -79,6 +91,10 @@ export async function getAlias(db: D1Database, address: string): Promise<AliasRo
 }
 
 /** Returns the alias, creating it with the given defaults the first time it is seen. */
+/** Note on an alias that appeared because mail arrived for it (Mailflare catch-all), as SimpleLogin words it. */
+export const CATCH_ALL_NOTE = "Created by catchall option";
+
+/** Returns the alias, creating it on its first message: an address nothing here manages yet. */
 export async function ensureAlias(
 	db: D1Database,
 	address: string,
@@ -88,10 +104,20 @@ export async function ensureAlias(
 	const timestamp = now();
 	await db
 		.prepare(
-			`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, num_id, uid, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT (address) DO NOTHING`,
+			`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, num_id, uid, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT (address) DO NOTHING`,
 		)
-		.bind(address, mailboxId, defaults.forwardEnabled ? 1 : 0, defaults.forwardEnabled ? "all" : "none", defaults.destination, crypto.randomUUID(), timestamp, timestamp)
+		.bind(
+			address,
+			mailboxId,
+			defaults.forwardEnabled ? 1 : 0,
+			defaults.forwardEnabled ? "all" : "none",
+			defaults.destination,
+			CATCH_ALL_NOTE,
+			crypto.randomUUID(),
+			timestamp,
+			timestamp,
+		)
 		.run();
 	const row = await getAlias(db, address);
 	if (!row) throw new Error(`Alias ${address} could not be created`);

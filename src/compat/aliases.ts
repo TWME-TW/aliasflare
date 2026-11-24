@@ -11,9 +11,11 @@ export type AliasStats = {
 	nb_forward: number;
 	nb_reply: number;
 	nb_block: number;
+	nb_sent: number;
 	last_forward_at: number | null;
 	last_reply_at: number | null;
 	last_block_at: number | null;
+	last_sent_at: number | null;
 };
 
 export type AliasView = AliasRow & AliasStats;
@@ -28,12 +30,14 @@ export class ClientError extends Error {
 }
 
 const STATS_COLUMNS = `
-	(SELECT COALESCE(SUM(c.forward_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_forward,
-	(SELECT COALESCE(SUM(c.reply_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_reply,
-	(SELECT COUNT(*) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped') AS nb_block,
-	(SELECT MAX(c.last_forward_at) FROM contacts c WHERE c.alias_address = a.address) AS last_forward_at,
-	(SELECT MAX(c.last_reply_at) FROM contacts c WHERE c.alias_address = a.address) AS last_reply_at,
-	(SELECT MAX(f.created_at) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped') AS last_block_at`;
+	a.imported_forwarded + (SELECT COALESCE(SUM(c.forward_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_forward,
+	a.imported_replied + (SELECT COALESCE(SUM(c.reply_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_reply,
+	a.imported_blocked + (SELECT COUNT(*) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped') AS nb_block,
+	a.imported_sent AS nb_sent,
+	NULLIF(MAX(COALESCE((SELECT MAX(c.last_forward_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_forward_at, 0)), 0) AS last_forward_at,
+	NULLIF(MAX(COALESCE((SELECT MAX(c.last_reply_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_reply_at, 0)), 0) AS last_reply_at,
+	NULLIF(MAX(COALESCE((SELECT MAX(f.created_at) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped'), 0), COALESCE(a.imported_last_block_at, 0)), 0) AS last_block_at,
+	a.imported_last_sent_at AS last_sent_at`;
 
 export type AliasQuery = {
 	deleted?: "without" | "with" | "only";
@@ -93,9 +97,9 @@ export async function totals(db: D1Database): Promise<{ aliases: number; active:
 				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL AND forward_mode != 'none') AS active,
 				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NOT NULL) AS deleted,
 				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL AND pinned = 1) AS pinned,
-				(SELECT COALESCE(SUM(forward_count), 0) FROM contacts) AS forwarded,
-				(SELECT COALESCE(SUM(reply_count), 0) FROM contacts) AS replied,
-				(SELECT COUNT(*) FROM forwards WHERE status = 'skipped') AS blocked`,
+				(SELECT COALESCE(SUM(forward_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_forwarded), 0) FROM aliases) AS forwarded,
+				(SELECT COALESCE(SUM(reply_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_replied), 0) FROM aliases) AS replied,
+				(SELECT COUNT(*) FROM forwards WHERE status = 'skipped') + (SELECT COALESCE(SUM(imported_blocked), 0) FROM aliases) AS blocked`,
 		)
 		.first<Record<string, number>>();
 	return {

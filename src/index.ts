@@ -21,7 +21,18 @@ import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
 import { domainOf, extractEmail, normalizeEmail, reverseAddress } from "./format";
 import { handleInbound, type InboundEvent } from "./forward";
-import { defaultImportDomains, fetchAddy, fetchSimpleLogin, ImportError, importAliases, parseAliasCsv, type ImportedAlias } from "./importer";
+import {
+	addSimpleLoginContacts,
+	defaultImportDomains,
+	fetchAddy,
+	fetchSimpleLogin,
+	ImportError,
+	importAliases,
+	parseAliasCsv,
+	selectByDomain,
+	type ImportedAlias,
+	type Selection,
+} from "./importer";
 import { isLocale, LANG_COOKIE, negotiateLocale, translator, type MessageKey } from "./i18n";
 import {
 	authenticationOptions,
@@ -460,8 +471,10 @@ app.post("/import/:source", async (c) => {
 		);
 	if (!domains.length) return render({ error: t("imp.err.noDomains") });
 
+	const reverseDomain = c.get("config").reverseDomain;
 	let server = "";
 	let aliases: ImportedAlias[];
+	let selection: Selection;
 	try {
 		if (source.fetch) {
 			const apiKey = typeof form.apiKey === "string" ? form.apiKey.trim() : "";
@@ -470,11 +483,15 @@ app.post("/import/:source", async (c) => {
 			if (url.protocol !== "https:") return render({ error: t("imp.err.badServer") });
 			server = url.origin;
 			aliases = await source.fetch(server, apiKey);
+			selection = selectByDomain(aliases, domains, reverseDomain);
+			// Contacts are fetched only for the aliases being imported, one list per alias.
+			if (sourceName === "simplelogin" && form.contacts === "1") await addSimpleLoginContacts(server, apiKey, selection.chosen);
 		} else {
 			const file = form.file;
 			if (!(file instanceof File) || file.size === 0) return render({ error: t("imp.err.empty") });
 			if (file.size > 5_000_000) return render({ error: t("imp.err.format") });
 			aliases = parseAliasCsv(await file.text());
+			selection = selectByDomain(aliases, domains, reverseDomain);
 		}
 	} catch (error) {
 		if (error instanceof TypeError) return render({ error: t("imp.err.badServer") });
@@ -485,7 +502,7 @@ app.post("/import/:source", async (c) => {
 				: t(error.reason === "auth" ? "imp.err.auth" : error.reason === "empty" ? "imp.err.empty" : "imp.err.format");
 		return render({ error: message });
 	}
-	const result = await importAliases(c.env.DB, settings, c.get("config").reverseDomain, aliases, domains);
+	const result = await importAliases(c.env.DB, settings, reverseDomain, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length);
 	console.log(JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length }));
 	return render({ result });
 });
@@ -568,8 +585,13 @@ app.post("/aliases/:address/note", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
 	const form = await c.req.parseBody();
 	const note = (typeof form.note === "string" ? form.note : "").trim().slice(0, 200) || null;
-	await c.env.DB.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(note, now(), address).run();
-	return redirectWithNotice(c, `/aliases/${encodeURIComponent(address)}`, "notice.noteSaved");
+	const result = await c.env.DB.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(note, now(), address).run();
+	if (c.req.header("X-Autosave") === "1") {
+		// Saved in place from the alias list or alias page.
+		return result.meta.changes > 0 ? c.json({ ok: true, message: c.get("t")("notice.noteSaved") }) : c.json({ ok: false, message: c.get("t")("link.error") }, 404);
+	}
+	const back = form.back === "list" ? "/" : `/aliases/${encodeURIComponent(address)}`;
+	return redirectWithNotice(c, back, "notice.noteSaved");
 });
 
 app.get("/aliases/:address", async (c) => {
