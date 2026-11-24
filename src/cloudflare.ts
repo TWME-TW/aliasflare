@@ -37,7 +37,7 @@ export class CloudflareError extends Error {
 async function cf<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
 	const response = await fetch(`${API}${path}`, {
 		...init,
-		redirect: "error",
+		redirect: "manual",
 		signal: AbortSignal.timeout(15_000),
 		headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
 	});

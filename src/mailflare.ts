@@ -45,7 +45,7 @@ async function call(config: MailflareConfig, path: string, init: RequestInit = {
 	const send = config.service ? config.service.fetch.bind(config.service) : fetch;
 	const response = await send(`${config.baseUrl}${path}`, {
 		...init,
-		redirect: "error",
+		redirect: "manual",
 		signal: AbortSignal.timeout(TIMEOUT_MS),
 		headers: { Authorization: `Bearer ${config.apiKey}`, ...(init.headers ?? {}) },
 	});

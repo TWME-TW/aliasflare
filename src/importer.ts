@@ -126,12 +126,14 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 			// No redirects: the key travels in a custom header that fetch would carry to any host.
 			response = await fetch(url, {
 				headers: { Accept: "application/json", "User-Agent": "aliasflare-import", ...headers },
-				redirect: "error",
+				redirect: "manual",
 				signal: AbortSignal.timeout(20_000),
 			});
 		} catch (error) {
 			throw new ImportError("fetch", error instanceof Error ? error.message : String(error));
 		}
+		// Workers cannot refuse redirects outright: they come back as a 3xx and are not followed.
+		if (response.status >= 300 && response.status < 400) throw new ImportError("fetch", `HTTP ${response.status} redirect, not followed`);
 		if (response.status === 429 && attempt < 4) {
 			// Rate limited: wait as asked (capped at 10 s), then try again.
 			const wait = Math.min(Number(response.headers.get("Retry-After")) || 2 ** attempt, 10);
