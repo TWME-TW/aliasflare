@@ -96,10 +96,29 @@ Optional: if Mailflare runs on the same Cloudflare account, enable the `MAILFLAR
 
 ### 3. Connect Mailflare
 
+Mailflare has two kinds of API key, and mailflare-alias needs the **personal** one:
+
+| | Personal API key | Admin API key |
+|---|---|---|
+| Where in Mailflare | **Settings → API keys** | Admin → API keys |
+| Permissions | `send`, `read`, `jmap`, `calendar:*` | `domains`, `accounts`, `mailboxes`, `storage` |
+| Limited to | the mailboxes you select (up to 30) | the whole installation |
+| Used by mailflare-alias | **Yes**: `send` + `jmap` | No |
+
+An Admin API key cannot read or send mail, so it does not work here.
+
 On **Connection**:
 
-1. In Mailflare, create an **API key** with the `jmap` and `send` scopes, then paste it.
-2. In Mailflare, add a **webhook** for `message.inbound` that points to the URL shown on the page (`…/webhook`). Paste its signing secret.
+1. **API key.** In Mailflare, go to **Settings → API keys** and create a key:
+   - select the `send` and `jmap` permissions;
+   - select **every mailbox whose aliases you want to forward**.
+
+   Paste the key. Mail to a mailbox the key does not include is not forwarded. When you add a mailbox later, create a new key that includes it.
+2. **Webhook.** Sign in to Mailflare as the **primary admin**; only that account can manage webhooks. Go to **Admin → Webhooks** and add a webhook:
+   - event: `message.inbound`;
+   - URL: the one shown on the page (`…/webhook`).
+
+   Paste its signing secret. A webhook fires only for mailboxes owned by the account that created it, so it covers the primary admin's mailboxes.
 3. Enter your Mailflare URL and the reverse-alias domain.
 
 Then on **Settings**, set your default forwarding address, which is your Gmail.

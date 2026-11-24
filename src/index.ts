@@ -55,7 +55,7 @@ const app = new Hono<AppEnv>();
 app.use("*", async (c, next) => {
 	await next();
 	c.header("X-Content-Type-Options", "nosniff");
-	c.header("Referrer-Policy", "no-referrer");
+	c.header("Referrer-Policy", "same-origin");
 	c.header("X-Frame-Options", "DENY");
 	c.header(
 		"Content-Security-Policy",

@@ -35,10 +35,16 @@ export async function isSignedIn(c: Context<AppEnv>): Promise<boolean> {
 }
 
 /** Rejects cross-site requests; the cookies are SameSite=Strict as well. */
+/**
+ * True when a state-changing request comes from this site. Browsers send `Origin: null` on form posts
+ * under some referrer policies and privacy settings; then only `Sec-Fetch-Site: same-origin` counts.
+ */
 export function sameOrigin(c: Context): boolean {
 	const origin = c.req.header("Origin");
-	if (!origin) return c.req.header("Sec-Fetch-Site") !== "cross-site";
-	return origin === new URL(c.req.url).origin;
+	const fetchSite = c.req.header("Sec-Fetch-Site");
+	if (origin && origin !== "null") return origin === new URL(c.req.url).origin;
+	if (origin === "null") return fetchSite === "same-origin";
+	return fetchSite !== "cross-site" && fetchSite !== "same-site";
 }
 
 export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {

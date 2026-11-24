@@ -55,9 +55,30 @@
    - 打開 Worker 網址，會進入初始設定頁。
    - 到 Worker 日誌找一次性設定碼，有效時間 60 分鐘。可以到 Cloudflare 後台 → Workers & Pages → mailflare-alias → Observability → Logs 查看，或執行 `npx wrangler tail mailflare-alias` 後重新整理頁面。
    - 輸入設定碼並註冊通行金鑰。
-3. **連線 Mailflare**：在「連線」頁面：
-   - 在 Mailflare 建立有 `jmap` 和 `send` 權限的 API key，貼進來。
-   - 在 Mailflare 新增 `message.inbound` webhook，網址填頁面上顯示的 `…/webhook`，再貼上它的簽章密鑰。
+3. **連線 Mailflare**
+
+   Mailflare 的 API key 分兩種，mailflare-alias 要用的是**一般使用者的 API key**：
+
+   | | 一般使用者 API key | 管理員 API key |
+   |---|---|---|
+   | 在 Mailflare 的位置 | **設定 → API keys** | 管理 → API keys |
+   | 權限 | `send`、`read`、`jmap`、`calendar:*` | `domains`、`accounts`、`mailboxes`、`storage` |
+   | 範圍 | 只限你勾選的信箱（最多 30 個） | 整個 Mailflare |
+   | mailflare-alias 是否使用 | **是**，需要 `send` + `jmap` | 否 |
+
+   管理員 API key 不能讀信也不能寄信，所以用在這裡沒有作用。
+
+   在「連線」頁面：
+   - **API key**：到 Mailflare 的 **設定 → API keys** 建立一把 key。
+     - 勾選 `send` 和 `jmap` 權限。
+     - 勾選**所有要轉寄別名的信箱**。沒有勾到的信箱，信不會被轉寄。之後新增信箱時，要再建立一把包含它的新 key。
+
+     建好後把 key 貼進來。
+   - **Webhook**：以**主要管理員**身分登入 Mailflare（只有主要管理員能管理 webhook），到 **管理 → Webhooks** 新增：
+     - 事件選 `message.inbound`；
+     - 網址填頁面上顯示的 `…/webhook`。
+
+     再把它的簽章密鑰貼進來。webhook 只對建立它的帳號所擁有的信箱生效，也就是主要管理員的信箱。
    - 填入 Mailflare 網址和反向別名網域。
    - 最後到「設定」頁面填入預設轉寄地址（你的 Gmail）。
 4. **在 Cloudflare 設定反向別名網域**
