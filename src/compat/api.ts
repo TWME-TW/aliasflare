@@ -618,16 +618,24 @@ async function addBlocks(c: C, entries: { kind: "address" | "domain"; value: str
 	return { rows, skipped: entries.length - rows.length };
 }
 
+// A Map, so "toString" or "constructor" cannot reach ORDER BY.
+const BLOCKLIST_SORT = new Map([
+	["created_at", "created_at"],
+	["value", "value"],
+	["blocked", "hits"],
+	["last_blocked", "created_at"],
+]);
+
 api.get("/v1/blocklist", async (c) => {
-	const search = (c.req.query("filter[search]") ?? "").toLowerCase();
+	const search = (c.req.query("filter[search]") ?? "").toLowerCase().slice(0, 200);
 	const type = c.req.query("filter[type]");
 	const sort = c.req.query("sort") ?? "-created_at";
-	const column = ({ created_at: "created_at", value: "value", blocked: "hits", last_blocked: "created_at" } as Record<string, string>)[sort.replace(/^-/, "")] ?? "created_at";
+	const column = BLOCKLIST_SORT.get(sort.replace(/^-/, "")) ?? "created_at";
 	const size = Math.min(Math.max(Number(c.req.query("page[size]")) || 100, 1), 100);
 	const pageNumber = Math.max(Number(c.req.query("page[number]")) || 1, 1);
 	const where: string[] = [];
 	const params: unknown[] = [];
-	if (search) where.push("value LIKE ?"), params.push(`%${search}%`);
+	if (search) where.push("value LIKE ? ESCAPE '!'"), params.push(`%${search.replace(/[!%_]/g, "!$&")}%`);
 	if (type === "email" || type === "domain") where.push("kind = ?"), params.push(type === "email" ? "address" : "domain");
 	const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 	const [list, counted] = await Promise.all([

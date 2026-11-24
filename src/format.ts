@@ -125,7 +125,8 @@ export function replaceAddresses(body: string, replacements: Replacement[]): str
 	for (const { from, to } of replacements) {
 		if (!from) continue;
 		const pattern = new RegExp(`(?<![A-Za-z0-9._%+-])${escapeRegExp(from)}(?![A-Za-z0-9.-]*[A-Za-z0-9])`, "gi");
-		out = out.replace(pattern, to);
+		// A function, so "$&" or "$`" in an address is inserted as text, not as a pattern.
+		out = out.replace(pattern, () => to);
 	}
 	return out;
 }

@@ -337,6 +337,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Najpierw zaznacz co najmniej jeden alias.",
 	"notice.bulkDone": "Zaktualizowano aliasy: {count}.",
 	"notice.bulkBad": "Wybierz akcję i co najmniej jeden alias.",
+	"new.title": "Nowy alias",
+	"new.prefix": "Nazwa aliasu",
+	"new.prefixPlaceholder": "Nazwa, np. shop (puste, aby wygenerować losowy alias)",
+	"new.domain": "Domena aliasu",
+	"new.suffix": "Dodaj losowy sufiks, np. {example}",
+	"new.help": "Sufiks utrudnia odgadnięcie aliasu. Bez nazwy zostanie utworzony losowy alias w formacie wybranym w Ustawieniach.",
+	"new.note": "Notatka (opcjonalnie)",
+	"new.destination": "Adres przekazywania (puste, aby użyć domyślnego)",
+	"new.create": "Utwórz alias",
+	"new.noDomains": "Aby tutaj tworzyć aliasy, najpierw dodaj domenę aliasów w Ustawieniach.",
+	"notice.newCreated": "Utworzono {alias}.",
+	"notice.newExists": "Taki alias już istnieje. Wybierz inną nazwę lub dodaj sufiks.",
+	"notice.newBadPrefix": "Użyj tylko liter, cyfr, kropek, myślników, podkreśleń i znaków plus; nazwa musi zaczynać się i kończyć literą lub cyfrą.",
+	"notice.newBadDomain": "Wybierz jedną z domen aliasów.",
+	"notice.newFailed": "Nie udało się utworzyć aliasu. Spróbuj ponownie.",
 };
 
 export default dictionary;

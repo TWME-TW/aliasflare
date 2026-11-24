@@ -132,6 +132,14 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 .toolbar input[type=search], .toolbar input[type=text] { flex:1 1 220px; width:auto; }
 .toolbar select { width:auto; }
 .bulk { padding:10px 12px; border-radius:16px; background:var(--bg); }
+.create { margin:12px 0; padding:10px 14px; border-radius:16px; background:var(--bg); }
+.create summary { cursor:pointer; font-weight:600; }
+.create-form { display:grid; gap:10px; margin-top:10px; }
+.create-address { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.create-address input { flex:1 1 200px; width:auto; }
+.create-address select { width:auto; }
+.create-form .check { margin-top:0; }
+.create-form button { justify-self:start; }
 th.pick, td.pick { width:36px; }
 td.pick input, th.pick input { width:18px; height:18px; accent-color:var(--primary); }
 .pager { display:flex; gap:16px; justify-content:center; align-items:center; margin-top:12px; }
@@ -287,6 +295,29 @@ function statusPill(t: Translate, status: string): Html {
 
 export type AliasListState = { query: string; filter: "all" | "active" | "disabled" | "pinned" | "deleted"; page: number; perPage: number; total: number };
 
+/** The "New alias" form above the alias list. */
+function newAliasForm(t: Translate, settings: Settings): Html | string {
+	if (settings.aliasDomains.length === 0) {
+		return html`<p class="notice">${t("new.noDomains")} <a href="/settings">${t("dash.goToSettings")}</a></p>`;
+	}
+	return html`<details class="create">
+<summary>${t("new.title")}</summary>
+<form method="post" action="/aliases/new" class="create-form">
+<div class="create-address">
+<input type="text" name="prefix" maxlength="50" autocomplete="off" spellcheck="false" placeholder="${t("new.prefixPlaceholder")}" aria-label="${t("new.prefix")}" />
+<span aria-hidden="true">@</span>
+<select name="domain" aria-label="${t("new.domain")}">
+${settings.aliasDomains.map((domain) => html`<option value="${domain}">${domain}</option>`)}
+</select>
+</div>
+<label class="check"><input type="checkbox" name="suffix" value="1" checked /><span>${t("new.suffix", { example: settings.customSuffix === "word" ? ".maple42" : ".x8k2fq" })}<p class="help">${t("new.help")}</p></span></label>
+<label>${t("new.note")} <input type="text" name="note" maxlength="500" /></label>
+<label>${t("new.destination")} <input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
+<button>${t("new.create")}</button>
+</form>
+</details>`;
+}
+
 export function dashboardPage(
 	t: Translate,
 	input: {
@@ -336,6 +367,7 @@ ${!settings.defaultDestination ? html`<p class="notice">${t("dash.setDestination
 <section>
 <h2>${t("dash.title")}</h2>
 <p class="help">${t("dash.aliasesHelp")}</p>
+${newAliasForm(t, settings)}
 <form class="toolbar" method="get" action="/" role="search">
 <input type="search" name="q" value="${list.query}" placeholder="${t("dash.searchPlaceholder")}" aria-label="${t("dash.search")}" />
 <select name="filter" aria-label="${t("dash.filter")}" data-autosubmit>

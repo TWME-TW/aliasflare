@@ -337,6 +337,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Pilih setidaknya satu alias terlebih dahulu.",
 	"notice.bulkDone": "{count} alias diperbarui.",
 	"notice.bulkBad": "Pilih tindakan dan setidaknya satu alias.",
+	"new.title": "Alias baru",
+	"new.prefix": "Nama alias",
+	"new.prefixPlaceholder": "Nama, misalnya shop (kosongkan untuk alias acak)",
+	"new.domain": "Domain alias",
+	"new.suffix": "Tambahkan akhiran acak, misalnya {example}",
+	"new.help": "Akhiran membuat alias lebih sulit ditebak. Tanpa nama, alias acak dibuat dengan format yang dipilih di Pengaturan.",
+	"new.note": "Catatan (opsional)",
+	"new.destination": "Alamat penerusan (kosongkan untuk default)",
+	"new.create": "Buat alias",
+	"new.noDomains": "Untuk membuat alias di sini, tambahkan dulu domain alias di Pengaturan.",
+	"notice.newCreated": "{alias} dibuat.",
+	"notice.newExists": "Alias itu sudah ada. Pilih nama lain atau tambahkan akhiran.",
+	"notice.newBadPrefix": "Gunakan hanya huruf, angka, titik, tanda hubung, garis bawah, dan tanda plus, dan awali serta akhiri dengan huruf atau angka.",
+	"notice.newBadDomain": "Pilih salah satu domain alias Anda.",
+	"notice.newFailed": "Alias tidak dapat dibuat. Coba lagi.",
 };
 
 export default dictionary;

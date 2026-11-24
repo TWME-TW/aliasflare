@@ -143,7 +143,7 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias");
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
-		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references)];
+		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
 		const toForwarded = await mapOriginalToForwarded(db, parentIds);
 		const inReplyTo = parseMessageIds(email.inReplyTo).map((id) => toForwarded.get(id) ?? id)[0];
 		const references = parseMessageIds(email.references)

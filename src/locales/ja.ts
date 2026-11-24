@@ -331,6 +331,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "先にエイリアスを 1 件以上選択してください。",
 	"notice.bulkDone": "{count} 件のエイリアスを更新しました。",
 	"notice.bulkBad": "操作を選択し、エイリアスを 1 件以上選択してください。",
+	"new.title": "新しいエイリアス",
+	"new.prefix": "エイリアス名",
+	"new.prefixPlaceholder": "名前（例：shop）（空欄でランダム生成）",
+	"new.domain": "エイリアスのドメイン",
+	"new.suffix": "ランダムなサフィックスを追加（例：{example}）",
+	"new.help": "サフィックスを付けると、エイリアスが推測されにくくなります。名前を入力しない場合は、「設定」で選んだ形式でランダムなエイリアスが作成されます。",
+	"new.note": "メモ（任意）",
+	"new.destination": "転送先アドレス（空欄でデフォルト）",
+	"new.create": "エイリアスを作成",
+	"new.noDomains": "ここでエイリアスを作成するには、先に「設定」でエイリアス用ドメインを追加してください。",
+	"notice.newCreated": "{alias} を作成しました。",
+	"notice.newExists": "そのエイリアスはすでに存在します。別の名前を選ぶか、サフィックスを追加してください。",
+	"notice.newBadPrefix": "使用できるのは英字、数字、ドット、ハイフン、アンダースコア、プラス記号のみです。先頭と末尾は英字または数字にしてください。",
+	"notice.newBadDomain": "エイリアス用ドメインのいずれかを選択してください。",
+	"notice.newFailed": "エイリアスを作成できませんでした。もう一度お試しください。",
 };
 
 export default dictionary;

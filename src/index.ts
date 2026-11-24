@@ -16,6 +16,7 @@ import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
 import { setUpCloudflare, type SetupStep } from "./cloudflare";
 import { api } from "./compat/api";
+import { ClientError, cleanPrefix, createAlias, createRandomAlias, randomSuffix } from "./compat/aliases";
 import { envOverrides, loadConfig, missingConnection, saveConfig, type AppConfig } from "./config";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
@@ -134,14 +135,27 @@ app.get("/assets/app.js", (c) => {
 });
 
 // The language menu submits here (GET /lang?locale=…&next=…); /lang/:locale is the no-form link form.
+/**
+ * A path on this site to redirect to, or "/". Control characters and backslashes are
+ * refused outright, since browsers drop or rewrite them and "/\t/evil.example" would
+ * otherwise become "//evil.example".
+ */
+export function safeLocalPath(value: string | undefined | null): string {
+	if (!value || !value.startsWith("/") || /[\x00-\x1f\x7f\\]/.test(value)) return "/";
+	try {
+		const parsed = new URL(value, "https://local.invalid");
+		return parsed.origin === "https://local.invalid" ? `${parsed.pathname}${parsed.search}${parsed.hash}` : "/";
+	} catch {
+		return "/";
+	}
+}
+
 app.get("/lang/:locale?", (c) => {
 	const locale = c.req.param("locale") ?? c.req.query("locale");
 	if (isLocale(locale)) {
 		setCookie(c, LANG_COOKIE, locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 	}
-	const next = c.req.query("next") ?? "/";
-	// Only same-site paths, so the switcher cannot be used as an open redirect.
-	return c.redirect(next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/");
+	return c.redirect(safeLocalPath(c.req.query("next")));
 });
 
 // SimpleLogin and addy.io client APIs (off until enabled in Settings).
@@ -264,10 +278,10 @@ app.post("/logout", (c) => {
 	return c.redirect("/login");
 });
 
-// Everything below is the dashboard and needs a signed-in passkey session.
-for (const path of ["/", "/settings", "/connection", "/blocklist", "/blocklist/*", "/passkeys", "/passkeys/*", "/api-keys", "/api-keys/*", "/import", "/import/*", "/aliases/*"]) {
-	app.use(path, requireAdmin);
-}
+// Everything registered below is the dashboard and needs a signed-in passkey session (and a
+// same-origin request for changes). The public routes above return before this runs, so a new
+// dashboard route is protected without being listed anywhere.
+app.use("*", requireAdmin);
 
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
 export type AliasFilter = (typeof ALIAS_FILTERS)[number];
@@ -599,7 +613,7 @@ const BULK_ACTIONS = ["all", "no_promotions", "none", "pin", "unpin", "note", "d
 
 app.post("/aliases/bulk", async (c) => {
 	const form = await c.req.parseBody({ all: true });
-	const back = typeof form.back === "string" && /^\/(\?[^\s]*)?$/.test(form.back) ? form.back : "/";
+	const back = typeof form.back === "string" && /^\/(\?|$)/.test(form.back) ? safeLocalPath(form.back) : "/";
 	const done = (key: MessageKey, params?: Record<string, string>) =>
 		c.redirect(`${back}${back.includes("?") ? "&" : "?"}notice=${encodeURIComponent(c.get("t")(key, params))}`);
 	const action = form.action as (typeof BULK_ACTIONS)[number];
@@ -652,6 +666,50 @@ app.post("/aliases/:address/mode", async (c) => {
 	if (!isForwardMode(form.mode)) return redirectWithNotice(c, "/", "notice.badMode");
 	await setForwardMode(c.env.DB, address, form.mode);
 	return redirectWithNotice(c, "/", "notice.modeSaved", { alias: address });
+});
+
+app.post("/aliases/new", async (c) => {
+	const db = c.env.DB;
+	const settings = await loadSettings(db);
+	const reverseDomain = c.get("config").reverseDomain;
+	const form = await c.req.parseBody();
+	const field = (name: string, max: number) => (typeof form[name] === "string" ? (form[name] as string).trim().slice(0, max) : "");
+	const domain = field("domain", 253).toLowerCase();
+	if (!settings.aliasDomains.includes(domain) || domain === reverseDomain) return redirectWithNotice(c, "/", "notice.newBadDomain");
+	const rawDestination = field("destination", 254);
+	const destination = rawDestination ? extractEmail(rawDestination) : null;
+	if (rawDestination && !destination) return redirectWithNotice(c, "/", "notice.badDestination");
+	if (destination && ((reverseDomain && domainOf(destination) === reverseDomain) || settings.aliasDomains.includes(domainOf(destination)))) {
+		return redirectWithNotice(c, "/", "notice.loop");
+	}
+	const note = field("note", 500) || null;
+	const prefix = field("prefix", 64);
+	try {
+		let alias;
+		if (!prefix) {
+			alias = await createRandomAlias(db, settings, reverseDomain, { domain, note, destination });
+		} else {
+			const cleaned = cleanPrefix(prefix);
+			if (!cleaned || cleaned !== prefix.toLowerCase()) return redirectWithNotice(c, "/", "notice.newBadPrefix");
+			// With a suffix a taken prefix is not a dead end: try a few suffixes before giving up.
+			const tries = form.suffix ? 5 : 1;
+			for (let attempt = 0; ; attempt += 1) {
+				try {
+					const localPart = form.suffix ? `${cleaned}${randomSuffix(settings.customSuffix)}` : cleaned;
+					alias = await createAlias(db, settings, reverseDomain, { localPart, domain, note, destination });
+					break;
+				} catch (error) {
+					if (!(error instanceof ClientError && error.status === 409) || attempt + 1 >= tries) throw error;
+				}
+			}
+		}
+		return redirectWithNotice(c, "/", "notice.newCreated", { alias: alias.address });
+	} catch (error) {
+		if (error instanceof ClientError) {
+			return redirectWithNotice(c, "/", error.status === 409 ? "notice.newExists" : error.status === 400 ? "notice.newBadPrefix" : "notice.newFailed");
+		}
+		throw error;
+	}
 });
 
 app.post("/aliases/:address/destination", async (c) => {
@@ -711,6 +769,8 @@ app.post("/aliases/:address/contacts/:id/block", async (c) => {
 	await c.env.DB.prepare("UPDATE contacts SET blocked = 1 - blocked WHERE id = ? AND alias_address = ?").bind(c.req.param("id"), address).run();
 	return c.redirect(`/aliases/${encodeURIComponent(address)}`);
 });
+
+export { app };
 
 export default {
 	fetch: app.fetch,

@@ -352,6 +352,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Selecione pelo menos um alias primeiro.",
 	"notice.bulkDone": "{count} aliases atualizados.",
 	"notice.bulkBad": "Escolha uma ação e pelo menos um alias.",
+	"new.title": "Novo alias",
+	"new.prefix": "Nome do alias",
+	"new.prefixPlaceholder": "Nome, como shop (vazio para um alias aleatório)",
+	"new.domain": "Domínio do alias",
+	"new.suffix": "Adicionar um sufixo aleatório, como {example}",
+	"new.help": "Um sufixo torna o alias mais difícil de adivinhar. Sem nome, um alias aleatório é criado no formato escolhido em Configurações.",
+	"new.note": "Nota (opcional)",
+	"new.destination": "Endereço de encaminhamento (vazio para o padrão)",
+	"new.create": "Criar alias",
+	"new.noDomains": "Para criar aliases aqui, adicione primeiro um domínio de alias em Configurações.",
+	"notice.newCreated": "{alias} criado.",
+	"notice.newExists": "Esse alias já existe. Escolha outro nome ou adicione um sufixo.",
+	"notice.newBadPrefix": "Use apenas letras, números, pontos, hífens, sublinhados e sinais de mais, começando e terminando com letra ou número.",
+	"notice.newBadDomain": "Escolha um dos seus domínios de alias.",
+	"notice.newFailed": "Não foi possível criar o alias. Tente novamente.",
 };
 
 export default dictionary;

@@ -354,6 +354,21 @@ export const en = {
 	"bulk.noneSelected": "Select at least one alias first.",
 	"notice.bulkDone": "Updated {count} aliases.",
 	"notice.bulkBad": "Choose an action and at least one alias.",
+	"new.title": "New alias",
+	"new.prefix": "Alias name",
+	"new.prefixPlaceholder": "Name, like shop (empty for a random alias)",
+	"new.domain": "Alias domain",
+	"new.suffix": "Add a random suffix, like {example}",
+	"new.help": "A suffix makes the alias harder to guess. Without a name, a random alias is created in the format chosen in Settings.",
+	"new.note": "Note (optional)",
+	"new.destination": "Forwarding address (empty for the default)",
+	"new.create": "Create alias",
+	"new.noDomains": "To create aliases here, add an alias domain in Settings first.",
+	"notice.newCreated": "Created {alias}.",
+	"notice.newExists": "That alias already exists. Choose another name or add a suffix.",
+	"notice.newBadPrefix": "Use only letters, digits, dots, hyphens, underscores and plus signs, starting and ending with a letter or digit.",
+	"notice.newBadDomain": "Choose one of your alias domains.",
+	"notice.newFailed": "The alias could not be created. Try again.",
 };
 
 export type MessageKey = keyof typeof en;

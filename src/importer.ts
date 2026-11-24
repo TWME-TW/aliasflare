@@ -116,7 +116,12 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 	for (let attempt = 0; ; attempt += 1) {
 		let response: Response;
 		try {
-			response = await fetch(url, { headers: { Accept: "application/json", "User-Agent": "mailflare-alias-import", ...headers } });
+			// No redirects: the key travels in a custom header that fetch would carry to any host.
+			response = await fetch(url, {
+				headers: { Accept: "application/json", "User-Agent": "mailflare-alias-import", ...headers },
+				redirect: "error",
+				signal: AbortSignal.timeout(20_000),
+			});
 		} catch (error) {
 			throw new ImportError("fetch", error instanceof Error ? error.message : String(error));
 		}

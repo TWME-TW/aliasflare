@@ -337,6 +337,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Hãy chọn ít nhất một bí danh trước.",
 	"notice.bulkDone": "Đã cập nhật {count} bí danh.",
 	"notice.bulkBad": "Hãy chọn một thao tác và ít nhất một bí danh.",
+	"new.title": "Bí danh mới",
+	"new.prefix": "Tên bí danh",
+	"new.prefixPlaceholder": "Tên, ví dụ shop (để trống để tạo bí danh ngẫu nhiên)",
+	"new.domain": "Tên miền bí danh",
+	"new.suffix": "Thêm hậu tố ngẫu nhiên, ví dụ {example}",
+	"new.help": "Hậu tố giúp bí danh khó đoán hơn. Nếu không nhập tên, hệ thống sẽ tạo bí danh ngẫu nhiên theo định dạng đã chọn trong Cài đặt.",
+	"new.note": "Ghi chú (tùy chọn)",
+	"new.destination": "Địa chỉ chuyển tiếp (để trống để dùng mặc định)",
+	"new.create": "Tạo bí danh",
+	"new.noDomains": "Để tạo bí danh ở đây, hãy thêm tên miền bí danh trong Cài đặt trước.",
+	"notice.newCreated": "Đã tạo {alias}.",
+	"notice.newExists": "Bí danh này đã tồn tại. Hãy chọn tên khác hoặc thêm hậu tố.",
+	"notice.newBadPrefix": "Chỉ dùng chữ cái, chữ số, dấu chấm, dấu gạch ngang, gạch dưới và dấu cộng; phải bắt đầu và kết thúc bằng chữ cái hoặc chữ số.",
+	"notice.newBadDomain": "Hãy chọn một trong các tên miền bí danh của bạn.",
+	"notice.newFailed": "Không thể tạo bí danh. Vui lòng thử lại.",
 };
 
 export default dictionary;

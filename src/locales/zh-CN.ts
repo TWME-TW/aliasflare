@@ -331,6 +331,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "请先至少选择一个别名。",
 	"notice.bulkDone": "已更新 {count} 个别名。",
 	"notice.bulkBad": "请选择一项操作，并至少选择一个别名。",
+	"new.title": "新建别名",
+	"new.prefix": "别名名称",
+	"new.prefixPlaceholder": "名称，例如 shop（留空则随机生成）",
+	"new.domain": "别名域名",
+	"new.suffix": "添加随机后缀，例如 {example}",
+	"new.help": "后缀可以让别名更难被猜到。不填名称时，会按「设置」中选择的格式随机生成别名。",
+	"new.note": "备注（选填）",
+	"new.destination": "转发地址（留空则使用默认值）",
+	"new.create": "创建别名",
+	"new.noDomains": "要在这里创建别名，请先在「设置」中添加别名域名。",
+	"notice.newCreated": "已创建 {alias}。",
+	"notice.newExists": "该别名已存在。请换一个名称，或添加后缀。",
+	"notice.newBadPrefix": "仅可使用英文字母、数字、点、连字符、下划线和加号，且必须以字母或数字开头和结尾。",
+	"notice.newBadDomain": "请选择你的别名域名之一。",
+	"notice.newFailed": "无法创建别名，请重试。",
 };
 
 export default dictionary;

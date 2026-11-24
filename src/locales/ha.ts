@@ -352,6 +352,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Da farko zaɓi aƙalla laƙabi ɗaya.",
 	"notice.bulkDone": "An sabunta laƙabi {count}.",
 	"notice.bulkBad": "Zaɓi aiki da aƙalla laƙabi ɗaya.",
+	"new.title": "Sabon laƙabi",
+	"new.prefix": "Sunan laƙabi",
+	"new.prefixPlaceholder": "Suna, misali shop (bar wofi don laƙabi bazuwa)",
+	"new.domain": "Domain na laƙabi",
+	"new.suffix": "Ƙara ƙarin ƙarshe bazuwa, misali {example}",
+	"new.help": "Ƙarin ƙarshe yana sa laƙabi ya yi wuyar zato. Idan ba a sa suna ba, za a ƙirƙiri laƙabi bazuwa a tsarin da aka zaɓa a Saituna.",
+	"new.note": "Bayani (zaɓi)",
+	"new.destination": "Adireshin tura saƙo (bar wofi don tsoho)",
+	"new.create": "Ƙirƙiri laƙabi",
+	"new.noDomains": "Don ƙirƙirar laƙabi a nan, da farko ƙara domain na laƙabi a Saituna.",
+	"notice.newCreated": "An ƙirƙiri {alias}.",
+	"notice.newExists": "Wannan laƙabi ya riga ya wanzu. Zaɓi wani suna ko ƙara ƙarin ƙarshe.",
+	"notice.newBadPrefix": "Yi amfani da haruffa, lambobi, digo, alamar haɗi, ƙasa-ƙasa da alamar ƙari kawai, kuma fara da ƙare da harafi ko lamba.",
+	"notice.newBadDomain": "Zaɓi ɗaya daga cikin domains ɗin laƙabinka.",
+	"notice.newFailed": "Ba a iya ƙirƙirar laƙabin ba. Sake gwadawa.",
 };
 
 export default dictionary;

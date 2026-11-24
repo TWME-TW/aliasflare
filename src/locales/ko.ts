@@ -352,6 +352,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "먼저 별칭을 하나 이상 선택하세요.",
 	"notice.bulkDone": "별칭 {count}개를 업데이트했습니다.",
 	"notice.bulkBad": "작업을 선택하고 별칭을 하나 이상 선택하세요.",
+	"new.title": "새 별칭",
+	"new.prefix": "별칭 이름",
+	"new.prefixPlaceholder": "이름 입력, 예: shop (비워 두면 무작위 별칭)",
+	"new.domain": "별칭 도메인",
+	"new.suffix": "무작위 접미사 추가, 예: {example}",
+	"new.help": "접미사를 붙이면 별칭을 추측하기 어려워집니다. 이름을 입력하지 않으면 「설정」에서 선택한 형식으로 무작위 별칭이 만들어집니다.",
+	"new.note": "메모(선택)",
+	"new.destination": "전달 주소 (비워 두면 기본값)",
+	"new.create": "별칭 만들기",
+	"new.noDomains": "여기서 별칭을 만들려면 먼저 「설정」에서 별칭 도메인을 추가하세요.",
+	"notice.newCreated": "{alias} 별칭을 만들었습니다.",
+	"notice.newExists": "이미 존재하는 별칭입니다. 다른 이름을 입력하거나 접미사를 추가하세요.",
+	"notice.newBadPrefix": "문자, 숫자, 점, 하이픈, 밑줄, 플러스 기호만 사용할 수 있으며, 문자 또는 숫자로 시작하고 끝나야 합니다.",
+	"notice.newBadDomain": "별칭 도메인 중 하나를 선택하세요.",
+	"notice.newFailed": "별칭을 만들지 못했습니다. 다시 시도하세요.",
 };
 
 export default dictionary;

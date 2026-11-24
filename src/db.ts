@@ -133,12 +133,21 @@ export async function getContactByReverseLocal(db: D1Database, reverseLocal: str
 	return db.prepare("SELECT * FROM contacts WHERE reverse_local = ?").bind(reverseLocal.toLowerCase()).first<ContactRow>();
 }
 
-export async function getContactsByReverseLocals(db: D1Database, locals: string[]): Promise<ContactRow[]> {
-	if (locals.length === 0) return [];
-	const placeholders = locals.map(() => "?").join(", ");
+/**
+ * De-duplicates values for an IN (...) list and keeps at most `limit` of them: D1 allows
+ * 100 bound parameters per statement, and mail can carry any number of addresses or IDs.
+ */
+export function boundedList(values: string[], limit = 80): string[] {
+	return [...new Set(values)].slice(0, limit);
+}
+
+export async function getContactsByReverseLocals(db: D1Database, aliasAddress: string, locals: string[]): Promise<ContactRow[]> {
+	const unique = boundedList(locals.map((local) => local.toLowerCase()));
+	if (unique.length === 0) return [];
+	const placeholders = unique.map(() => "?").join(", ");
 	const { results } = await db
-		.prepare(`SELECT * FROM contacts WHERE reverse_local IN (${placeholders})`)
-		.bind(...locals.map((local) => local.toLowerCase()))
+		.prepare(`SELECT * FROM contacts WHERE alias_address = ? AND reverse_local IN (${placeholders})`)
+		.bind(aliasAddress, ...unique)
 		.all<ContactRow>();
 	return results;
 }
@@ -197,8 +206,9 @@ export async function recordEvent(
 }
 
 /** Maps Message-IDs the user's mail client saw (forwarded copies) back to the originals. */
-export async function mapForwardedToOriginal(db: D1Database, ids: string[]): Promise<Map<string, string>> {
+export async function mapForwardedToOriginal(db: D1Database, allIds: string[]): Promise<Map<string, string>> {
 	const map = new Map<string, string>();
+	const ids = boundedList(allIds);
 	if (ids.length === 0) return map;
 	const placeholders = ids.map(() => "?").join(", ");
 	const { results } = await db
@@ -212,8 +222,9 @@ export async function mapForwardedToOriginal(db: D1Database, ids: string[]): Pro
 }
 
 /** The reverse of mapForwardedToOriginal, so forwarded copies thread together in the user's client. */
-export async function mapOriginalToForwarded(db: D1Database, ids: string[]): Promise<Map<string, string>> {
+export async function mapOriginalToForwarded(db: D1Database, allIds: string[]): Promise<Map<string, string>> {
 	const map = new Map<string, string>();
+	const ids = boundedList(allIds);
 	if (ids.length === 0) return map;
 	const placeholders = ids.map(() => "?").join(", ");
 	const { results } = await db
@@ -237,7 +248,8 @@ export type BlocklistRow = { id: string; kind: "address" | "domain"; value: stri
 
 /** Candidate blocklist values for a sender: the address, its domain and every parent domain. */
 export function blocklistCandidates(email: string): string[] {
-	const labels = domainOf(email).split(".");
+	// A real domain has at most 127 labels; the cap keeps a crafted one inside D1's limits.
+	const labels = domainOf(email).split(".").slice(-60);
 	const domains: string[] = [];
 	for (let index = 0; index < labels.length - 1; index += 1) domains.push(labels.slice(index).join("."));
 	return [email, ...domains];

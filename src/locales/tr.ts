@@ -337,6 +337,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Önce en az bir takma ad seçin.",
 	"notice.bulkDone": "{count} takma ad güncellendi.",
 	"notice.bulkBad": "Bir işlem ve en az bir takma ad seçin.",
+	"new.title": "Yeni takma ad",
+	"new.prefix": "Takma ad adı",
+	"new.prefixPlaceholder": "Ad, ör. shop (rastgele takma ad için boş bırakın)",
+	"new.domain": "Takma ad alan adı",
+	"new.suffix": "Rastgele son ek ekle, ör. {example}",
+	"new.help": "Son ek, takma adın tahmin edilmesini zorlaştırır. Ad girilmezse, Ayarlar'da seçilen biçimde rastgele bir takma ad oluşturulur.",
+	"new.note": "Not (isteğe bağlı)",
+	"new.destination": "Yönlendirme adresi (varsayılan için boş bırakın)",
+	"new.create": "Takma ad oluştur",
+	"new.noDomains": "Burada takma ad oluşturmak için önce Ayarlar'dan bir takma ad alan adı ekleyin.",
+	"notice.newCreated": "{alias} oluşturuldu.",
+	"notice.newExists": "Bu takma ad zaten var. Başka bir ad seçin veya bir son ek ekleyin.",
+	"notice.newBadPrefix": "Yalnızca harf, rakam, nokta, kısa çizgi, alt çizgi ve artı işareti kullanın; harf veya rakamla başlayıp bitmelidir.",
+	"notice.newBadDomain": "Takma ad alan adlarınızdan birini seçin.",
+	"notice.newFailed": "Takma ad oluşturulamadı. Lütfen tekrar deneyin.",
 };
 
 export default dictionary;

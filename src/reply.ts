@@ -33,17 +33,72 @@ export function firstAuthenticationResults(rawHeaders: string): string | null {
 }
 
 /**
- * True when Cloudflare's own Authentication-Results says DMARC passed and, when it names
- * the From domain it evaluated, that domain is the expected one.
+ * Splits an Authentication-Results value (RFC 8601) into its clauses at top-level
+ * semicolons. Comments are dropped and quoted strings kept whole, so a semicolon or a
+ * "dmarc=pass" inside a quoted address or a comment cannot start a clause of its own.
+ */
+export function authResultClauses(value: string): string[] {
+	const clauses: string[] = [];
+	let current = "";
+	let depth = 0;
+	let quoted = false;
+	for (let i = 0; i < value.length; i++) {
+		const ch = value[i]!;
+		if (quoted) {
+			current += ch;
+			if (ch === "\\") current += value[++i] ?? "";
+			else if (ch === '"') quoted = false;
+		} else if (depth > 0) {
+			if (ch === "\\") i++;
+			else if (ch === "(") depth++;
+			else if (ch === ")") depth--;
+		} else if (ch === '"') {
+			quoted = true;
+			current += ch;
+		} else if (ch === "(") {
+			depth = 1;
+			current += " ";
+		} else if (ch === ";") {
+			clauses.push(current.trim());
+			current = "";
+		} else current += ch;
+	}
+	clauses.push(current.trim());
+	return clauses;
+}
+
+/**
+ * True when Cloudflare's own Authentication-Results has exactly one DMARC result, it is
+ * a pass, and (when a domain is expected) it names that domain as the From domain.
  */
 export function dmarcPassedByCloudflare(value: string | null, fromDomain?: string): boolean {
 	if (!value) return false;
-	const [authserv, ...results] = value.split(";");
-	if (authserv?.trim().split(/\s+/)[0]?.toLowerCase() !== "mx.cloudflare.net") return false;
-	const dmarc = results.find((result) => /^\s*dmarc\s*=\s*pass\b/i.test(result));
-	if (!dmarc) return false;
-	const evaluated = dmarc.match(/header\.from\s*=\s*([^\s;]+)/i)?.[1]?.toLowerCase();
-	return !fromDomain || !evaluated || evaluated === fromDomain.toLowerCase();
+	const [authserv, ...results] = authResultClauses(value);
+	if (authserv?.split(/\s+/)[0]?.toLowerCase() !== "mx.cloudflare.net") return false;
+	const dmarc = results.filter((result) => /^dmarc\s*=/i.test(result));
+	if (dmarc.length !== 1 || !/^dmarc\s*=\s*pass\b/i.test(dmarc[0]!)) return false;
+	if (!fromDomain) return true;
+	const evaluated = dmarc[0]!.match(/(?:^|\s)header\.from\s*=\s*([A-Za-z0-9.-]+)(?=\s|$)/i)?.[1]?.toLowerCase();
+	return evaluated === fromDomain.toLowerCase();
+}
+
+/**
+ * The one sender address of a message, or null unless it has exactly one From header
+ * holding exactly one plain mailbox (no group, no quoted local part) and any Sender
+ * header names the same address.
+ */
+export function singleSender(rawHeaders: string, parsedFrom: string | undefined): string | null {
+	const unfolded = rawHeaders.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/);
+	const fromHeaders = unfolded.filter((line) => /^from\s*:/i.test(line));
+	if (fromHeaders.length !== 1) return null;
+	if (!parsedFrom || /["<>()\s,;:\\]/.test(parsedFrom) || !/^[^@]+@[^@]+\.[^@]+$/.test(parsedFrom)) return null;
+	const from = parsedFrom.toLowerCase();
+	// More than one address (a list or a group) shows up as more than one "@" outside quotes.
+	const value = fromHeaders[0]!.replace(/^from\s*:/i, "").replace(/"(?:[^"\\]|\\.)*"/g, '""');
+	if ((value.match(/@/g) ?? []).length !== 1 || /[,;:]/.test(value.replace(/<[^<>]*>/g, ""))) return null;
+	const sender = unfolded.find((line) => /^sender\s*:/i.test(line));
+	if (sender && extractEmail(sender.replace(/^sender\s*:/i, "")) !== from) return null;
+	return from;
 }
 
 function headerSection(raw: Uint8Array): string {
@@ -73,17 +128,22 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	const alias = await getAlias(db, contact.alias_address);
+	if (!alias || alias.deleted_at) {
+		message.setReject("This address does not exist");
+		return;
+	}
 	const settings = await loadSettings(db);
-	const destination = alias?.destination || settings.defaultDestination;
+	const destination = alias.destination || settings.defaultDestination;
 
 	const raw = new Uint8Array(await new Response(message.raw).arrayBuffer());
-	const authResults = firstAuthenticationResults(headerSection(raw));
+	const headers = headerSection(raw);
+	const authResults = firstAuthenticationResults(headers);
 	const email = await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" });
-	const headerFrom = extractEmail(email.from?.address ?? null);
+	const headerFrom = singleSender(headers, email.from?.address);
 
 	// Only the alias owner may write through a reverse alias, or anyone could send as the alias.
-	const dmarcPass = dmarcPassedByCloudflare(authResults, destination ? domainOf(destination) : undefined);
-	if (!alias || !destination || headerFrom !== normalizeEmail(destination) || !dmarcPass) {
+	const dmarcPass = !!destination && dmarcPassedByCloudflare(authResults, domainOf(destination));
+	if (!destination || headerFrom !== normalizeEmail(destination) || !dmarcPass) {
 		await recordEvent(db, {
 			kind: "reply",
 			contactId: contact.id,
@@ -94,6 +154,14 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject("Only the owner of this alias can send through this address");
 		return;
 	}
+	// The owner turned this alias or this correspondent off: an auto-reply or a stray reply
+	// should not go out anyway.
+	if (alias.forward_mode === "none" || contact.blocked) {
+		const why = contact.blocked ? "the correspondent is blocked" : "the alias is turned off";
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Not sent: ${why}` });
+		message.setReject(`Not sent: ${why}`);
+		return;
+	}
 
 	let html = email.html ?? undefined;
 	let text = email.text ?? undefined;
@@ -102,7 +170,8 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		const reverseLocals = findAddressesOnDomain(body, reverseDomain)
 			.map(reverseLocalOf)
 			.filter((local): local is string => !!local);
-		const contacts = await getContactsByReverseLocals(db, reverseLocals);
+		// Only this alias's own correspondents: a reverse alias of another alias stays as it is.
+		const contacts = await getContactsByReverseLocals(db, contact.alias_address, reverseLocals);
 		const replacements: Replacement[] = contacts.flatMap((found) => [
 			{ from: reverseAddress(found.reverse_local, reverseDomain), to: found.email },
 			{ from: `${found.reverse_local}@${reverseDomain}`, to: found.email },
@@ -112,7 +181,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		if (text) text = replaceAddresses(text, replacements);
 	}
 
-	const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references)];
+	const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
 	const toOriginal = await mapForwardedToOriginal(db, parentIds);
 	const inReplyTo = parseMessageIds(email.inReplyTo).map((id) => toOriginal.get(id) ?? id)[0];
 	const references = parseMessageIds(email.references)

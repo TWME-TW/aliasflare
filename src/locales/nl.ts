@@ -337,6 +337,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Selecteer eerst minstens één alias.",
 	"notice.bulkDone": "{count} aliassen bijgewerkt.",
 	"notice.bulkBad": "Kies een actie en minstens één alias.",
+	"new.title": "Nieuwe alias",
+	"new.prefix": "Aliasnaam",
+	"new.prefixPlaceholder": "Naam, bijv. shop (leeg voor een willekeurige alias)",
+	"new.domain": "Aliasdomein",
+	"new.suffix": "Voeg een willekeurig achtervoegsel toe, bijv. {example}",
+	"new.help": "Een achtervoegsel maakt de alias moeilijker te raden. Zonder naam wordt een willekeurige alias gemaakt in de indeling die je bij Instellingen hebt gekozen.",
+	"new.note": "Notitie (optioneel)",
+	"new.destination": "Doorstuuradres (leeg voor de standaard)",
+	"new.create": "Alias aanmaken",
+	"new.noDomains": "Om hier aliassen aan te maken, voeg je eerst een aliasdomein toe bij Instellingen.",
+	"notice.newCreated": "{alias} aangemaakt.",
+	"notice.newExists": "Die alias bestaat al. Kies een andere naam of voeg een achtervoegsel toe.",
+	"notice.newBadPrefix": "Gebruik alleen letters, cijfers, punten, koppeltekens, underscores en plustekens, en begin en eindig met een letter of cijfer.",
+	"notice.newBadDomain": "Kies een van je aliasdomeinen.",
+	"notice.newFailed": "De alias kon niet worden aangemaakt. Probeer het opnieuw.",
 };
 
 export default dictionary;

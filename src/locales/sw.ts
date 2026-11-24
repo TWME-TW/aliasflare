@@ -352,6 +352,21 @@ const dictionary: Dictionary = {
 	"bulk.noneSelected": "Chagua angalau lakabu moja kwanza.",
 	"notice.bulkDone": "Lakabu {count} zimesasishwa.",
 	"notice.bulkBad": "Chagua kitendo na angalau lakabu moja.",
+	"new.title": "Lakabu mpya",
+	"new.prefix": "Jina la lakabu",
+	"new.prefixPlaceholder": "Jina, mfano shop (acha tupu kwa lakabu ya nasibu)",
+	"new.domain": "Kikoa cha lakabu",
+	"new.suffix": "Ongeza kiambishi tamati cha nasibu, mfano {example}",
+	"new.help": "Kiambishi tamati hufanya lakabu iwe ngumu kukisia. Bila jina, lakabu ya nasibu huundwa kwa muundo uliochaguliwa katika Mipangilio.",
+	"new.note": "Maelezo (si lazima)",
+	"new.destination": "Anwani ya kutuma (acha tupu kwa chaguo-msingi)",
+	"new.create": "Unda lakabu",
+	"new.noDomains": "Ili kuunda lakabu hapa, kwanza ongeza kikoa cha lakabu katika Mipangilio.",
+	"notice.newCreated": "Imeundwa {alias}.",
+	"notice.newExists": "Lakabu hiyo tayari ipo. Chagua jina lingine au ongeza kiambishi tamati.",
+	"notice.newBadPrefix": "Tumia herufi, tarakimu, nukta, viunganishi, mistari ya chini na alama ya kujumlisha pekee; anza na kumaliza kwa herufi au tarakimu.",
+	"notice.newBadDomain": "Chagua mojawapo ya vikoa vyako vya lakabu.",
+	"notice.newFailed": "Lakabu haikuweza kuundwa. Jaribu tena.",
 };
 
 export default dictionary;

@@ -33,6 +33,7 @@ Mailflare keeps your mail. mailflare-alias forwards a copy to the inbox you alre
 - **Forwarding modes per alias.** *Forward everything*, *Block promotions* (list mail) or *Forward nothing*.
 - **Blocklist.** Block an address, or a domain with its subdomains, across all aliases.
 - **Search and batch editing.** Search the alias list by address, note, name or forwarding address, filter it (forwarding, not forwarding, pinned, deleted), then tick aliases to change their forwarding mode, pin them, set a note or forwarding address, delete, restore or permanently delete them in one go.
+- **Create aliases on the alias page.** Pick a name and one of your alias domains, optionally with a random suffix, a note and a forwarding address, or leave the name empty for a random alias. An alias exists from the moment you create it, before it receives any mail.
 - **Notes** on each alias, edited right in the alias list. Aliases that appear because mail arrived for them are noted *Created by catchall option*, as in SimpleLogin.
 
 **Apps and browser extensions**
