@@ -233,7 +233,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Haruffa na bazuwar",
 	"set.format.uuid": "UUID",
 	"keys.title": "Maɓallan API",
-	"keys.help": "Kowace manhaja ko ƙarin browser tana shiga da maɓallinta. Maɓalli na iya sarrafa laƙabi amma ba zai iya canja saituna ba.",
+	"keys.help": "Kowace manhaja ko ƙarin browser tana shiga da maɓallinta. Maɓalli na iya sarrafa laƙabi kuma, idan Saituna sun yarda, ya canja saitunan da manhajoji ke nunawa. Ba zai iya canja haɗi, API ko maɓallai ba.",
 	"keys.off": "Duk APIs na clients a kashe suke. Kunna su a Saituna.",
 	"keys.serverUrl": "URL na sabar don manhajoji",
 	"keys.none": "Babu maɓallan API tukuna.",
@@ -310,6 +310,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Lambobi",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID a tushe",
+	"set.customSuffix": "Ƙarin ƙarshe na laƙabi na musamman",
+	"set.customSuffixHelp": "Manhajoji suna sanya shi tsakanin farkon sunanka da domain, kamar shop.maple42@…, don a yi wuya a iya hasashen laƙabi na musamman. Manhajoji kuma za su iya ƙirƙirar laƙabi na musamman ba tare da shi ba.",
+	"set.suffix.word": "Kalma da lambobi, kamar .maple42",
+	"set.suffix.random_string": "Haruffa na bazuwar, kamar .x8k2fq",
+	"set.appSettings": "Bar manhajoji su canja saituna",
+	"set.appSettingsHelp": "Manhajojin SimpleLogin da addy.io na iya canja abin da shafukan saitunansu ke nunawa: tsarin laƙabi da ƙarin ƙarshe, domain na laƙabi na asali, tsarin adireshin mai aikawa, adireshin tura saƙo na asali da jerin da aka toshe. Saitunan haɗi, API da maɓallai a nan kaɗai ake iya canja su.",
+	"set.uiLanguage": "Harshen dashboard",
+	"set.uiLanguageHelp": "Ana adana shi a wannan browser. Har sai ka zaɓa, dashboard yana bin harshen browser ɗinka.",
 };
 
 export default dictionary;

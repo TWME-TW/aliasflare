@@ -233,7 +233,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Caracteres aleatórios",
 	"set.format.uuid": "UUID",
 	"keys.title": "Chaves de API",
-	"keys.help": "Cada app ou extensão de navegador entra com a própria chave. Uma chave pode gerenciar aliases, mas não pode alterar configurações.",
+	"keys.help": "Cada app ou extensão de navegador entra com a própria chave. Uma chave pode gerenciar aliases e, se as Configurações permitirem, alterar as configurações que os apps mostram. Ela não pode alterar a conexão, as APIs nem as chaves.",
 	"keys.off": "As duas APIs de cliente estão desativadas. Ative-as em Configurações.",
 	"keys.serverUrl": "URL do servidor para os apps",
 	"keys.none": "Nenhuma chave de API ainda.",
@@ -310,6 +310,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Rótulos",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID na origem",
+	"set.customSuffix": "Sufixo para aliases personalizados",
+	"set.customSuffixHelp": "Os apps o colocam entre o seu prefixo e o domínio, como em shop.maple42@…, para que os aliases personalizados sejam mais difíceis de adivinhar. Os apps também podem criar aliases personalizados sem ele.",
+	"set.suffix.word": "Uma palavra e números, como .maple42",
+	"set.suffix.random_string": "Caracteres aleatórios, como .x8k2fq",
+	"set.appSettings": "Permitir que os apps alterem configurações",
+	"set.appSettingsHelp": "Os apps do SimpleLogin e do addy.io podem alterar o que as telas de configurações deles mostram: o formato e o sufixo do alias, o domínio de alias padrão, o formato do endereço do remetente, o endereço de encaminhamento padrão e a lista de bloqueio. As configurações de conexão, de API e de chaves só podem ser alteradas aqui.",
+	"set.uiLanguage": "Idioma do painel",
+	"set.uiLanguageHelp": "Salvo neste navegador. Até você escolher um, o painel segue o idioma do seu navegador.",
 };
 
 export default dictionary;

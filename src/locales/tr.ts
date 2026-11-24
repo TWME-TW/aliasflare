@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Rastgele karakterler",
 	"set.format.uuid": "UUID",
 	"keys.title": "API anahtarları",
-	"keys.help": "Her uygulama veya tarayıcı eklentisi kendi anahtarıyla oturum açar. Bir anahtar takma adları yönetebilir ancak ayarları değiştiremez.",
+	"keys.help": "Her uygulama veya tarayıcı eklentisi kendi anahtarıyla oturum açar. Bir anahtar takma adları yönetebilir ve Ayarlar izin veriyorsa uygulamaların gösterdiği ayarları değiştirebilir. Bağlantıyı, API'leri veya anahtarları değiştiremez.",
 	"keys.off": "İki istemci API'si de kapalı. Ayarlar'dan açın.",
 	"keys.serverUrl": "Uygulamalar için sunucu URL'si",
 	"keys.none": "Henüz API anahtarı yok.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Etiketler",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "Kaynaktaki ID",
+	"set.customSuffix": "Özel takma adlar için son ek",
+	"set.customSuffixHelp": "Uygulamalar bunu ön ekinizle alan adı arasına koyar, örneğin shop.maple42@… gibi; böylece özel takma adların tahmin edilmesi zorlaşır. Uygulamalar özel takma adları bu olmadan da oluşturabilir.",
+	"set.suffix.word": "Bir sözcük ve rakamlar, örneğin .maple42",
+	"set.suffix.random_string": "Rastgele karakterler, örneğin .x8k2fq",
+	"set.appSettings": "Uygulamaların ayarları değiştirmesine izin ver",
+	"set.appSettingsHelp": "SimpleLogin ve addy.io uygulamaları, kendi ayar ekranlarında gösterilenleri değiştirebilir: takma ad biçimi ve son eki, varsayılan takma ad alan adı, gönderen adresi biçimi, varsayılan yönlendirme adresi ve engelleme listesi. Bağlantı, API ve anahtar ayarları yalnızca buradan değiştirilebilir.",
+	"set.uiLanguage": "Panel dili",
+	"set.uiLanguageHelp": "Bu tarayıcıda saklanır. Siz bir dil seçene kadar panel, tarayıcınızın dilini kullanır.",
 };
 
 export default dictionary;

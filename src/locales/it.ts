@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Caratteri casuali",
 	"set.format.uuid": "UUID",
 	"keys.title": "Chiavi API",
-	"keys.help": "Ogni app o estensione del browser accede con una propria chiave. Una chiave può gestire gli alias ma non modificare le impostazioni.",
+	"keys.help": "Ogni app o estensione del browser accede con una propria chiave. Una chiave può gestire gli alias e, se le Impostazioni lo consentono, modificare le impostazioni mostrate dalle app. Non può modificare la connessione, le API o le chiavi.",
 	"keys.off": "Entrambe le API client sono disattivate. Attivale nelle Impostazioni.",
 	"keys.serverUrl": "URL del server per le app",
 	"keys.none": "Nessuna chiave API per ora.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Etichette",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID all'origine",
+	"set.customSuffix": "Suffisso per gli alias personalizzati",
+	"set.customSuffixHelp": "Le app lo inseriscono tra il tuo prefisso e il dominio, come in shop.maple42@…, così gli alias personalizzati sono più difficili da indovinare. Le app possono anche creare alias personalizzati senza di esso.",
+	"set.suffix.word": "Una parola e delle cifre, come .maple42",
+	"set.suffix.random_string": "Caratteri casuali, come .x8k2fq",
+	"set.appSettings": "Consenti alle app di modificare le impostazioni",
+	"set.appSettingsHelp": "Le app di SimpleLogin e addy.io possono modificare ciò che mostrano le loro schermate delle impostazioni: il formato e il suffisso degli alias, il dominio alias predefinito, il formato dell'indirizzo del mittente, l'indirizzo di inoltro predefinito e la lista di blocco. Le impostazioni di connessione, API e chiavi si possono modificare solo qui.",
+	"set.uiLanguage": "Lingua della dashboard",
+	"set.uiLanguageHelp": "Salvata in questo browser. Finché non ne scegli una, la dashboard segue la lingua del tuo browser.",
 };
 
 export default dictionary;

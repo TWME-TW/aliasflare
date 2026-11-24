@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Aksara rawak",
 	"set.format.uuid": "UUID",
 	"keys.title": "Kunci API",
-	"keys.help": "Setiap aplikasi atau sambungan pelayar log masuk dengan kuncinya sendiri. Kunci boleh mengurus alias tetapi tidak boleh menukar tetapan.",
+	"keys.help": "Setiap aplikasi atau sambungan pelayar log masuk dengan kuncinya sendiri. Kunci boleh mengurus alias dan, jika Tetapan membenarkan, menukar tetapan yang dipaparkan oleh aplikasi. Kunci tidak boleh menukar sambungan, API atau kunci.",
 	"keys.off": "Kedua-dua API klien dimatikan. Hidupkan dalam Tetapan.",
 	"keys.serverUrl": "URL pelayan untuk aplikasi",
 	"keys.none": "Belum ada kunci API.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Label",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID di sumber",
+	"set.customSuffix": "Akhiran untuk alias tersuai",
+	"set.customSuffixHelp": "Aplikasi meletakkannya di antara awalan anda dengan domain, seperti dalam shop.maple42@…, supaya alias tersuai lebih sukar diteka. Aplikasi juga boleh mencipta alias tersuai tanpanya.",
+	"set.suffix.word": "Satu perkataan dan nombor, seperti .maple42",
+	"set.suffix.random_string": "Aksara rawak, seperti .x8k2fq",
+	"set.appSettings": "Benarkan aplikasi menukar tetapan",
+	"set.appSettingsHelp": "Aplikasi SimpleLogin dan addy.io boleh menukar perkara yang dipaparkan pada skrin tetapan mereka: format dan akhiran alias, domain alias lalai, format alamat penghantar, alamat pemajuan lalai dan senarai sekatan. Tetapan sambungan, API dan kunci hanya boleh ditukar di sini.",
+	"set.uiLanguage": "Bahasa papan pemuka",
+	"set.uiLanguageHelp": "Disimpan dalam pelayar ini. Selagi anda belum memilih, papan pemuka mengikut bahasa pelayar anda.",
 };
 
 export default dictionary;

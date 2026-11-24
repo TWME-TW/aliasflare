@@ -32,7 +32,7 @@ Mailflare keeps your mail. mailflare-alias forwards a copy to the inbox you alre
   - a warning when the sender failed DMARC, so it may be spoofed.
 - **Forwarding modes per alias.** *Forward everything*, *Block promotions* (list mail) or *Forward nothing*.
 - **Blocklist.** Block an address, or a domain with its subdomains, across all aliases.
-- **Notes** on each alias.
+- **Notes** on each alias, edited right in the alias list. Aliases that appear because mail arrived for them are noted *Created by catchall option*, as in SimpleLogin.
 
 **Apps and browser extensions**
 - **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. From there you can list, search, create, pin, enable, disable and delete aliases, change their notes and destinations, and manage reverse aliases (SimpleLogin contacts).
@@ -155,7 +155,11 @@ The page shows what each step did. Running it again is safe.
    - **SimpleLogin**: *API URL*.
    - **addy.io**: *Instance URL*.
 
-Keys can manage aliases but cannot change settings. Only a hash of each key is stored.
+Keys can manage aliases. With *Let apps change settings* on (the default), apps can also change what their own settings screens show:
+- **SimpleLogin**: alias format, suffix of custom aliases, default alias domain, sender address format, and the default mailbox (your default forwarding address);
+- **addy.io**: the blocklist.
+
+Connection, API and key settings can only be changed in the dashboard. Only a hash of each key is stored.
 
 ### 6. Optional: import from SimpleLogin or addy.io
 

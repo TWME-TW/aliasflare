@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Willekeurige tekens",
 	"set.format.uuid": "UUID",
 	"keys.title": "API-sleutels",
-	"keys.help": "Elke app of browserextensie logt in met een eigen sleutel. Een sleutel kan aliassen beheren maar geen instellingen wijzigen.",
+	"keys.help": "Elke app of browserextensie logt in met een eigen sleutel. Een sleutel kan aliassen beheren en, als Instellingen dat toestaan, de instellingen wijzigen die apps tonen. Hij kan de verbinding, de API's of de sleutels niet wijzigen.",
 	"keys.off": "Beide client-API's staan uit. Zet ze aan bij Instellingen.",
 	"keys.serverUrl": "Server-URL voor de apps",
 	"keys.none": "Nog geen API-sleutels.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Labels",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID bij de bron",
+	"set.customSuffix": "Achtervoegsel voor aangepaste aliassen",
+	"set.customSuffixHelp": "Apps plaatsen het tussen je voorvoegsel en het domein, zoals in shop.maple42@…, zodat aangepaste aliassen moeilijker te raden zijn. Apps kunnen aangepaste aliassen ook zonder maken.",
+	"set.suffix.word": "Een woord en cijfers, zoals .maple42",
+	"set.suffix.random_string": "Willekeurige tekens, zoals .x8k2fq",
+	"set.appSettings": "Apps instellingen laten wijzigen",
+	"set.appSettingsHelp": "Apps van SimpleLogin en addy.io mogen wijzigen wat hun instellingenschermen tonen: de aliasindeling en het achtervoegsel, het standaard aliasdomein, de indeling van het afzenderadres, het standaard doorstuuradres en de blokkeerlijst. Instellingen voor verbinding, API en sleutels kunnen alleen hier worden gewijzigd.",
+	"set.uiLanguage": "Taal van het dashboard",
+	"set.uiLanguageHelp": "Opgeslagen in deze browser. Zolang je er geen kiest, volgt het dashboard de taal van je browser.",
 };
 
 export default dictionary;

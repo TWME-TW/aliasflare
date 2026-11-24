@@ -212,7 +212,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "ランダムな文字",
 	"set.format.uuid": "UUID",
 	"keys.title": "API キー",
-	"keys.help": "アプリやブラウザ拡張機能ごとに専用のキーでサインインします。キーではエイリアスを管理できますが、設定は変更できません。",
+	"keys.help": "アプリやブラウザ拡張機能ごとに専用のキーでサインインします。キーではエイリアスを管理できます。「設定」で許可している場合は、アプリに表示される設定も変更できます。接続、API、キーそのものは変更できません。",
 	"keys.off": "どちらのクライアント API もオフです。設定でオンにしてください。",
 	"keys.serverUrl": "アプリに設定するサーバー URL",
 	"keys.none": "API キーはまだありません。",
@@ -289,6 +289,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "ラベル",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "移行元の ID",
+	"set.customSuffix": "カスタムエイリアスのサフィックス",
+	"set.customSuffixHelp": "アプリはこれをプレフィックスとドメインの間に入れます（例：shop.maple42@…）。これによりカスタムエイリアスが推測されにくくなります。アプリはサフィックスなしでカスタムエイリアスを作成することもできます。",
+	"set.suffix.word": "単語と数字（例：.maple42）",
+	"set.suffix.random_string": "ランダムな文字（例：.x8k2fq）",
+	"set.appSettings": "アプリによる設定の変更を許可",
+	"set.appSettingsHelp": "SimpleLogin や addy.io のアプリは、設定画面に表示される項目を変更できます：エイリアスの形式とサフィックス、デフォルトのエイリアスドメイン、送信者アドレスの形式、デフォルトの転送先アドレス、ブロックリスト。接続、API、キーの設定はここでのみ変更できます。",
+	"set.uiLanguage": "ダッシュボードの言語",
+	"set.uiLanguageHelp": "このブラウザーに保存されます。選択するまでは、ダッシュボードはブラウザーの言語に従います。",
 };
 
 export default dictionary;

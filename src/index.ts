@@ -309,9 +309,16 @@ app.get("/settings", async (c) =>
 app.post("/settings", async (c) => {
 	const form = await c.req.parseBody();
 	// The page saves each change as it happens (X-Autosave) and expects JSON; without script it posts the form.
+	// The dashboard language lives in a cookie in this browser; the page reloads to show it.
+	const uiLocale = form.uiLocale;
+	const localeChanged = isLocale(uiLocale) && uiLocale !== c.get("t").locale;
+	if (localeChanged) {
+		setCookie(c, LANG_COOKIE, uiLocale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+		c.set("t", translator(uiLocale));
+	}
 	const reply = (key: MessageKey, ok: boolean, params?: Record<string, string>) =>
 		c.req.header("X-Autosave") === "1"
-			? c.json({ ok, message: c.get("t")(key, params) }, ok ? 200 : 400)
+			? c.json({ ok, message: c.get("t")(key, params), reload: localeChanged }, ok ? 200 : 400)
 			: redirectWithNotice(c, "/settings", key, params);
 	const destination = typeof form.defaultDestination === "string" ? form.defaultDestination.trim() : "";
 	const reverseDomain = c.get("config").reverseDomain;
@@ -328,6 +335,8 @@ app.post("/settings", async (c) => {
 		addyApi: form.addyApi === "1",
 		aliasDomains,
 		randomAliasFormat: form.randomAliasFormat,
+		customSuffix: form.customSuffix,
+		appSettings: form.appSettings === "1",
 		senderFormat: form.senderFormat,
 		reverseAliasReplacement: form.reverseAliasReplacement === "1",
 		includeSenderInReverseAlias: form.includeSenderInReverseAlias === "1",

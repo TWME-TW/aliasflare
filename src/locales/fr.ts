@@ -233,7 +233,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Caractères aléatoires",
 	"set.format.uuid": "UUID",
 	"keys.title": "Clés API",
-	"keys.help": "Chaque application ou extension de navigateur se connecte avec sa propre clé. Une clé peut gérer les alias mais ne peut pas modifier les paramètres.",
+	"keys.help": "Chaque application ou extension de navigateur se connecte avec sa propre clé. Une clé peut gérer les alias et, si les Paramètres l'autorisent, modifier les paramètres affichés par les applications. Elle ne peut pas modifier la connexion, les API ni les clés.",
 	"keys.off": "Les deux API clientes sont désactivées. Activez-les dans les Paramètres.",
 	"keys.serverUrl": "URL du serveur pour les applications",
 	"keys.none": "Aucune clé API pour le moment.",
@@ -310,6 +310,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Libellés",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID à la source",
+	"set.customSuffix": "Suffixe des alias personnalisés",
+	"set.customSuffixHelp": "Les applications le placent entre votre préfixe et le domaine, comme dans shop.maple42@…, pour que les alias personnalisés soient plus difficiles à deviner. Les applications peuvent aussi créer des alias personnalisés sans suffixe.",
+	"set.suffix.word": "Un mot et des chiffres, comme .maple42",
+	"set.suffix.random_string": "Caractères aléatoires, comme .x8k2fq",
+	"set.appSettings": "Autoriser les applications à modifier les paramètres",
+	"set.appSettingsHelp": "Les applications SimpleLogin et addy.io peuvent modifier ce que montrent leurs écrans de paramètres : le format et le suffixe des alias, le domaine d'alias par défaut, le format de l'adresse de l'expéditeur, l'adresse de transfert par défaut et la liste de blocage. Les paramètres de connexion, d'API et de clés ne peuvent être modifiés qu'ici.",
+	"set.uiLanguage": "Langue du tableau de bord",
+	"set.uiLanguageHelp": "Enregistrée dans ce navigateur. Tant que vous n'en choisissez pas une, le tableau de bord suit la langue de votre navigateur.",
 };
 
 export default dictionary;

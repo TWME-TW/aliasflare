@@ -194,6 +194,15 @@ export function randomSuffixWord(): string {
 	return `.${WORDS[randomInt(WORDS.length)]}${randomInt(100)}`;
 }
 
+/** A suffix for custom aliases, as chosen in settings: a word and digits, or random characters. */
+export function randomSuffix(kind: Settings["customSuffix"]): string {
+	if (kind === "word") return randomSuffixWord();
+	const letters = "abcdefghijklmnopqrstuvwxyz0123456789";
+	let out = ".";
+	for (let i = 0; i < 6; i += 1) out += letters[randomInt(letters.length)];
+	return out;
+}
+
 const LOCAL_PART = /^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/;
 
 export function cleanPrefix(prefix: string): string {

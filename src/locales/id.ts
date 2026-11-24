@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Karakter acak",
 	"set.format.uuid": "UUID",
 	"keys.title": "Kunci API",
-	"keys.help": "Setiap aplikasi atau ekstensi peramban masuk dengan kuncinya sendiri. Kunci dapat mengelola alias tetapi tidak dapat mengubah pengaturan.",
+	"keys.help": "Setiap aplikasi atau ekstensi peramban masuk dengan kuncinya sendiri. Kunci dapat mengelola alias dan, jika Pengaturan mengizinkan, mengubah pengaturan yang ditampilkan aplikasi. Kunci tidak dapat mengubah koneksi, API, atau kunci.",
 	"keys.off": "Kedua API klien nonaktif. Aktifkan di Pengaturan.",
 	"keys.serverUrl": "URL server untuk aplikasi",
 	"keys.none": "Belum ada kunci API.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Label",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID di sumber",
+	"set.customSuffix": "Akhiran untuk alias kustom",
+	"set.customSuffixHelp": "Aplikasi menempatkannya di antara awalan Anda dan domain, seperti pada shop.maple42@…, sehingga alias kustom lebih sulit ditebak. Aplikasi juga dapat membuat alias kustom tanpa akhiran ini.",
+	"set.suffix.word": "Sebuah kata dan angka, seperti .maple42",
+	"set.suffix.random_string": "Karakter acak, seperti .x8k2fq",
+	"set.appSettings": "Izinkan aplikasi mengubah pengaturan",
+	"set.appSettingsHelp": "Aplikasi SimpleLogin dan addy.io dapat mengubah apa yang ditampilkan layar pengaturan mereka: format dan akhiran alias, domain alias default, format alamat pengirim, alamat penerusan default, dan daftar blokir. Pengaturan koneksi, API, dan kunci hanya dapat diubah di sini.",
+	"set.uiLanguage": "Bahasa dasbor",
+	"set.uiLanguageHelp": "Disimpan di browser ini. Sebelum Anda memilih, dasbor mengikuti bahasa browser Anda.",
 };
 
 export default dictionary;

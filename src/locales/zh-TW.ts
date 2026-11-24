@@ -212,7 +212,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "隨機字元",
 	"set.format.uuid": "UUID",
 	"keys.title": "API 金鑰",
-	"keys.help": "每個 App 或瀏覽器擴充功能都用自己的金鑰登入。金鑰可以管理別名，但不能變更設定。",
+	"keys.help": "每個 App 或瀏覽器擴充功能都用自己的金鑰登入。金鑰可以管理別名；如果「設定」允許，也能變更 App 顯示的設定。金鑰不能變更連線、API 或金鑰本身。",
 	"keys.off": "兩種用戶端 API 都還沒開啟，請到「設定」開啟。",
 	"keys.serverUrl": "給 App 使用的伺服器網址",
 	"keys.none": "還沒有 API 金鑰。",
@@ -289,6 +289,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "標籤",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "在來源的 ID",
+	"set.customSuffix": "自訂別名的後綴",
+	"set.customSuffixHelp": "App 會把它放在你的前綴和網域之間，例如 shop.maple42@…，讓自訂別名更難被猜到。App 也可以建立不帶後綴的自訂別名。",
+	"set.suffix.word": "單字加數字，例如 .maple42",
+	"set.suffix.random_string": "隨機字元，例如 .x8k2fq",
+	"set.appSettings": "允許 App 變更設定",
+	"set.appSettingsHelp": "SimpleLogin 和 addy.io 的 App 可以變更它們設定畫面上的項目：別名格式與後綴、預設別名網域、寄件者顯示格式、預設轉寄地址和封鎖名單。連線、API 與金鑰的設定只能在這裡變更。",
+	"set.uiLanguage": "管理介面語言",
+	"set.uiLanguageHelp": "儲存在這個瀏覽器。選擇之前，管理介面會跟隨瀏覽器的語言。",
 };
 
 export default dictionary;

@@ -233,7 +233,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Herufi nasibu",
 	"set.format.uuid": "UUID",
 	"keys.title": "Funguo za API",
-	"keys.help": "Kila programu au kiendelezi cha kivinjari huingia kwa ufunguo wake. Ufunguo unaweza kudhibiti lakabu lakini hauwezi kubadilisha mipangilio.",
+	"keys.help": "Kila programu au kiendelezi cha kivinjari huingia kwa ufunguo wake. Ufunguo unaweza kudhibiti lakabu na, ikiwa Mipangilio inaruhusu, kubadilisha mipangilio inayoonyeshwa na programu. Hauwezi kubadilisha muunganisho, API wala funguo.",
 	"keys.off": "API zote mbili za wateja zimezimwa. Ziwashe kwenye Mipangilio.",
 	"keys.serverUrl": "URL ya seva kwa programu",
 	"keys.none": "Hakuna funguo za API bado.",
@@ -310,6 +310,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Lebo",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID kwenye chanzo",
+	"set.customSuffix": "Kiambishi tamati cha lakabu maalum",
+	"set.customSuffixHelp": "Programu huiweka kati ya kiambishi awali chako na kikoa, kama katika shop.maple42@…, ili lakabu maalum ziwe ngumu kukisia. Programu pia zinaweza kuunda lakabu maalum bila hicho.",
+	"set.suffix.word": "Neno na tarakimu, kama .maple42",
+	"set.suffix.random_string": "Herufi nasibu, kama .x8k2fq",
+	"set.appSettings": "Ruhusu programu zibadilishe mipangilio",
+	"set.appSettingsHelp": "Programu za SimpleLogin na addy.io zinaweza kubadilisha kinachoonyeshwa kwenye skrini zao za mipangilio: muundo wa lakabu na kiambishi tamati, kikoa chaguomsingi cha lakabu, muundo wa anwani ya mtumaji, anwani chaguomsingi ya kutuma na orodha ya waliozuiwa. Mipangilio ya muunganisho, API na funguo inaweza kubadilishwa hapa tu.",
+	"set.uiLanguage": "Lugha ya dashibodi",
+	"set.uiLanguageHelp": "Huhifadhiwa kwenye kivinjari hiki. Hadi uchague, dashibodi hufuata lugha ya kivinjari chako.",
 };
 
 export default dictionary;

@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Ký tự ngẫu nhiên",
 	"set.format.uuid": "UUID",
 	"keys.title": "Khóa API",
-	"keys.help": "Mỗi ứng dụng hoặc tiện ích trình duyệt đăng nhập bằng khóa riêng. Khóa có thể quản lý bí danh nhưng không thể thay đổi cài đặt.",
+	"keys.help": "Mỗi ứng dụng hoặc tiện ích trình duyệt đăng nhập bằng khóa riêng. Khóa có thể quản lý bí danh và, nếu Cài đặt cho phép, thay đổi các cài đặt mà ứng dụng hiển thị. Khóa không thể thay đổi kết nối, API hay các khóa.",
 	"keys.off": "Cả hai API cho ứng dụng đều đang tắt. Hãy bật trong Cài đặt.",
 	"keys.serverUrl": "URL máy chủ cho ứng dụng",
 	"keys.none": "Chưa có khóa API nào.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Nhãn",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID ở nguồn",
+	"set.customSuffix": "Hậu tố cho bí danh tùy chỉnh",
+	"set.customSuffixHelp": "Các ứng dụng đặt nó giữa tiền tố của bạn và tên miền, như trong shop.maple42@…, để bí danh tùy chỉnh khó đoán hơn. Các ứng dụng cũng có thể tạo bí danh tùy chỉnh mà không có hậu tố này.",
+	"set.suffix.word": "Một từ và các chữ số, như .maple42",
+	"set.suffix.random_string": "Ký tự ngẫu nhiên, như .x8k2fq",
+	"set.appSettings": "Cho phép ứng dụng thay đổi cài đặt",
+	"set.appSettingsHelp": "Các ứng dụng SimpleLogin và addy.io có thể thay đổi những gì màn hình cài đặt của chúng hiển thị: định dạng và hậu tố bí danh, tên miền bí danh mặc định, định dạng địa chỉ người gửi, địa chỉ chuyển tiếp mặc định và danh sách chặn. Cài đặt kết nối, API và khóa chỉ có thể thay đổi tại đây.",
+	"set.uiLanguage": "Ngôn ngữ bảng điều khiển",
+	"set.uiLanguageHelp": "Được lưu trong trình duyệt này. Cho đến khi bạn chọn, bảng điều khiển sẽ theo ngôn ngữ của trình duyệt.",
 };
 
 export default dictionary;

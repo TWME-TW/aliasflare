@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Zufällige Zeichen",
 	"set.format.uuid": "UUID",
 	"keys.title": "API-Schlüssel",
-	"keys.help": "Jede App oder Browser-Erweiterung meldet sich mit einem eigenen Schlüssel an. Ein Schlüssel kann Aliasse verwalten, aber keine Einstellungen ändern.",
+	"keys.help": "Jede App oder Browser-Erweiterung meldet sich mit einem eigenen Schlüssel an. Ein Schlüssel kann Aliasse verwalten und, wenn die Einstellungen es erlauben, die Einstellungen ändern, die Apps anzeigen. Er kann weder die Verbindung noch die APIs oder die Schlüssel ändern.",
 	"keys.off": "Beide Client-APIs sind aus. Schalte sie in den Einstellungen ein.",
 	"keys.serverUrl": "Server-URL für die Apps",
 	"keys.none": "Noch keine API-Schlüssel.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Labels",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID bei der Quelle",
+	"set.customSuffix": "Suffix für benutzerdefinierte Aliasse",
+	"set.customSuffixHelp": "Apps setzen ihn zwischen dein Präfix und die Domain, wie in shop.maple42@…, damit benutzerdefinierte Aliasse schwerer zu erraten sind. Apps können benutzerdefinierte Aliasse auch ohne ihn erstellen.",
+	"set.suffix.word": "Ein Wort und Ziffern, wie .maple42",
+	"set.suffix.random_string": "Zufällige Zeichen, wie .x8k2fq",
+	"set.appSettings": "Apps Einstellungen ändern lassen",
+	"set.appSettingsHelp": "Apps von SimpleLogin und addy.io dürfen ändern, was ihre Einstellungsbildschirme anzeigen: das Alias-Format und den Suffix, die Standard-Alias-Domain, das Format der Absenderadresse, die Standard-Weiterleitungsadresse und die Sperrliste. Verbindungs-, API- und Schlüsseleinstellungen lassen sich nur hier ändern.",
+	"set.uiLanguage": "Sprache des Dashboards",
+	"set.uiLanguageHelp": "Wird in diesem Browser gespeichert. Solange du keine auswählst, folgt das Dashboard der Sprache deines Browsers.",
 };
 
 export default dictionary;

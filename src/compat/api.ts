@@ -10,9 +10,9 @@ import { Hono, type Context } from "hono";
 import { presentedKey, verifyApiKey } from "../apikeys";
 import type { AppEnv } from "../auth";
 import { signToken, verifyToken } from "../crypto";
-import { ensureContact, type ContactRow } from "../db";
-import { domainOf, extractEmail, reverseAddress } from "../format";
-import { loadSettings, type Settings } from "../settings";
+import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
+import { domainOf, extractEmail, isSenderFormat, reverseAddress } from "../format";
+import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
 import {
 	ClientError,
 	cleanPrefix,
@@ -26,7 +26,7 @@ import {
 	latestContact,
 	listAliasViews,
 	listDestinations,
-	randomSuffixWord,
+	randomSuffix,
 	resolveDestination,
 	restoreAlias,
 	totals,
@@ -183,6 +183,7 @@ api.get("/user_info", (c) =>
 		trial_end_timestamp: null,
 		profile_picture_url: null,
 		max_alias_free_plan: 0,
+		can_create_reverse_alias: true,
 		connection: "api_key",
 	}),
 );
@@ -199,7 +200,7 @@ async function suffixes(c: C) {
 	const secret = c.get("config").signingSecret;
 	const out = [];
 	for (const domain of c.get("settings").aliasDomains) {
-		for (const suffix of [`${randomSuffixWord()}@${domain}`, `@${domain}`]) {
+		for (const suffix of [`${randomSuffix(c.get("settings").customSuffix)}@${domain}`, `@${domain}`]) {
 			out.push({
 				suffix,
 				signed_suffix: await signToken(secret, "sl-suffix", btoa(suffix).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_"), 6 * 3600),
@@ -211,13 +212,25 @@ async function suffixes(c: C) {
 	return out;
 }
 
-api.get("/v5/alias/options", async (c) => {
+function prefixSuggestion(c: C): string {
 	const hostname = (c.req.query("hostname") ?? "").toLowerCase();
-	const prefix = cleanPrefix(hostname.replace(/^www\./, "").split(".")[0] ?? "");
-	return c.json({ can_create: c.get("settings").aliasDomains.length > 0, prefix_suggestion: prefix, suffixes: await suffixes(c) });
-});
+	return cleanPrefix(hostname.replace(/^www\./, "").split(".")[0] ?? "");
+}
 
-api.post("/v3/alias/custom/new", async (c) => {
+api.get("/v5/alias/options", async (c) =>
+	c.json({ can_create: c.get("settings").aliasDomains.length > 0, prefix_suggestion: prefixSuggestion(c), suffixes: await suffixes(c) }),
+);
+
+// Used by the browser extension: suffixes as [suffix, signed_suffix] pairs.
+api.get("/v4/alias/options", async (c) =>
+	c.json({
+		can_create: c.get("settings").aliasDomains.length > 0,
+		prefix_suggestion: prefixSuggestion(c),
+		suffixes: (await suffixes(c)).map((suffix) => [suffix.suffix, suffix.signed_suffix]),
+	}),
+);
+
+const createCustomAlias = async (c: C) => {
 	const input = await body(c);
 	const prefix = cleanPrefix(str(input.alias_prefix) ?? "");
 	const signed = str(input.signed_suffix, 1000) ?? "";
@@ -226,7 +239,8 @@ api.post("/v3/alias/custom/new", async (c) => {
 	const suffix = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
 	const at = suffix.lastIndexOf("@");
 	if (!prefix || at < 0) throw new ClientError(400, "Enter an alias prefix.");
-	const mailboxIds = Array.isArray(input.mailbox_ids) ? input.mailbox_ids : [];
+	// v3 takes mailbox_ids; v2 (the browser extension) uses the default mailbox.
+	const mailboxIds = Array.isArray(input.mailbox_ids) ? input.mailbox_ids : input.mailbox_id !== undefined ? [input.mailbox_id] : [];
 	const destination = await resolveDestination(c.env.DB, c.get("settings"), mailboxIds[0] as number | undefined);
 	const alias = await createAlias(c.env.DB, c.get("settings"), reverseDomainOf(c), {
 		localPart: prefix + suffix.slice(0, at),
@@ -236,7 +250,9 @@ api.post("/v3/alias/custom/new", async (c) => {
 		destination: destination ?? null,
 	});
 	return c.json(await slAlias(c, alias), 201);
-});
+};
+api.post("/v3/alias/custom/new", createCustomAlias);
+api.post("/v2/alias/custom/new", createCustomAlias);
 
 api.post("/alias/random/new", async (c) => {
 	const input = await body(c);
@@ -272,7 +288,7 @@ api.post("/aliases/:id/toggle", async (c) => {
 	return c.json({ enabled });
 });
 
-api.patch("/aliases/:id", async (c) => {
+const updateSlAlias = async (c: C) => {
 	const alias = await slFindAlias(c);
 	const input = await body(c);
 	const mailboxId = Array.isArray(input.mailbox_ids) ? input.mailbox_ids[0] : input.mailbox_id;
@@ -283,7 +299,10 @@ api.patch("/aliases/:id", async (c) => {
 		destination: await resolveDestination(c.env.DB, c.get("settings"), mailboxId as number | undefined),
 	});
 	return c.json({ ok: true });
-});
+};
+// SimpleLogin documents PUT; some clients send PATCH.
+api.put("/aliases/:id", updateSlAlias);
+api.patch("/aliases/:id", updateSlAlias);
 
 api.get("/aliases/:id/activities", async (c) => {
 	const alias = await slFindAlias(c);
@@ -341,12 +360,37 @@ api.post("/contacts/:id/toggle", async (c) => {
 	return c.json({ block_forward: blocked });
 });
 
-api.get("/v2/mailboxes", async (c) => {
+const slMailboxes = async (c: C) => {
 	const destinations = await listDestinations(c.env.DB, c.get("settings"));
 	return c.json({
 		mailboxes: destinations.map((d) => ({ id: d.numId, email: d.email, default: d.isDefault, creation_timestamp: 0, nb_alias: d.aliasCount, verified: true })),
 	});
-});
+};
+api.get("/v2/mailboxes", slMailboxes);
+// The browser extension still reads the v1 list.
+api.get("/mailboxes", slMailboxes);
+
+// ── Settings changed from apps ────────────────────────────────────────────────────────────────
+
+/** Saves settings an app changed, if apps may change settings. */
+async function changeSettings(c: C, update: Partial<Settings>): Promise<Settings> {
+	requireAppSettings(c);
+	const next = normalizeSettings({ ...c.get("settings"), ...update });
+	await saveSettings(c.env.DB, next);
+	c.set("settings", next);
+	return next;
+}
+
+function requireAppSettings(c: C): void {
+	if (!c.get("settings").appSettings) {
+		throw new ClientError(403, "Changing settings from apps is turned off. Turn it on in the mailflare-alias settings.");
+	}
+}
+
+async function jsonBody(c: C): Promise<Record<string, unknown>> {
+	const body = await c.req.json().catch(() => null);
+	return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+}
 
 function slSetting(settings: Settings) {
 	return {
@@ -354,11 +398,52 @@ function slSetting(settings: Settings) {
 		notification: false,
 		random_alias_default_domain: settings.aliasDomains[0] ?? "",
 		sender_format: settings.senderFormat,
-		random_alias_suffix: settings.randomAliasFormat === "random_characters" ? "random_string" : "word",
+		random_alias_suffix: settings.customSuffix,
 	};
 }
 api.get("/setting", (c) => c.json(slSetting(c.get("settings"))));
-api.patch("/setting", (c) => c.json(slSetting(c.get("settings"))));
+
+// SimpleLogin apps change one or more of these at a time.
+api.patch("/setting", async (c) => {
+	const body = await jsonBody(c);
+	const settings = c.get("settings");
+	const update: Partial<Settings> = {};
+	if (body.alias_generator !== undefined) {
+		if (body.alias_generator === "uuid") update.randomAliasFormat = "uuid";
+		// "word" covers both kinds of non-UUID names here; keep random characters if they were chosen.
+		else if (body.alias_generator === "word") update.randomAliasFormat = settings.randomAliasFormat === "uuid" ? "random_words" : settings.randomAliasFormat;
+		else throw new ClientError(400, "Invalid alias_generator");
+	}
+	if (body.random_alias_suffix !== undefined) {
+		if (body.random_alias_suffix !== "word" && body.random_alias_suffix !== "random_string") throw new ClientError(400, "Invalid random_alias_suffix");
+		update.customSuffix = body.random_alias_suffix;
+	}
+	if (body.random_alias_default_domain !== undefined) {
+		const domain = typeof body.random_alias_default_domain === "string" ? body.random_alias_default_domain.trim().toLowerCase() : "";
+		if (!settings.aliasDomains.includes(domain)) throw new ClientError(400, "Invalid domain");
+		update.aliasDomains = [domain, ...settings.aliasDomains.filter((d) => d !== domain)];
+	}
+	if (body.sender_format !== undefined) {
+		if (!isSenderFormat(body.sender_format)) throw new ClientError(400, "Invalid sender_format");
+		update.senderFormat = body.sender_format;
+	}
+	if (body.notification !== undefined && typeof body.notification !== "boolean") throw new ClientError(400, "Invalid notification");
+	// mailflare-alias sends no notification emails, so "notification" is accepted and stays off.
+	return c.json(slSetting(Object.keys(update).length ? await changeSettings(c, update) : settings));
+});
+
+// Making a mailbox the default one sets the default forwarding address.
+api.put("/mailboxes/:id", async (c) => {
+	const body = await jsonBody(c);
+	if (body.email !== undefined || body.cancel_email_change !== undefined) {
+		throw new ClientError(400, "Change forwarding addresses in the mailflare-alias dashboard.");
+	}
+	const id = c.req.param("id");
+	const match = (await listDestinations(c.env.DB, c.get("settings"))).find((d) => d.numId === Number(id) || d.uid === id);
+	if (!match) throw new ClientError(404, "Unknown mailbox");
+	if (body.default === true && !match.isDefault) await changeSettings(c, { defaultDestination: match.email });
+	return c.json({ updated: true });
+});
 
 const slDomains = (c: C) => c.json(c.get("settings").aliasDomains.map((domain) => ({ domain, is_custom: true })));
 api.get("/v2/setting/domains", slDomains);
@@ -491,6 +576,115 @@ api.get("/v1/account-details", async (c) => {
 });
 
 api.get("/v1/account-notifications", (c) => c.json({ data: [] }));
+
+// addy.io's blocklist is the blocklist here: "email" entries are addresses, "domain" entries domains.
+const addyBlock = (row: BlocklistRow) => ({
+	id: row.id,
+	user_id: OWNER_ID,
+	value: row.value,
+	type: row.kind === "address" ? "email" : "domain",
+	blocked: row.hits,
+	last_blocked: null,
+	created_at: addyDate(row.created_at),
+	updated_at: addyDate(row.created_at),
+});
+
+const BLOCK_DOMAIN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+function blockValue(type: unknown, value: unknown): { kind: "address" | "domain"; value: string } {
+	const raw = (typeof value === "string" ? value : "").trim().toLowerCase().replace(/^@/, "");
+	if (type === "email") {
+		const email = extractEmail(raw);
+		if (email && email === raw) return { kind: "address", value: email };
+	} else if (type === "domain" && BLOCK_DOMAIN.test(raw)) {
+		return { kind: "domain", value: raw };
+	}
+	throw new ClientError(422, "The value is not a valid email address or domain.");
+}
+
+async function addBlocks(c: C, entries: { kind: "address" | "domain"; value: string }[]): Promise<{ rows: BlocklistRow[]; skipped: number }> {
+	requireAppSettings(c);
+	const created: string[] = [];
+	for (const entry of entries) {
+		const id = newId("bl");
+		const result = await c.env.DB.prepare("INSERT INTO blocklist (id, kind, value, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (value) DO NOTHING")
+			.bind(id, entry.kind, entry.value, now())
+			.run();
+		if (result.meta.changes > 0) created.push(id);
+	}
+	const rows = created.length
+		? (await c.env.DB.prepare(`SELECT * FROM blocklist WHERE id IN (${created.map(() => "?").join(", ")})`).bind(...created).all<BlocklistRow>()).results
+		: [];
+	return { rows, skipped: entries.length - rows.length };
+}
+
+api.get("/v1/blocklist", async (c) => {
+	const search = (c.req.query("filter[search]") ?? "").toLowerCase();
+	const type = c.req.query("filter[type]");
+	const sort = c.req.query("sort") ?? "-created_at";
+	const column = ({ created_at: "created_at", value: "value", blocked: "hits", last_blocked: "created_at" } as Record<string, string>)[sort.replace(/^-/, "")] ?? "created_at";
+	const size = Math.min(Math.max(Number(c.req.query("page[size]")) || 100, 1), 100);
+	const pageNumber = Math.max(Number(c.req.query("page[number]")) || 1, 1);
+	const where: string[] = [];
+	const params: unknown[] = [];
+	if (search) where.push("value LIKE ?"), params.push(`%${search}%`);
+	if (type === "email" || type === "domain") where.push("kind = ?"), params.push(type === "email" ? "address" : "domain");
+	const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+	const [list, counted] = await Promise.all([
+		c.env.DB.prepare(`SELECT * FROM blocklist ${clause} ORDER BY ${column} ${sort.startsWith("-") ? "DESC" : "ASC"} LIMIT ? OFFSET ?`)
+			.bind(...params, size, (pageNumber - 1) * size)
+			.all<BlocklistRow>(),
+		c.env.DB.prepare(`SELECT COUNT(*) AS total FROM blocklist ${clause}`).bind(...params).first<{ total: number }>(),
+	]);
+	const total = counted?.total ?? 0;
+	const lastPage = Math.max(Math.ceil(total / size), 1);
+	return c.json({
+		data: list.results.map(addyBlock),
+		links: { first: null, last: null, prev: null, next: null },
+		meta: { current_page: pageNumber, from: total ? (pageNumber - 1) * size + 1 : null, last_page: lastPage, per_page: size, to: Math.min(pageNumber * size, total) || null, total },
+	});
+});
+
+api.post("/v1/blocklist", async (c) => {
+	const body = await jsonBody(c);
+	const { rows } = await addBlocks(c, [blockValue(body.type, body.value)]);
+	if (!rows[0]) throw new ClientError(422, "This value is already on your blocklist.");
+	return c.json({ data: addyBlock(rows[0]) }, 201);
+});
+
+api.post("/v1/blocklist/store/bulk", async (c) => {
+	const body = await jsonBody(c);
+	const values = Array.isArray(body.values) ? [...new Set(body.values)].slice(0, 100) : [];
+	if (!values.length) throw new ClientError(422, "No values given.");
+	const { rows, skipped } = await addBlocks(c, values.map((value) => blockValue(body.type, value)));
+	const added = rows.length;
+	const message =
+		added === 0
+			? skipped > 0
+				? "All entries were already on your blocklist."
+				: "No entries added."
+			: `${added === 1 ? "1 entry" : `${added} entries`} added to blocklist.${skipped > 0 ? ` ${skipped} already on blocklist.` : ""}`;
+	return c.json({ data: rows.map(addyBlock), message, skipped }, 201);
+});
+
+api.delete("/v1/blocklist/:id", async (c) => {
+	requireAppSettings(c);
+	const result = await c.env.DB.prepare("DELETE FROM blocklist WHERE id = ?").bind(c.req.param("id")).run();
+	if (!result.meta.changes) throw new ClientError(404, "Not found");
+	return c.body(null, 204);
+});
+
+api.post("/v1/blocklist/delete/bulk", async (c) => {
+	requireAppSettings(c);
+	const body = await jsonBody(c);
+	const ids = Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string").slice(0, 100) : [];
+	const found = ids.length
+		? (await c.env.DB.prepare(`SELECT id FROM blocklist WHERE id IN (${ids.map(() => "?").join(", ")})`).bind(...ids).all<{ id: string }>()).results.map((row) => row.id)
+		: [];
+	if (!found.length) return c.json({ message: "No blocklist entries found" }, 404);
+	await c.env.DB.prepare(`DELETE FROM blocklist WHERE id IN (${found.map(() => "?").join(", ")})`).bind(...found).run();
+	return c.json({ message: found.length === 1 ? "1 entry removed from blocklist" : `${found.length} entries removed from blocklist`, ids: found });
+});
 
 api.get("/v1/domain-options", (c) => {
 	const settings = c.get("settings");

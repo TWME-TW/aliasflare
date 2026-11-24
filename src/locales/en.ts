@@ -235,7 +235,7 @@ export const en = {
 	"set.format.random_characters": "Random characters",
 	"set.format.uuid": "UUID",
 	"keys.title": "API keys",
-	"keys.help": "Each app or browser extension signs in with its own key. A key can manage aliases but cannot change settings.",
+	"keys.help": "Each app or browser extension signs in with its own key. A key can manage aliases and, if Settings allow it, change the settings apps show. It cannot change the connection, the APIs or the keys.",
 	"keys.off": "Both client APIs are off. Turn them on in Settings.",
 	"keys.serverUrl": "Server URL for the apps",
 	"keys.none": "No API keys yet.",
@@ -312,6 +312,14 @@ export const en = {
 	"hist.labels": "Labels",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID at the source",
+	"set.customSuffix": "Suffix for custom aliases",
+	"set.customSuffixHelp": "Apps put it between your prefix and the domain, as in shop.maple42@…, so custom aliases are harder to guess. Apps can also create custom aliases without it.",
+	"set.suffix.word": "A word and digits, like .maple42",
+	"set.suffix.random_string": "Random characters, like .x8k2fq",
+	"set.appSettings": "Let apps change settings",
+	"set.appSettingsHelp": "SimpleLogin and addy.io apps may change what their settings screens show: the alias format and suffix, the default alias domain, the sender address format, the default forwarding address and the blocklist. Connection, API and key settings can only be changed here.",
+	"set.uiLanguage": "Dashboard language",
+	"set.uiLanguageHelp": "Saved in this browser. Until you choose one, the dashboard follows your browser's language.",
 };
 
 export type MessageKey = keyof typeof en;

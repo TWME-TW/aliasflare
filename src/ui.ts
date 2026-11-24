@@ -8,7 +8,7 @@ import type { ApiKeyRow } from "./apikeys";
 import type { SetupStep } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
-import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
+import { CUSTOM_SUFFIXES, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -187,12 +187,11 @@ export function page(title: string, body: Html, options: PageOptions): Html {
 </head>
 <body>
 ${options.nav
-	? html`<header class="topbar">${brand}<span class="spacer"></span>${languageMenu(t, options.path, "mobile-only")}
+	? html`<header class="topbar">${brand}<span class="spacer"></span>
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="mailflare-alias">
 ${link("/", "nav.aliases", "aliases")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
-${languageMenu(t, options.path)}
 <p class="powered">mailflare-alias · <a href="https://github.com/TWME-TW/mailflare-alias">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
@@ -345,6 +344,19 @@ export function settingsPage(t: Translate, input: { settings: Settings; reverseD
 		html`<main>
 ${noticeBox(notice)}
 <form class="sections" method="post" action="/settings" data-autosave data-msg-failed="${t("link.error")}">
+<section id="language-settings">
+<h2>${t("nav.language")}</h2>
+<label for="uiLocale">${t("set.uiLanguage")}</label>
+<select id="uiLocale" name="uiLocale">
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${t.locale === locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
+</select>
+<p class="help">${t("set.uiLanguageHelp")}</p>
+
+<label for="language">${t("settings.mailLanguage")}</label>
+<select id="language" name="language">
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${settings.language === locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
+</select>
+</section>
 <section>
 <h2>${t("settings.section")}</h2>
 <label for="defaultDestination">${t("settings.destination")}</label>
@@ -364,11 +376,6 @@ ${checkbox("includeSenderInReverseAlias", settings.includeSenderInReverseAlias, 
 ${checkbox("removeTrackers", settings.removeTrackers, t("settings.trackers"), t("settings.trackersHelp"))}
 ${checkbox("showBanner", settings.showBanner, t("settings.banner"), t("settings.bannerHelp"))}
 ${checkbox("autoForwardNewAliases", settings.autoForwardNewAliases, t("settings.autoForward"), t("settings.autoForwardHelp"))}
-
-<label for="language">${t("settings.mailLanguage")}</label>
-<select id="language" name="language">
-${LOCALE_LIST.map((locale) => html`<option value="${locale}" ${settings.language === locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
-</select>
 
 <label for="unsubscribeBehavior">${t("settings.unsubscribe")}</label>
 <select id="unsubscribeBehavior" name="unsubscribeBehavior">
@@ -392,6 +399,14 @@ ${checkbox("addyApi", settings.addyApi, t("set.addyApi"), t("set.addyApiHelp", {
 <select id="randomAliasFormat" name="randomAliasFormat">
 ${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings.randomAliasFormat === format ? "selected" : ""}>${t(`set.format.${format}`)}</option>`)}
 </select>
+
+<label for="customSuffix">${t("set.customSuffix")}</label>
+<select id="customSuffix" name="customSuffix">
+${CUSTOM_SUFFIXES.map((suffix) => html`<option value="${suffix}" ${settings.customSuffix === suffix ? "selected" : ""}>${t(`set.suffix.${suffix}`)}</option>`)}
+</select>
+<p class="help">${t("set.customSuffixHelp")}</p>
+
+${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.appSettingsHelp"))}
 
 <noscript><p><button class="primary">${t("settings.saveButton")}</button></p></noscript>
 </section>

@@ -218,7 +218,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "Losowe znaki",
 	"set.format.uuid": "UUID",
 	"keys.title": "Klucze API",
-	"keys.help": "Każda aplikacja lub rozszerzenie przeglądarki loguje się własnym kluczem. Klucz może zarządzać aliasami, ale nie może zmieniać ustawień.",
+	"keys.help": "Każda aplikacja lub rozszerzenie przeglądarki loguje się własnym kluczem. Klucz może zarządzać aliasami i, jeśli pozwalają na to Ustawienia, zmieniać ustawienia pokazywane w aplikacjach. Nie może zmieniać połączenia, API ani kluczy.",
 	"keys.off": "Oba API klientów są wyłączone. Włącz je w Ustawieniach.",
 	"keys.serverUrl": "Adres URL serwera dla aplikacji",
 	"keys.none": "Brak kluczy API.",
@@ -295,6 +295,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "Etykiety",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID w źródle",
+	"set.customSuffix": "Sufiks niestandardowych aliasów",
+	"set.customSuffixHelp": "Aplikacje umieszczają go między Twoim prefiksem a domeną, jak w shop.maple42@…, dzięki czemu niestandardowe aliasy trudniej odgadnąć. Aplikacje mogą też tworzyć niestandardowe aliasy bez niego.",
+	"set.suffix.word": "Słowo i cyfry, np. .maple42",
+	"set.suffix.random_string": "Losowe znaki, np. .x8k2fq",
+	"set.appSettings": "Pozwól aplikacjom zmieniać ustawienia",
+	"set.appSettingsHelp": "Aplikacje SimpleLogin i addy.io mogą zmieniać to, co pokazują ich ekrany ustawień: format i sufiks aliasów, domyślną domenę aliasów, format adresu nadawcy, domyślny adres przekazywania i listę blokad. Ustawienia połączenia, API i kluczy można zmieniać tylko tutaj.",
+	"set.uiLanguage": "Język panelu",
+	"set.uiLanguageHelp": "Zapisany w tej przeglądarce. Dopóki go nie wybierzesz, panel używa języka Twojej przeglądarki.",
 };
 
 export default dictionary;

@@ -233,7 +233,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "무작위 문자",
 	"set.format.uuid": "UUID",
 	"keys.title": "API 키",
-	"keys.help": "각 앱 또는 브라우저 확장 프로그램은 자체 키로 로그인합니다. 키로 별칭을 관리할 수 있지만 설정은 변경할 수 없습니다.",
+	"keys.help": "각 앱 또는 브라우저 확장 프로그램은 자체 키로 로그인합니다. 키로 별칭을 관리할 수 있으며, 설정에서 허용하면 앱에 표시되는 설정도 변경할 수 있습니다. 연결, API, 키는 변경할 수 없습니다.",
 	"keys.off": "두 클라이언트 API가 모두 꺼져 있습니다. 설정에서 켜세요.",
 	"keys.serverUrl": "앱용 서버 URL",
 	"keys.none": "아직 API 키가 없습니다.",
@@ -310,6 +310,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "라벨",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "원본의 ID",
+	"set.customSuffix": "사용자 지정 별칭의 접미사",
+	"set.customSuffixHelp": "앱이 접두사와 도메인 사이에 이를 넣습니다(예: shop.maple42@…). 그래서 사용자 지정 별칭을 추측하기 더 어려워집니다. 앱은 접미사 없이도 사용자 지정 별칭을 만들 수 있습니다.",
+	"set.suffix.word": "단어와 숫자, 예: .maple42",
+	"set.suffix.random_string": "무작위 문자, 예: .x8k2fq",
+	"set.appSettings": "앱의 설정 변경 허용",
+	"set.appSettingsHelp": "SimpleLogin 및 addy.io 앱은 설정 화면에 표시되는 항목을 변경할 수 있습니다: 별칭 형식과 접미사, 기본 별칭 도메인, 보내는 사람 주소 형식, 기본 전달 주소, 차단 목록. 연결, API, 키 설정은 여기에서만 변경할 수 있습니다.",
+	"set.uiLanguage": "대시보드 언어",
+	"set.uiLanguageHelp": "이 브라우저에 저장됩니다. 선택하기 전까지 대시보드는 브라우저 언어를 따릅니다.",
 };
 
 export default dictionary;

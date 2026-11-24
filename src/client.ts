@@ -147,6 +147,7 @@ export const APP_SCRIPT = `(() => {
         });
         const result = await response.json().catch(() => null);
         if (id !== latest) return; // a newer change is already on its way
+        if (result && result.reload) { location.reload(); return; }
         show((result && (result.message || result.error)) || form.dataset.msgFailed, !!(response.ok && result && result.ok));
       } catch {
         if (id === latest) show(form.dataset.msgFailed, false);

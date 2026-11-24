@@ -212,7 +212,7 @@ const dictionary: Dictionary = {
 	"set.format.random_characters": "随机字符",
 	"set.format.uuid": "UUID",
 	"keys.title": "API 密钥",
-	"keys.help": "每个应用或浏览器扩展都使用自己的密钥登录。密钥可以管理别名，但不能更改设置。",
+	"keys.help": "每个应用或浏览器扩展都使用自己的密钥登录。密钥可以管理别名；如果“设置”允许，也能更改应用显示的设置。密钥不能更改连接、API 或密钥本身。",
 	"keys.off": "两种客户端 API 都未开启，请在「设置」中开启。",
 	"keys.serverUrl": "供应用使用的服务器网址",
 	"keys.none": "还没有 API 密钥。",
@@ -289,6 +289,14 @@ const dictionary: Dictionary = {
 	"hist.labels": "标签",
 	"hist.pgp": "PGP",
 	"hist.sourceId": "来源中的 ID",
+	"set.customSuffix": "自定义别名的后缀",
+	"set.customSuffixHelp": "应用会把它放在你的前缀和域名之间，例如 shop.maple42@…，让自定义别名更难被猜到。应用也可以创建不带后缀的自定义别名。",
+	"set.suffix.word": "单词加数字，例如 .maple42",
+	"set.suffix.random_string": "随机字符，例如 .x8k2fq",
+	"set.appSettings": "允许应用更改设置",
+	"set.appSettingsHelp": "SimpleLogin 和 addy.io 的应用可以更改其设置界面中显示的项目：别名格式与后缀、默认别名域名、发件人显示格式、默认转发地址和屏蔽列表。连接、API 和密钥的设置只能在这里更改。",
+	"set.uiLanguage": "管理界面语言",
+	"set.uiLanguageHelp": "保存在此浏览器中。在你选择之前，管理界面会跟随浏览器的语言。",
 };
 
 export default dictionary;
