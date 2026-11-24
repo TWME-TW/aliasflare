@@ -1,0 +1,3 @@
+# Optional for `npm run dev`. Every setting can be entered on the dashboard instead;
+# values here override the dashboard. A fixed setup code saves looking in the logs.
+SETUP_CODE=LOCALDEV123

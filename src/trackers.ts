@@ -1,0 +1,99 @@
+/**
+ * Email tracker removal, in the spirit of Firefox Relay and DuckDuckGo Email Protection:
+ * drop tracking pixels and strip tracking parameters from links. It is deliberately
+ * conservative; it never rewrites link destinations, so nothing breaks beyond a missing pixel.
+ */
+
+/** Query parameters that only identify the recipient or the campaign. */
+const TRACKING_PARAMS = new Set([
+	"fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "yclid", "twclid", "ttclid", "igshid", "li_fat_id",
+	"mc_cid", "mc_eid", "_hsenc", "_hsmi", "__hssc", "__hstc", "__hsfp", "hsctatracking", "mkt_tok", "vero_id", "vero_conv",
+	"oly_anon_id", "oly_enc_id", "rb_clickid", "s_cid", "ml_subscriber", "ml_subscriber_hash", "wickedid", "_kx", "ck_subscriber_id",
+	"sc_cid", "trk", "trkcampaign", "mbid", "cmpid", "elqtrackid", "elqtrack", "elq", "elqaid", "elqat", "spm", "ref_src",
+]);
+const TRACKING_PARAM_PREFIXES = ["utm_", "pk_", "mtm_", "hmb_", "ga_", "_ga"];
+
+/** URL patterns of known open-tracking pixels, whatever their declared size. */
+const TRACKER_URL_PATTERNS: RegExp[] = [
+	/list-manage\.com\/track\/open/i,
+	/\/wf\/open\?/i, // SendGrid
+	/mandrillapp\.com\/track\/open/i,
+	/\/track\/open(\.php)?\b/i,
+	/\.hubspotemail\.net\//i,
+	/hubspotlinks\.com\/.*\/(e|o)\b/i,
+	/\bopen\.convertkit-mail\d*\.com\//i,
+	/\bmktoresp\.com\//i,
+	/\bexct\.net\/open/i,
+	/\brs6\.net\/on\.jsp/i,
+	/\bmailtrack\.io\//i,
+	/\bmltrk\.io\//i,
+	/\bstreak\.com\/.*\/(pixel|open)/i,
+	/\bt\.yesware\.com\//i,
+	/\bbl-1\.com\//i, // Bananatag
+	/\bmixmax\.com\/(api\/)?track/i,
+	/\bsuperhuman\.com\/.*\.(gif|png)/i,
+	/\bemltrk\.com\//i,
+	/\bpixel\.(mailchimp|wp|facebook)\.com\//i,
+	/\bopen\.substack\.com\//i,
+	/\bemail\.mg\.[^/]+\/o\//i, // Mailgun
+	/\bsparkpostmail\.com\/q\//i,
+	/\bpostmarkapp\.com\/.*\/open/i,
+	/\bcustomeriomail\.com\/e\/o\//i,
+	/\bklclick\d*\.com\/.*\/open/i,
+	/\/(open|opened|pixel|beacon)\.(gif|png|jpg)\b/i,
+];
+
+export function isTrackingParam(name: string): boolean {
+	const lower = name.toLowerCase();
+	return TRACKING_PARAMS.has(lower) || TRACKING_PARAM_PREFIXES.some((prefix) => lower.startsWith(prefix));
+}
+
+/** Removes tracking query parameters from an http(s) link; anything else is returned unchanged. */
+export function cleanLink(href: string): { href: string; changed: boolean } {
+	let url: URL;
+	try {
+		url = new URL(href);
+	} catch {
+		return { href, changed: false };
+	}
+	if (url.protocol !== "http:" && url.protocol !== "https:") return { href, changed: false };
+	const names = [...url.searchParams.keys()];
+	const tracking = names.filter(isTrackingParam);
+	if (tracking.length === 0) return { href, changed: false };
+	for (const name of new Set(tracking)) url.searchParams.delete(name);
+	return { href: url.toString(), changed: true };
+}
+
+function pixelSize(value: string | null): number | null {
+	if (value === null) return null;
+	const match = value.trim().match(/^(\d+(?:\.\d+)?)(px)?$/i);
+	return match ? Number(match[1]) : null;
+}
+
+/** True for an image that exists only to report an open. */
+export function isTrackerImage(attributes: { src: string | null; width: string | null; height: string | null; style: string | null }): boolean {
+	const { src, width, height, style } = attributes;
+	if (src && TRACKER_URL_PATTERNS.some((pattern) => pattern.test(src))) return true;
+	const w = pixelSize(width);
+	const h = pixelSize(height);
+	if (w !== null && h !== null && w <= 2 && h <= 2) return true;
+	if (style) {
+		const css = style.toLowerCase().replace(/\s+/g, "");
+		if (/display:none|visibility:hidden/.test(css) && src) return true;
+		const cw = css.match(/(?:^|;)width:(\d+(?:\.\d+)?)px/)?.[1];
+		const ch = css.match(/(?:^|;)height:(\d+(?:\.\d+)?)px/)?.[1];
+		if (cw !== undefined && ch !== undefined && Number(cw) <= 2 && Number(ch) <= 2) return true;
+	}
+	return false;
+}
+
+/** Plain-text links: strip tracking parameters from every http(s) URL. */
+export function cleanText(text: string): { text: string; removed: number } {
+	let removed = 0;
+	const out = text.replace(/https?:\/\/[^\s<>"')\]]+/gi, (link) => {
+		const cleaned = cleanLink(link);
+		if (cleaned.changed) removed += 1;
+		return cleaned.href;
+	});
+	return { text: out, removed };
+}

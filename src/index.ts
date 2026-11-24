@@ -1,0 +1,466 @@
+import { Hono, type Context } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
+import { html } from "hono/html";
+import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
+import {
+	endSession,
+	isSignedIn,
+	requireAdmin,
+	sameOrigin,
+	setChallengeCookie,
+	startSession,
+	takeChallengeCookie,
+	type AppEnv,
+} from "./auth";
+import { PASSKEY_SCRIPT } from "./client";
+import { envOverrides, loadConfig, missingConnection, saveConfig } from "./config";
+import { verifyWebhookSignature } from "./crypto";
+import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
+import { domainOf, extractEmail, normalizeEmail } from "./format";
+import { handleInbound, type InboundEvent } from "./forward";
+import { isLocale, LANG_COOKIE, negotiateLocale, translator, type MessageKey } from "./i18n";
+import {
+	authenticationOptions,
+	checkSetupCode,
+	completeAuthentication,
+	completeRegistration,
+	hasPasskeys,
+	issueSetupCode,
+	listPasskeys,
+	registrationOptions,
+	relyingParty,
+} from "./passkeys";
+import { handleReverseAliasMail } from "./reply";
+import { loadSettings, normalizeSettings, saveSettings } from "./settings";
+import {
+	aliasPage,
+	blocklistPage,
+	connectionPage,
+	dashboardPage,
+	loginPage,
+	messagePage,
+	passkeysPage,
+	settingsPage,
+	setupPage,
+	type ActivityItem,
+} from "./ui";
+import { describeAction, performAction, resolveLink } from "./unsubscribe";
+
+const MAX_WEBHOOK_BYTES = 64 * 1024;
+const MAX_JSON_BYTES = 32 * 1024;
+const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+const app = new Hono<AppEnv>();
+
+app.use("*", async (c, next) => {
+	await next();
+	c.header("X-Content-Type-Options", "nosniff");
+	c.header("Referrer-Policy", "no-referrer");
+	c.header("X-Frame-Options", "DENY");
+	c.header(
+		"Content-Security-Policy",
+		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+	);
+});
+
+app.use("*", async (c, next) => {
+	c.set("config", await loadConfig(c.env));
+	const chosen = getCookie(c, LANG_COOKIE);
+	c.set("t", translator(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language"))));
+	await next();
+});
+
+type C = Context<AppEnv>;
+
+/** Redirects with a translated notice, shown once at the top of the next page. */
+function redirectWithNotice(c: C, path: string, key: MessageKey, params?: Record<string, string>) {
+	return c.redirect(`${path}?notice=${encodeURIComponent(c.get("t")(key, params))}`);
+}
+
+function publicOrigin(c: C): string {
+	return c.get("config").publicUrl || new URL(c.req.url).origin;
+}
+
+async function readJson<T>(c: C): Promise<T | null> {
+	const text = await c.req.text();
+	if (text.length > MAX_JSON_BYTES) return null;
+	try {
+		return JSON.parse(text || "{}") as T;
+	} catch {
+		return null;
+	}
+}
+
+async function rateLimited(c: C): Promise<boolean> {
+	const key = c.req.header("CF-Connecting-IP") ?? "unknown";
+	return !!c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key })).success;
+}
+
+const jsonError = (c: C, key: MessageKey, status: 400 | 401 | 403 | 409 | 429) => c.json({ error: c.get("t")(key) }, status);
+
+app.get("/health", (c) => c.json({ ok: missingConnection(c.get("config")).length === 0 }));
+
+app.get("/assets/passkey.js", (c) => {
+	c.header("Cache-Control", "public, max-age=300");
+	return c.body(PASSKEY_SCRIPT, 200, { "Content-Type": "text/javascript; charset=utf-8" });
+});
+
+app.get("/lang/:locale", (c) => {
+	const locale = c.req.param("locale");
+	if (isLocale(locale)) {
+		setCookie(c, LANG_COOKIE, locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+	}
+	const next = c.req.query("next") ?? "/";
+	// Only same-site paths, so the switcher cannot be used as an open redirect.
+	return c.redirect(next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/");
+});
+
+// Mailflare webhook: message.inbound → forward to the alias's destination.
+app.post("/webhook", async (c) => {
+	const config = c.get("config");
+	const missing = missingConnection(config);
+	if (missing.length) return c.json({ error: `Not configured: ${missing.join(", ")}` }, 503);
+	const length = Number(c.req.header("Content-Length") ?? 0);
+	if (length > MAX_WEBHOOK_BYTES) return c.json({ error: "Payload too large" }, 413);
+	const body = await c.req.text();
+	if (body.length > MAX_WEBHOOK_BYTES) return c.json({ error: "Payload too large" }, 413);
+	if (!(await verifyWebhookSignature(config.webhookSecret, body, c.req.header("X-Email-Platform-Signature") ?? null))) {
+		return c.json({ error: "Invalid signature" }, 401);
+	}
+	let payload: { type?: string; data?: InboundEvent };
+	try {
+		payload = JSON.parse(body);
+	} catch {
+		return c.json({ error: "Invalid JSON" }, 400);
+	}
+	if (payload.type !== "message.inbound" || !payload.data) return c.json({ result: "ignored" });
+	const outcome = await handleInbound(c.env, config, payload.data, publicOrigin(c));
+	return c.json({ result: outcome.result }, outcome.status as 200);
+});
+
+// Signed links in forwarded mail. GET only shows a confirmation, so link scanners change
+// nothing; the change happens on POST (RFC 8058 one-click unsubscribe, or the button).
+for (const kind of ["unsubscribe", "action"] as const) {
+	const invalid = (c: C) => {
+		const t = c.get("t");
+		return c.html(messagePage(t, t("link.invalidTitle"), html`<p>${t("link.invalid")}</p>`), 404);
+	};
+	app.get(`/${kind}/:token`, async (c) => {
+		const t = c.get("t");
+		const target = await resolveLink(c.env, c.get("config"), kind, c.req.param("token"));
+		if (!target) return invalid(c);
+		const title = kind === "unsubscribe" ? t("link.unsubscribe") : target.action === "disable_alias" ? t("link.disable") : t("link.block");
+		return c.html(
+			messagePage(t, title, html`<p>${describeAction(target, t)}</p><form method="post"><button class="primary">${title}</button></form>`),
+		);
+	});
+	app.post(`/${kind}/:token`, async (c) => {
+		const t = c.get("t");
+		const target = await resolveLink(c.env, c.get("config"), kind, c.req.param("token"));
+		if (!target) return invalid(c);
+		try {
+			await performAction(c.env, c.get("config"), target);
+		} catch (error) {
+			return c.html(messagePage(t, t("link.error"), html`<p>${error instanceof Error ? error.message : t("link.tryAgain")}</p>`), 500);
+		}
+		return c.html(messagePage(t, t("link.done"), html`<p>${describeAction(target, t)}</p>`));
+	});
+}
+
+// First run: register the first passkey with the one-time setup code.
+app.get("/setup", async (c) => {
+	if (await hasPasskeys(c.env.DB)) return c.redirect("/login");
+	if (!c.env.SETUP_CODE) await issueSetupCode(c.env.DB);
+	return c.html(setupPage(c.get("t"), { codeInLogs: !c.env.SETUP_CODE }));
+});
+
+app.post("/setup/options", async (c) => {
+	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
+	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
+	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
+	const body = await readJson<{ code?: string }>(c);
+	if (!body?.code || !(await checkSetupCode(c.env, body.code))) return jsonError(c, "err.badCode", 401);
+	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url));
+	setChallengeCookie(c, challengeId);
+	return c.json({ options });
+});
+
+app.post("/setup/verify", async (c) => {
+	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
+	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
+	const body = await readJson<{ response?: RegistrationResponseJSON; name?: string }>(c);
+	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
+	const passkey = await completeRegistration(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response, body.name ?? "").catch(
+		() => null,
+	);
+	if (!passkey) return jsonError(c, "err.registerFailed", 400);
+	await c.env.DB.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup'").run();
+	// The language picked during setup also becomes the language of forwarded-mail banners.
+	const settings = await loadSettings(c.env.DB);
+	await saveSettings(c.env.DB, { ...settings, language: c.get("t").locale });
+	await startSession(c);
+	return c.json({ ok: true });
+});
+
+app.get("/login", async (c) => {
+	if (!(await hasPasskeys(c.env.DB))) return c.redirect("/setup");
+	if (await isSignedIn(c)) return c.redirect("/");
+	return c.html(loginPage(c.get("t")));
+});
+
+app.post("/login/options", async (c) => {
+	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
+	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
+	const { options, challengeId } = await authenticationOptions(c.env.DB, relyingParty(c.req.url));
+	setChallengeCookie(c, challengeId);
+	return c.json({ options });
+});
+
+app.post("/login/verify", async (c) => {
+	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
+	const body = await readJson<{ response?: AuthenticationResponseJSON }>(c);
+	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
+	const passkey = await completeAuthentication(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response).catch(() => null);
+	if (!passkey) return jsonError(c, "err.loginFailed", 401);
+	await startSession(c);
+	return c.json({ ok: true });
+});
+
+app.post("/logout", (c) => {
+	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
+	endSession(c);
+	return c.redirect("/login");
+});
+
+// Everything below is the dashboard and needs a signed-in passkey session.
+for (const path of ["/", "/settings", "/connection", "/blocklist", "/blocklist/*", "/passkeys", "/passkeys/*", "/aliases/*"]) {
+	app.use(path, requireAdmin);
+}
+
+app.get("/", async (c) => {
+	const db = c.env.DB;
+	const settings = await loadSettings(db);
+	const { results: aliases } = await db
+		.prepare(
+			"SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases ORDER BY created_at DESC LIMIT 500",
+		)
+		.all<AliasRow & { contacts: number }>();
+	const { results: activity } = await db
+		.prepare(
+			`SELECT kind, status, alias, detail, at FROM (
+				SELECT 'forward' AS kind, status, alias_address AS alias,
+					CASE WHEN error IS NOT NULL THEN error
+						WHEN trackers_removed > 0 THEN COALESCE(subject, '') || ' · ' || trackers_removed || ' tracker(s)'
+						ELSE subject END AS detail,
+					updated_at AS at FROM forwards
+				UNION ALL
+				SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
+			) ORDER BY at DESC LIMIT 50`,
+		)
+		.all<ActivityItem>();
+	return c.html(
+		dashboardPage(c.get("t"), { settings, aliases, activity, missing: missingConnection(c.get("config")), notice: c.req.query("notice") }),
+	);
+});
+
+app.get("/settings", async (c) =>
+	c.html(
+		settingsPage(c.get("t"), { settings: await loadSettings(c.env.DB), reverseDomain: c.get("config").reverseDomain, notice: c.req.query("notice") }),
+	),
+);
+
+app.post("/settings", async (c) => {
+	const form = await c.req.parseBody();
+	const destination = typeof form.defaultDestination === "string" ? form.defaultDestination.trim() : "";
+	const reverseDomain = c.get("config").reverseDomain;
+	if (destination && !extractEmail(destination)) return redirectWithNotice(c, "/settings", "notice.badDestination");
+	if (destination && reverseDomain && domainOf(destination) === reverseDomain) {
+		return redirectWithNotice(c, "/settings", "notice.destinationOnReverse");
+	}
+	const settings = normalizeSettings({
+		senderFormat: form.senderFormat,
+		reverseAliasReplacement: form.reverseAliasReplacement === "1",
+		includeSenderInReverseAlias: form.includeSenderInReverseAlias === "1",
+		autoForwardNewAliases: form.autoForwardNewAliases === "1",
+		removeTrackers: form.removeTrackers === "1",
+		showBanner: form.showBanner === "1",
+		unsubscribeBehavior: form.unsubscribeBehavior,
+		language: form.language,
+		defaultDestination: destination,
+	});
+	await saveSettings(c.env.DB, settings);
+	return redirectWithNotice(c, "/settings", "notice.settingsSaved");
+});
+
+app.get("/connection", (c) => {
+	const config = c.get("config");
+	return c.html(
+		connectionPage(c.get("t"), {
+			values: { mailflareUrl: config.mailflareUrl, reverseDomain: config.reverseDomain, publicUrl: config.publicUrl },
+			hasApiKey: !!config.mailflareApiKey,
+			hasWebhookSecret: !!config.webhookSecret,
+			fixed: envOverrides(c.env),
+			webhookUrl: `${publicOrigin(c)}/webhook`,
+			missing: missingConnection(config),
+			notice: c.req.query("notice"),
+		}),
+	);
+});
+
+function validOrigin(value: string): string | null {
+	try {
+		const url = new URL(value);
+		return url.protocol === "https:" && !url.username && !url.password ? url.origin : null;
+	} catch {
+		return null;
+	}
+}
+
+app.post("/connection", async (c) => {
+	const form = await c.req.parseBody();
+	const fixed = envOverrides(c.env);
+	const text = (key: string) => (typeof form[key] === "string" ? (form[key] as string).trim() : "");
+	const values: Record<string, string> = {};
+
+	if (!fixed.has("mailflareUrl")) {
+		const origin = text("mailflareUrl") ? validOrigin(text("mailflareUrl")) : "";
+		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badMailflareUrl");
+		values.mailflareUrl = origin;
+	}
+	if (!fixed.has("publicUrl")) {
+		const origin = text("publicUrl") ? validOrigin(text("publicUrl")) : "";
+		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badPublicUrl");
+		values.publicUrl = origin;
+	}
+	if (!fixed.has("reverseDomain")) {
+		const domain = text("reverseDomain").toLowerCase().replace(/\.$/, "");
+		if (domain && !DOMAIN_PATTERN.test(domain)) return redirectWithNotice(c, "/connection", "notice.badDomain");
+		values.reverseDomain = domain;
+	}
+	// Secret fields are write-only: blank keeps the stored value.
+	for (const key of ["mailflareApiKey", "webhookSecret"] as const) {
+		if (!fixed.has(key) && text(key)) values[key] = text(key);
+	}
+	await saveConfig(c.env.DB, values);
+	return redirectWithNotice(c, "/connection", "notice.connectionSaved");
+});
+
+app.get("/blocklist", async (c) => {
+	const { results } = await c.env.DB.prepare("SELECT * FROM blocklist ORDER BY created_at DESC").all<BlocklistRow>();
+	return c.html(blocklistPage(c.get("t"), { entries: results, notice: c.req.query("notice") }));
+});
+
+app.post("/blocklist", async (c) => {
+	const form = await c.req.parseBody();
+	const raw = (typeof form.value === "string" ? form.value : "").trim().toLowerCase().replace(/^@/, "");
+	const email = raw.includes("@") ? extractEmail(raw) : null;
+	const domain = !raw.includes("@") && DOMAIN_PATTERN.test(raw) ? raw : null;
+	const value = email ?? domain;
+	if (!value) return redirectWithNotice(c, "/blocklist", "notice.badBlock");
+	await c.env.DB.prepare("INSERT INTO blocklist (id, kind, value, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (value) DO NOTHING")
+		.bind(newId("bl"), email ? "address" : "domain", value, now())
+		.run();
+	return redirectWithNotice(c, "/blocklist", "notice.blocked", { value });
+});
+
+app.post("/blocklist/:id/delete", async (c) => {
+	await c.env.DB.prepare("DELETE FROM blocklist WHERE id = ?").bind(c.req.param("id")).run();
+	return redirectWithNotice(c, "/blocklist", "notice.unblocked");
+});
+
+app.get("/passkeys", async (c) => c.html(passkeysPage(c.get("t"), { passkeys: await listPasskeys(c.env.DB), notice: c.req.query("notice") })));
+
+app.post("/passkeys/options", async (c) => {
+	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url));
+	setChallengeCookie(c, challengeId);
+	return c.json({ options });
+});
+
+app.post("/passkeys/verify", async (c) => {
+	const body = await readJson<{ response?: RegistrationResponseJSON; name?: string }>(c);
+	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
+	const passkey = await completeRegistration(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response, body.name ?? "").catch(
+		() => null,
+	);
+	if (!passkey) return jsonError(c, "err.registerFailed", 400);
+	return c.json({ ok: true });
+});
+
+app.post("/passkeys/:id/delete", async (c) => {
+	// Never remove the last passkey, or nobody could sign in again.
+	const result = await c.env.DB.prepare("DELETE FROM passkeys WHERE id = ? AND (SELECT COUNT(*) FROM passkeys) > 1").bind(c.req.param("id")).run();
+	return redirectWithNotice(c, "/passkeys", result.meta.changes > 0 ? "notice.passkeyRemoved" : "notice.lastPasskey");
+});
+
+app.post("/aliases/:address/mode", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	const form = await c.req.parseBody();
+	if (!isForwardMode(form.mode)) return redirectWithNotice(c, "/", "notice.badMode");
+	await setForwardMode(c.env.DB, address, form.mode);
+	return redirectWithNotice(c, "/", "notice.modeSaved", { alias: address });
+});
+
+app.post("/aliases/:address/destination", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	const form = await c.req.parseBody();
+	const raw = typeof form.destination === "string" ? form.destination.trim() : "";
+	const destination = raw ? extractEmail(raw) : null;
+	if (raw && !destination) return redirectWithNotice(c, "/", "notice.badDestination");
+	const reverseDomain = c.get("config").reverseDomain;
+	if (destination && ((reverseDomain && domainOf(destination) === reverseDomain) || destination === address)) {
+		return redirectWithNotice(c, "/", "notice.loop");
+	}
+	await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?").bind(destination, now(), address).run();
+	return redirectWithNotice(c, "/", "notice.aliasDestinationSaved", { alias: address });
+});
+
+app.post("/aliases/:address/note", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	const form = await c.req.parseBody();
+	const note = (typeof form.note === "string" ? form.note : "").trim().slice(0, 200) || null;
+	await c.env.DB.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(note, now(), address).run();
+	return redirectWithNotice(c, `/aliases/${encodeURIComponent(address)}`, "notice.noteSaved");
+});
+
+app.get("/aliases/:address", async (c) => {
+	const alias = await getAlias(c.env.DB, normalizeEmail(c.req.param("address")));
+	if (!alias) return c.notFound();
+	const { results: contacts } = await c.env.DB.prepare(
+		"SELECT * FROM contacts WHERE alias_address = ? ORDER BY COALESCE(last_forward_at, created_at) DESC LIMIT 1000",
+	)
+		.bind(alias.address)
+		.all<ContactRow>();
+	return c.html(aliasPage(c.get("t"), { alias, contacts, reverseDomain: c.get("config").reverseDomain, notice: c.req.query("notice") }));
+});
+
+app.post("/aliases/:address/contacts", async (c) => {
+	const alias = await getAlias(c.env.DB, normalizeEmail(c.req.param("address")));
+	if (!alias) return c.notFound();
+	const reverseDomain = c.get("config").reverseDomain;
+	const base = `/aliases/${encodeURIComponent(alias.address)}`;
+	if (!reverseDomain) return redirectWithNotice(c, base, "notice.needReverseDomain");
+	const form = await c.req.parseBody();
+	const email = extractEmail(typeof form.email === "string" ? form.email : "");
+	if (!email || domainOf(email) === reverseDomain) return redirectWithNotice(c, base, "notice.badContact");
+	const settings = await loadSettings(c.env.DB);
+	const contact = await ensureContact(c.env.DB, alias.address, email, null, settings.includeSenderInReverseAlias);
+	return redirectWithNotice(c, base, "notice.contactCreated", { reverse: `${contact.reverse_local}@${reverseDomain}`, email });
+});
+
+app.post("/aliases/:address/contacts/:id/block", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	await c.env.DB.prepare("UPDATE contacts SET blocked = 1 - blocked WHERE id = ? AND alias_address = ?").bind(c.req.param("id"), address).run();
+	return c.redirect(`/aliases/${encodeURIComponent(address)}`);
+});
+
+export default {
+	fetch: app.fetch,
+	async email(message, env) {
+		const config = await loadConfig(env);
+		if (missingConnection(config).length) {
+			message.setReject("This address is temporarily unavailable");
+			return;
+		}
+		await handleReverseAliasMail(message, env, config);
+	},
+} satisfies ExportedHandler<Env>;

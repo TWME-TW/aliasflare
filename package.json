@@ -1,0 +1,29 @@
+{
+	"name": "mailflare-alias",
+	"version": "0.1.0",
+	"description": "SimpleLogin-style reverse aliases for Mailflare, on Cloudflare Workers.",
+	"private": true,
+	"type": "module",
+	"license": "MIT",
+	"scripts": {
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy",
+		"db:migrate:local": "wrangler d1 migrations apply DB --local",
+		"db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+		"typecheck": "npm run cf-typegen && tsc --noEmit",
+		"test": "vitest run",
+		"check": "npm run typecheck && npm test",
+		"cf-typegen": "wrangler types --strict-vars false",
+		"deploy:local": "wrangler d1 migrations apply DB --remote -c wrangler.local.jsonc && wrangler deploy -c wrangler.local.jsonc"
+	},
+	"dependencies": {
+		"@simplewebauthn/server": "^14.1.0",
+		"hono": "^4.13.21",
+		"postal-mime": "^4.2.1"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.0",
+		"vitest": "^5.1.1",
+		"wrangler": "^4.167.0"
+	}
+}
