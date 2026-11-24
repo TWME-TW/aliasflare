@@ -345,8 +345,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Nombre del alias",
 	"new.prefixPlaceholder": "Nombre, p. ej. shop (vacío para un alias aleatorio)",
 	"new.domain": "Dominio del alias",
-	"new.suffix": "Añadir un sufijo aleatorio, p. ej. {example}",
-	"new.help": "Un sufijo hace que el alias sea más difícil de adivinar. Si no indicas un nombre, se crea un alias aleatorio con el formato elegido en Ajustes.",
 	"new.note": "Nota (opcional)",
 	"new.destination": "Dirección de reenvío (vacío para la predeterminada)",
 	"new.create": "Crear alias",

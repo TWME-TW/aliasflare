@@ -351,7 +351,6 @@ ${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}">${t(`set.f
 ${settings.aliasDomains.map((domain) => html`<option value="${domain}">${domain}</option>`)}
 </select>
 </div>
-<label class="check" data-custom-only><input type="checkbox" name="suffix" value="1" checked /><span>${t("new.suffix", { example: settings.customSuffix === "word" ? ".maple42" : ".x8k2fq" })}<p class="help">${t("new.help")}</p></span></label>
 <label>${t("new.note")} <input type="text" name="note" maxlength="500" /></label>
 <label>${t("new.destination")} <input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
 <button>${t("new.create")}</button>

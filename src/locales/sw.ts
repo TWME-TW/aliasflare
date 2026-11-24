@@ -345,8 +345,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Jina la lakabu",
 	"new.prefixPlaceholder": "Jina, mfano shop (acha tupu kwa lakabu ya nasibu)",
 	"new.domain": "Kikoa cha lakabu",
-	"new.suffix": "Ongeza kiambishi tamati cha nasibu, mfano {example}",
-	"new.help": "Kiambishi tamati hufanya lakabu iwe ngumu kukisia. Bila jina, lakabu ya nasibu huundwa kwa muundo uliochaguliwa katika Mipangilio.",
 	"new.note": "Maelezo (si lazima)",
 	"new.destination": "Anwani ya kutuma (acha tupu kwa chaguo-msingi)",
 	"new.create": "Unda lakabu",

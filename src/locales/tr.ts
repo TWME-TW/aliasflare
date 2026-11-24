@@ -330,8 +330,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Takma ad adı",
 	"new.prefixPlaceholder": "Ad, ör. shop (rastgele takma ad için boş bırakın)",
 	"new.domain": "Takma ad alan adı",
-	"new.suffix": "Rastgele son ek ekle, ör. {example}",
-	"new.help": "Son ek, takma adın tahmin edilmesini zorlaştırır. Ad girilmezse, Ayarlar'da seçilen biçimde rastgele bir takma ad oluşturulur.",
 	"new.note": "Not (isteğe bağlı)",
 	"new.destination": "Yönlendirme adresi (varsayılan için boş bırakın)",
 	"new.create": "Takma ad oluştur",

@@ -330,8 +330,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Nama alias",
 	"new.prefixPlaceholder": "Nama, misalnya shop (kosongkan untuk alias acak)",
 	"new.domain": "Domain alias",
-	"new.suffix": "Tambahkan akhiran acak, misalnya {example}",
-	"new.help": "Akhiran membuat alias lebih sulit ditebak. Tanpa nama, alias acak dibuat dengan format yang dipilih di Pengaturan.",
 	"new.note": "Catatan (opsional)",
 	"new.destination": "Alamat penerusan (kosongkan untuk default)",
 	"new.create": "Buat alias",

@@ -16,7 +16,7 @@ import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
 import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api } from "./compat/api";
-import { ClientError, cleanPrefix, createAlias, createRandomAlias, randomSuffix } from "./compat/aliases";
+import { ClientError, cleanPrefix, createAlias, createRandomAlias } from "./compat/aliases";
 import { ConfigError, DOMAIN_PATTERN, envOverrides, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
@@ -792,17 +792,7 @@ app.post("/aliases/new", async (c) => {
 		} else {
 			const cleaned = cleanPrefix(prefix);
 			if (!cleaned || cleaned !== prefix.toLowerCase()) return redirectWithNotice(c, "/", "notice.newBadPrefix");
-			// With a suffix a taken prefix is not a dead end: try a few suffixes before giving up.
-			const tries = form.suffix ? 5 : 1;
-			for (let attempt = 0; ; attempt += 1) {
-				try {
-					const localPart = form.suffix ? `${cleaned}${randomSuffix(settings.customSuffix)}` : cleaned;
-					alias = await createAlias(db, settings, { localPart, domain, note, destination });
-					break;
-				} catch (error) {
-					if (!(error instanceof ClientError && error.status === 409) || attempt + 1 >= tries) throw error;
-				}
-			}
+			alias = await createAlias(db, settings, { localPart: cleaned, domain, note, destination });
 		}
 		return redirectWithNotice(c, "/", "notice.newCreated", { alias: alias.address });
 	} catch (error) {

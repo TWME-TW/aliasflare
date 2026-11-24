@@ -324,8 +324,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "别名名称",
 	"new.prefixPlaceholder": "名称，例如 shop（留空则随机生成）",
 	"new.domain": "别名域名",
-	"new.suffix": "添加随机后缀，例如 {example}",
-	"new.help": "后缀可以让别名更难被猜到。不填名称时，会按「设置」中选择的格式随机生成别名。",
 	"new.note": "备注（选填）",
 	"new.destination": "转发地址（留空则使用默认值）",
 	"new.create": "创建别名",

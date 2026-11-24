@@ -324,8 +324,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "エイリアス名",
 	"new.prefixPlaceholder": "名前（例：shop）（空欄でランダム生成）",
 	"new.domain": "エイリアスのドメイン",
-	"new.suffix": "ランダムなサフィックスを追加（例：{example}）",
-	"new.help": "サフィックスを付けると、エイリアスが推測されにくくなります。名前を入力しない場合は、「設定」で選んだ形式でランダムなエイリアスが作成されます。",
 	"new.note": "メモ（任意）",
 	"new.destination": "転送先アドレス（空欄でデフォルト）",
 	"new.create": "エイリアスを作成",

@@ -345,8 +345,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Sunan laƙabi",
 	"new.prefixPlaceholder": "Suna, misali shop (bar wofi don laƙabi bazuwa)",
 	"new.domain": "Domain na laƙabi",
-	"new.suffix": "Ƙara ƙarin ƙarshe bazuwa, misali {example}",
-	"new.help": "Ƙarin ƙarshe yana sa laƙabi ya yi wuyar zato. Idan ba a sa suna ba, za a ƙirƙiri laƙabi bazuwa a tsarin da aka zaɓa a Saituna.",
 	"new.note": "Bayani (zaɓi)",
 	"new.destination": "Adireshin tura saƙo (bar wofi don tsoho)",
 	"new.create": "Ƙirƙiri laƙabi",

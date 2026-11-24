@@ -347,8 +347,6 @@ export const en = {
 	"new.prefix": "Alias name",
 	"new.prefixPlaceholder": "Name, like shop (empty for a random alias)",
 	"new.domain": "Alias domain",
-	"new.suffix": "Add a random suffix, like {example}",
-	"new.help": "A suffix makes the alias harder to guess. Without a name, a random alias is created in the format chosen in Settings.",
 	"new.note": "Note (optional)",
 	"new.destination": "Forwarding address (empty for the default)",
 	"new.create": "Create alias",

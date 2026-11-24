@@ -36,9 +36,8 @@ describe("creating an alias from the dashboard", () => {
 		expect(row).toMatchObject({ note: "Groceries", destination: "else@gmail.test", forward_mode: "all" });
 	});
 
-	it("adds a suffix in the chosen style when asked", async () => {
-		const notice = await create({ prefix: "shop", domain: "other.test", suffix: "1" });
-		expect(notice).toMatch(/^Created shop\.[a-z0-9]{6}@other\.test\.$/);
+	it("uses the name exactly as given, with no suffix", async () => {
+		expect(await create({ prefix: "shop", domain: "other.test", suffix: "1" })).toBe("Created shop@other.test.");
 	});
 
 	it("creates a UUID or word alias when that type is chosen, ignoring any name", async () => {

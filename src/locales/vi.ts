@@ -330,8 +330,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Tên bí danh",
 	"new.prefixPlaceholder": "Tên, ví dụ shop (để trống để tạo bí danh ngẫu nhiên)",
 	"new.domain": "Tên miền bí danh",
-	"new.suffix": "Thêm hậu tố ngẫu nhiên, ví dụ {example}",
-	"new.help": "Hậu tố giúp bí danh khó đoán hơn. Nếu không nhập tên, hệ thống sẽ tạo bí danh ngẫu nhiên theo định dạng đã chọn trong Cài đặt.",
 	"new.note": "Ghi chú (tùy chọn)",
 	"new.destination": "Địa chỉ chuyển tiếp (để trống để dùng mặc định)",
 	"new.create": "Tạo bí danh",

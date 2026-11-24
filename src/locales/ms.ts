@@ -330,8 +330,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Nama alias",
 	"new.prefixPlaceholder": "Nama, contohnya shop (kosongkan untuk alias rawak)",
 	"new.domain": "Domain alias",
-	"new.suffix": "Tambah akhiran rawak, contohnya {example}",
-	"new.help": "Akhiran menjadikan alias lebih sukar diteka. Tanpa nama, alias rawak dicipta dalam format yang dipilih dalam Tetapan.",
 	"new.note": "Nota (pilihan)",
 	"new.destination": "Alamat pemajuan (kosongkan untuk lalai)",
 	"new.create": "Cipta alias",

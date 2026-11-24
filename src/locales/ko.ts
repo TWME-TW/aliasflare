@@ -345,8 +345,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "별칭 이름",
 	"new.prefixPlaceholder": "이름 입력, 예: shop (비워 두면 무작위 별칭)",
 	"new.domain": "별칭 도메인",
-	"new.suffix": "무작위 접미사 추가, 예: {example}",
-	"new.help": "접미사를 붙이면 별칭을 추측하기 어려워집니다. 이름을 입력하지 않으면 「설정」에서 선택한 형식으로 무작위 별칭이 만들어집니다.",
 	"new.note": "메모(선택)",
 	"new.destination": "전달 주소 (비워 두면 기본값)",
 	"new.create": "별칭 만들기",

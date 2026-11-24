@@ -330,8 +330,6 @@ const dictionary: Dictionary = {
 	"new.prefix": "Aliasnaam",
 	"new.prefixPlaceholder": "Naam, bijv. shop (leeg voor een willekeurige alias)",
 	"new.domain": "Aliasdomein",
-	"new.suffix": "Voeg een willekeurig achtervoegsel toe, bijv. {example}",
-	"new.help": "Een achtervoegsel maakt de alias moeilijker te raden. Zonder naam wordt een willekeurige alias gemaakt in de indeling die je bij Instellingen hebt gekozen.",
 	"new.note": "Notitie (optioneel)",
 	"new.destination": "Doorstuuradres (leeg voor de standaard)",
 	"new.create": "Alias aanmaken",
