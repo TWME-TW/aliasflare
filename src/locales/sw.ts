@@ -381,6 +381,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Elekeza pia kwenye Worker hii catch-all ambayo tayari inatuma barua mahali pengine (kwa mfano kwa Mailflare). Barua inazotuma huko leo sasa zitafika hapa badala yake. Iache imezimwa kwa vikoa vinavyopokea barua nyingine.",
 	"common.copy": "Nakili",
 	"common.copied": "Imenakiliwa {value}",
+	"new.kind": "Aina ya lakabu",
+	"new.kind.custom": "Jina unalochagua mwenyewe",
+	"dash.perPage": "{count} kwa ukurasa",
+	"dash.perPageLabel": "Safu kwa ukurasa",
 };
 
 export default dictionary;

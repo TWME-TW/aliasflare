@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Также направляет на этот Worker catch-all, который уже отправляет почту в другое место (например, в Mailflare). Почта, которую он сейчас туда отправляет, будет приходить сюда. Не включайте для доменов, которые получают другую почту.",
 	"common.copy": "Копировать",
 	"common.copied": "Скопировано: {value}",
+	"new.kind": "Тип алиаса",
+	"new.kind.custom": "Имя на ваш выбор",
+	"dash.perPage": "{count} на странице",
+	"dash.perPageLabel": "Строк на странице",
 };
 
 export default dictionary;

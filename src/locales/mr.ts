@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "आधीपासून इतरत्र मेल पाठवणारा catch-all (उदा. Mailflare कडे) या Worker कडेही वळवा. तो आज तिथे पाठवत असलेला मेल त्याऐवजी इथे येईल. इतर मेल मिळणाऱ्या डोमेनसाठी हे बंद ठेवा.",
 	"common.copy": "कॉपी करा",
 	"common.copied": "{value} कॉपी केले",
+	"new.kind": "उपनावाचा प्रकार",
+	"new.kind.custom": "तुम्ही निवडलेले नाव",
+	"dash.perPage": "प्रति पृष्ठ {count}",
+	"dash.perPageLabel": "प्रति पृष्ठ ओळी",
 };
 
 export default dictionary;

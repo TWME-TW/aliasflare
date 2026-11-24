@@ -360,6 +360,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "已經把信送往其他地方（例如 Mailflare）的 catch-all，也改為指向這個 Worker。原本送到那裡的信之後會改送到這裡。用來接收其他信件的網域請不要勾選。",
 	"common.copy": "複製",
 	"common.copied": "已複製 {value}",
+	"new.kind": "別名類型",
+	"new.kind.custom": "自訂名稱",
+	"dash.perPage": "每頁 {count} 列",
+	"dash.perPageLabel": "每頁列數",
 };
 
 export default dictionary;

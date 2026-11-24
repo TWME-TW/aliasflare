@@ -381,6 +381,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "یک catch-all که از قبل ایمیل را جای دیگری می‌فرستد (مثلاً به Mailflare) را هم به این Worker وصل می‌کند. ایمیلی که امروز به آنجا می‌فرستد، به‌جایش به اینجا می‌رسد. برای دامنه‌هایی که ایمیل دیگری دریافت می‌کنند خاموش بگذارید.",
 	"common.copy": "کپی",
 	"common.copied": "{value} کپی شد",
+	"new.kind": "نوع نام مستعار",
+	"new.kind.custom": "نامی که خودتان انتخاب می‌کنید",
+	"dash.perPage": "{count} در هر صفحه",
+	"dash.perPageLabel": "ردیف در هر صفحه",
 };
 
 export default dictionary;

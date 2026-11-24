@@ -381,6 +381,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "දැනටමත් වෙනත් තැනකට තැපෑල යවන catch-all එකද (උදාහරණයක් ලෙස Mailflare වෙත) මෙම Worker වෙත යොමු කරන්න. එය අද එහට යවන තැපෑල ඒ වෙනුවට මෙහි පැමිණෙනු ඇත. වෙනත් තැපෑල ලැබෙන වසම් සඳහා මෙය ක්‍රියාවිරහිතව තබන්න.",
 	"common.copy": "පිටපත් කරන්න",
 	"common.copied": "{value} පිටපත් කරන ලදී",
+	"new.kind": "අන්වර්ථ නාමයේ වර්ගය",
+	"new.kind.custom": "ඔබ තෝරන නම",
+	"dash.perPage": "පිටුවකට {count}",
+	"dash.perPageLabel": "පිටුවකට පේළි",
 };
 
 export default dictionary;

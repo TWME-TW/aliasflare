@@ -381,6 +381,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Haka kuma a nuna wa wannan Worker catch-all da ke aika saƙo a wani wuri tuni (misali zuwa Mailflare). Saƙon da yake aikawa can yau zai zo nan maimakon. A bar shi a kashe ga domains da ke karɓar wasu saƙonni.",
 	"common.copy": "Kwafi",
 	"common.copied": "An kwafi {value}",
+	"new.kind": "Nau'in laƙabi",
+	"new.kind.custom": "Sunan da ka zaɓa",
+	"dash.perPage": "{count} a kowane shafi",
+	"dash.perPageLabel": "Layuka a kowane shafi",
 };
 
 export default dictionary;

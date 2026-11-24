@@ -171,6 +171,14 @@ export const APP_SCRIPT = `(() => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.hidden = true; }, ok ? 2500 : 6000);
   };
+  // New alias: a random kind needs no name, so the name and suffix fields hide.
+  for (const kind of document.querySelectorAll("select[data-alias-kind]")) {
+    const update = () => {
+      for (const field of kind.form.querySelectorAll("[data-custom-only]")) field.hidden = kind.value !== "custom";
+    };
+    kind.addEventListener("change", update);
+    update();
+  }
   for (const button of document.querySelectorAll("button[data-copy]")) {
     if (!navigator.clipboard) continue;
     button.hidden = false;

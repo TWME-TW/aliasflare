@@ -381,6 +381,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "وجّه أيضًا إلى هذا Worker أي catch-all يرسل البريد إلى مكان آخر بالفعل (مثل Mailflare). فالبريد الذي يُرسل إلى هناك اليوم سيصل إلى هنا بدلًا من ذلك. اتركه معطّلًا للنطاقات التي تستقبل بريدًا آخر.",
 	"common.copy": "نسخ",
 	"common.copied": "تم نسخ {value}",
+	"new.kind": "نوع الاسم المستعار",
+	"new.kind.custom": "اسم تختاره بنفسك",
+	"dash.perPage": "{count} لكل صفحة",
+	"dash.perPageLabel": "صفوف لكل صفحة",
 };
 
 export default dictionary;

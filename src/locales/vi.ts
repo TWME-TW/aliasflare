@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Cũng trỏ catch-all đang gửi thư đến nơi khác (chẳng hạn Mailflare) tới Worker này. Thư mà nó đang gửi đến đó sẽ chuyển về đây. Hãy tắt tùy chọn này với các tên miền đang nhận thư khác.",
 	"common.copy": "Sao chép",
 	"common.copied": "Đã sao chép {value}",
+	"new.kind": "Loại bí danh",
+	"new.kind.custom": "Tên do bạn chọn",
+	"dash.perPage": "{count} mục mỗi trang",
+	"dash.perPageLabel": "Số dòng mỗi trang",
 };
 
 export default dictionary;

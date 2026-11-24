@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Laat ook een catch-all die al ergens anders mail naartoe stuurt (bijvoorbeeld naar Mailflare) naar deze Worker verwijzen. Mail die er nu naartoe gaat, komt dan hier terecht. Laat dit uit staan voor domeinen die andere mail ontvangen.",
 	"common.copy": "Kopiëren",
 	"common.copied": "{value} gekopieerd",
+	"new.kind": "Alias-type",
+	"new.kind.custom": "Een naam naar keuze",
+	"dash.perPage": "{count} per pagina",
+	"dash.perPageLabel": "Rijen per pagina",
 };
 
 export default dictionary;

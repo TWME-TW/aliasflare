@@ -48,7 +48,7 @@ import {
 	relyingParty,
 } from "./passkeys";
 import { handleReverseAliasMail } from "./reply";
-import { loadSettings, normalizeSettings, saveSettings } from "./settings";
+import { isRandomAliasFormat, loadSettings, normalizeSettings, saveSettings } from "./settings";
 import {
 	aliasPage,
 	apiKeysPage,
@@ -63,6 +63,8 @@ import {
 	passkeysPage,
 	settingsPage,
 	setupPage,
+	ALIAS_PAGE_SIZES,
+	DEFAULT_ALIAS_PAGE_SIZE,
 	type ActivityItem,
 } from "./ui";
 import { claimLink, describeAction, performAction, releaseLink, resolveLink } from "./unsubscribe";
@@ -379,7 +381,6 @@ app.use("*", async (c, next) => {
 
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
 export type AliasFilter = (typeof ALIAS_FILTERS)[number];
-const ALIASES_PER_PAGE = 100;
 /** When an alias was created or last forwarded or replied through, for "newest or most recently used first". */
 const LAST_USED = `MAX(aliases.created_at, COALESCE((SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address), 0))`;
 
@@ -390,6 +391,8 @@ app.get("/", async (c) => {
 	const requested = c.req.query("filter") as AliasFilter;
 	const filter: AliasFilter = ALIAS_FILTERS.includes(requested) ? requested : "all";
 	const pageNumber = Math.max(1, Math.floor(Number(c.req.query("page")) || 1));
+	const requestedSize = Number(c.req.query("per"));
+	const perPage = (ALIAS_PAGE_SIZES as readonly number[]).includes(requestedSize) ? requestedSize : DEFAULT_ALIAS_PAGE_SIZE;
 	const where = [filter === "deleted" ? "deleted_at IS NOT NULL" : "deleted_at IS NULL"];
 	const params: unknown[] = [];
 	if (filter === "active") where.push("forward_mode != 'none'");
@@ -408,11 +411,11 @@ app.get("/", async (c) => {
 				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases ${clause}
 				 ORDER BY pinned DESC, ${LAST_USED} DESC, num_id DESC LIMIT ? OFFSET ?`,
 			)
-			.bind(...params, ALIASES_PER_PAGE, (pageNumber - 1) * ALIASES_PER_PAGE)
+			.bind(...params, perPage, (pageNumber - 1) * perPage)
 			.all<AliasRow & { contacts: number }>(),
 		db.prepare(`SELECT COUNT(*) AS total FROM aliases ${clause}`).bind(...params).first<{ total: number }>(),
 	]);
-	const list = { query, filter, page: pageNumber, perPage: ALIASES_PER_PAGE, total: counted?.total ?? 0 };
+	const list = { query, filter, page: pageNumber, perPage, total: counted?.total ?? 0 };
 	const { results: activity } = await db
 		.prepare(
 			`SELECT kind, status, alias, detail, at FROM (
@@ -779,11 +782,13 @@ app.post("/aliases/new", async (c) => {
 		return redirectWithNotice(c, "/", "notice.loop");
 	}
 	const note = field("note", 500) || null;
-	const prefix = field("prefix", 64);
+	// A random kind (words, characters or UUID) ignores any name; "custom" uses the name.
+	const kind = isRandomAliasFormat(form.kind) ? form.kind : null;
+	const prefix = kind ? "" : field("prefix", 64);
 	try {
 		let alias;
 		if (!prefix) {
-			alias = await createRandomAlias(db, settings, { domain, note, destination });
+			alias = await createRandomAlias(db, settings, { domain, note, destination, ...(kind ? { format: kind } : {}) });
 		} else {
 			const cleaned = cleanPrefix(prefix);
 			if (!cleaned || cleaned !== prefix.toLowerCase()) return redirectWithNotice(c, "/", "notice.newBadPrefix");

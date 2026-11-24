@@ -383,6 +383,10 @@ export const en = {
 	"cf.replaceCatchAllHelp": "Also point a catch-all that already sends mail elsewhere (for example to Mailflare) at this Worker. Mail it sends there today then comes here instead. Leave it off for domains that receive other mail.",
 	"common.copy": "Copy",
 	"common.copied": "Copied {value}",
+	"new.kind": "Alias type",
+	"new.kind.custom": "A name you choose",
+	"dash.perPage": "{count} per page",
+	"dash.perPageLabel": "Rows per page",
 };
 
 export type MessageKey = keyof typeof en;

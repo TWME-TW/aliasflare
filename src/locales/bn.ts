@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "যে catch-all ইতিমধ্যে অন্য কোথাও মেইল পাঠায় (যেমন Mailflare-এ), তাকেও এই Worker-এ নির্দেশ করুন। সে আজ যে মেইল সেখানে পাঠায়, তার বদলে তা এখানে আসবে। অন্য মেইল গ্রহণ করে এমন ডোমেইনের জন্য এটি বন্ধ রাখুন।",
 	"common.copy": "কপি করুন",
 	"common.copied": "{value} কপি করা হয়েছে",
+	"new.kind": "অ্যালিয়াসের ধরন",
+	"new.kind.custom": "আপনার পছন্দের একটি নাম",
+	"dash.perPage": "প্রতি পৃষ্ঠায় {count}",
+	"dash.perPageLabel": "প্রতি পৃষ্ঠায় সারি",
 };
 
 export default dictionary;

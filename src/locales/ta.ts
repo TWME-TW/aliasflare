@@ -375,6 +375,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ஏற்கனவே வேறிடத்திற்கு அஞ்சல் அனுப்பும் catch-all ஐ (எடுத்துக்காட்டாக Mailflare க்கு) இந்த Worker க்கும் சுட்டிக்காட்டவும். அது இன்று அங்கு அனுப்பும் அஞ்சல் அதற்குப் பதிலாக இங்கு வரும். வேறு அஞ்சல் பெறும் டொமைன்களுக்கு இதை அணைத்து வைக்கவும்.",
 	"common.copy": "நகலெடு",
 	"common.copied": "{value} நகலெடுக்கப்பட்டது",
+	"new.kind": "மாற்றுப்பெயர் வகை",
+	"new.kind.custom": "நீங்கள் தேர்ந்தெடுக்கும் பெயர்",
+	"dash.perPage": "ஒரு பக்கத்திற்கு {count}",
+	"dash.perPageLabel": "பக்கத்திற்கான வரிசைகள்",
 };
 
 export default dictionary;

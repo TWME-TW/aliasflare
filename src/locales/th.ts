@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ให้ catch-all ที่ส่งอีเมลไปที่อื่นอยู่แล้ว (เช่น Mailflare) ชี้มายัง Worker นี้ด้วย อีเมลที่ส่งไปที่นั่นในปัจจุบันจะมาถึงที่นี่แทน ให้ปิดไว้สำหรับโดเมนที่รับอีเมลอื่น",
 	"common.copy": "คัดลอก",
 	"common.copied": "คัดลอก {value} แล้ว",
+	"new.kind": "ประเภทนามแฝง",
+	"new.kind.custom": "ชื่อที่คุณเลือกเอง",
+	"dash.perPage": "{count} รายการต่อหน้า",
+	"dash.perPageLabel": "จำนวนแถวต่อหน้า",
 };
 
 export default dictionary;

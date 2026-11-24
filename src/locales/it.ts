@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Indirizza a questo Worker anche un catch-all che già invia posta altrove (ad esempio a Mailflare). La posta che oggi viene inviata lì arriverà invece qui. Lascialo disattivato per i domini che ricevono altra posta.",
 	"common.copy": "Copia",
 	"common.copied": "Copiato {value}",
+	"new.kind": "Tipo di alias",
+	"new.kind.custom": "Un nome a tua scelta",
+	"dash.perPage": "{count} per pagina",
+	"dash.perPageLabel": "Righe per pagina",
 };
 
 export default dictionary;

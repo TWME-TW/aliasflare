@@ -375,6 +375,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ಈಗಾಗಲೇ ಬೇರೆಡೆ ಮೇಲ್ ಕಳುಹಿಸುತ್ತಿರುವ catch-all ಅನ್ನು (ಉದಾಹರಣೆಗೆ Mailflare ಗೆ) ಈ Worker ಗೂ ತೋರಿಸಿ. ಅದು ಇಂದು ಅಲ್ಲಿಗೆ ಕಳುಹಿಸುವ ಮೇಲ್ ಬದಲಾಗಿ ಇಲ್ಲಿಗೆ ಬರುತ್ತದೆ. ಬೇರೆ ಮೇಲ್ ಬರುವ ಡೊಮೇನ್‌ಗಳಿಗೆ ಇದನ್ನು ಆಫ್ ಆಗಿಯೇ ಇಡಿ.",
 	"common.copy": "ನಕಲಿಸಿ",
 	"common.copied": "{value} ನಕಲಿಸಲಾಗಿದೆ",
+	"new.kind": "ಅಲಿಯಾಸ್ ಪ್ರಕಾರ",
+	"new.kind.custom": "ನೀವೇ ಆಯ್ಕೆ ಮಾಡುವ ಹೆಸರು",
+	"dash.perPage": "ಪ್ರತಿ ಪುಟಕ್ಕೆ {count}",
+	"dash.perPageLabel": "ಪ್ರತಿ ಪುಟಕ್ಕೆ ಸಾಲುಗಳು",
 };
 
 export default dictionary;

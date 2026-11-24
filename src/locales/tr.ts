@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Başka bir yere (örneğin Mailflare'e) e-posta gönderen bir catch-all'ı da bu Worker'a yönlendirir. Bugün oraya giden e-postalar bunun yerine buraya gelir. Başka e-posta alan alan adlarında kapalı bırakın.",
 	"common.copy": "Kopyala",
 	"common.copied": "{value} kopyalandı",
+	"new.kind": "Takma ad türü",
+	"new.kind.custom": "Kendin seçtiğin bir ad",
+	"dash.perPage": "Sayfa başına {count}",
+	"dash.perPageLabel": "Sayfa başına satır",
 };
 
 export default dictionary;

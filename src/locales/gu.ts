@@ -375,6 +375,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "પહેલેથી બીજે ક્યાંય મેઇલ મોકલતા catch-all ને (જેમ કે Mailflare પર) પણ આ Worker તરફ નિર્દેશિત કરો. તે આજે ત્યાં મોકલે છે તે મેઇલ તેના બદલે અહીં આવશે. બીજો મેઇલ મેળવતા ડોમેન માટે તેને બંધ રાખો.",
 	"common.copy": "કોપી કરો",
 	"common.copied": "{value} કૉપી કરવામાં આવ્યું",
+	"new.kind": "ઉપનામનો પ્રકાર",
+	"new.kind.custom": "તમે પસંદ કરેલું નામ",
+	"dash.perPage": "પ્રતિ પૃષ્ઠ {count}",
+	"dash.perPageLabel": "પ્રતિ પૃષ્ઠ પંક્તિઓ",
 };
 
 export default dictionary;

@@ -381,6 +381,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "이미 다른 곳(예: Mailflare)으로 메일을 보내는 catch-all도 이 Worker로 연결합니다. 현재 그곳으로 가던 메일이 대신 여기로 옵니다. 다른 메일을 받는 도메인에서는 끄세요.",
 	"common.copy": "복사",
 	"common.copied": "{value} 복사됨",
+	"new.kind": "별칭 유형",
+	"new.kind.custom": "직접 정한 이름",
+	"dash.perPage": "페이지당 {count}개",
+	"dash.perPageLabel": "페이지당 행 수",
 };
 
 export default dictionary;

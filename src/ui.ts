@@ -326,6 +326,10 @@ function statusPill(t: Translate, status: string): Html {
 	return html`<span class="pill ${tone}">${translated(t, `status.${status}`, status)}</span>`;
 }
 
+/** Rows per page the alias list offers. */
+export const ALIAS_PAGE_SIZES = [25, 50, 100, 200] as const;
+export const DEFAULT_ALIAS_PAGE_SIZE = 100;
+
 export type AliasListState = { query: string; filter: "all" | "active" | "disabled" | "pinned" | "deleted"; page: number; perPage: number; total: number };
 
 /** The "New alias" form above the alias list. */
@@ -333,17 +337,21 @@ function newAliasForm(t: Translate, settings: Settings): Html | string {
 	if (settings.aliasDomains.length === 0) {
 		return html`<p class="notice">${t("new.noDomains")} <a href="/settings">${t("dash.goToSettings")}</a></p>`;
 	}
-	return html`<details class="create">
+	return html`<details class="create" open>
 <summary>${t("new.title")}</summary>
 <form method="post" action="/aliases/new" class="create-form">
+<label>${t("new.kind")} <select name="kind" data-alias-kind>
+<option value="custom">${t("new.kind.custom")}</option>
+${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}">${t(`set.format.${format}`)}</option>`)}
+</select></label>
 <div class="create-address">
-<input type="text" name="prefix" maxlength="50" autocomplete="off" spellcheck="false" placeholder="${t("new.prefixPlaceholder")}" aria-label="${t("new.prefix")}" />
+<input type="text" name="prefix" data-custom-only maxlength="50" autocomplete="off" spellcheck="false" placeholder="${t("new.prefixPlaceholder")}" aria-label="${t("new.prefix")}" />
 <span aria-hidden="true">@</span>
 <select name="domain" aria-label="${t("new.domain")}">
 ${settings.aliasDomains.map((domain) => html`<option value="${domain}">${domain}</option>`)}
 </select>
 </div>
-<label class="check"><input type="checkbox" name="suffix" value="1" checked /><span>${t("new.suffix", { example: settings.customSuffix === "word" ? ".maple42" : ".x8k2fq" })}<p class="help">${t("new.help")}</p></span></label>
+<label class="check" data-custom-only><input type="checkbox" name="suffix" value="1" checked /><span>${t("new.suffix", { example: settings.customSuffix === "word" ? ".maple42" : ".x8k2fq" })}<p class="help">${t("new.help")}</p></span></label>
 <label>${t("new.note")} <input type="text" name="note" maxlength="500" /></label>
 <label>${t("new.destination")} <input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
 <button>${t("new.create")}</button>
@@ -368,6 +376,7 @@ export function dashboardPage(
 		const params = new URLSearchParams();
 		if (next.query) params.set("q", next.query);
 		if (next.filter !== "all") params.set("filter", next.filter);
+		if (next.perPage !== DEFAULT_ALIAS_PAGE_SIZE) params.set("per", String(next.perPage));
 		if (next.page > 1) params.set("page", String(next.page));
 		const search = params.toString();
 		return search ? `/?${search}` : "/";
@@ -405,6 +414,9 @@ ${newAliasForm(t, settings)}
 <input type="search" name="q" value="${list.query}" placeholder="${t("dash.searchPlaceholder")}" aria-label="${t("dash.search")}" />
 <select name="filter" aria-label="${t("dash.filter")}" data-autosubmit>
 ${(["all", "active", "disabled", "pinned", "deleted"] as const).map((filter) => html`<option value="${filter}" ${list.filter === filter ? "selected" : ""}>${t(`dash.filter.${filter}`)}</option>`)}
+</select>
+<select name="per" aria-label="${t("dash.perPageLabel")}" data-autosubmit>
+${ALIAS_PAGE_SIZES.map((size) => html`<option value="${size}" ${list.perPage === size ? "selected" : ""}>${t("dash.perPage", { count: String(size) })}</option>`)}
 </select>
 <button>${t("dash.searchButton")}</button>
 </form>

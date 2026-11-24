@@ -360,6 +360,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "すでに別の宛先（例: Mailflare）へメールを送っているキャッチオールも、このWorkerに向けます。現在そこに送られているメールは代わりにここへ届くようになります。他のメールを受信しているドメインではオフのままにしてください。",
 	"common.copy": "コピー",
 	"common.copied": "{value} をコピーしました",
+	"new.kind": "エイリアスの種類",
+	"new.kind.custom": "任意の名前",
+	"dash.perPage": "1ページあたり {count} 件",
+	"dash.perPageLabel": "1ページの行数",
 };
 
 export default dictionary;

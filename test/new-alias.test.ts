@@ -41,6 +41,16 @@ describe("creating an alias from the dashboard", () => {
 		expect(notice).toMatch(/^Created shop\.[a-z0-9]{6}@other\.test\.$/);
 	});
 
+	it("creates a UUID or word alias when that type is chosen, ignoring any name", async () => {
+		await create({ kind: "uuid", prefix: "ignored", domain: "me.test" });
+		await create({ kind: "random_words", domain: "me.test" });
+		const [first, second] = await addresses();
+		const all = [first, second];
+		expect(all.some((address) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@me\.test$/.test(address!))).toBe(true);
+		expect(all.some((address) => /^[a-z]+\.[a-z]+\d+@me\.test$/.test(address!))).toBe(true);
+		expect(all.some((address) => address!.startsWith("ignored"))).toBe(false);
+	});
+
 	it("creates a random alias without a name", async () => {
 		await create({ prefix: "", domain: "me.test" });
 		expect(await addresses()).toEqual([expect.stringMatching(/^[a-z]+\.[a-z]+\d{1,3}@me\.test$/)]);

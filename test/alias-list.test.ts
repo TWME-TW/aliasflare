@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/index";
+import { loadSettings, saveSettings } from "../src/settings";
 import { testDb } from "./helpers/d1";
 import { signIn, TEST_SECRET } from "./helpers/session";
 
@@ -34,6 +35,21 @@ describe("alias list", () => {
 		const page = await dashboard();
 		const order = [...page.matchAll(/data-copy="([^"]+)"/g)].map((match) => match[1]);
 		expect(order).toEqual(["old-pinned@me.test", "old-busy@me.test", "new@me.test", "old-quiet@me.test"]);
+	});
+
+	it("shows as many rows as asked for, keeps that size in the page links, and opens the new-alias form", async () => {
+		await saveSettings(db, { ...(await loadSettings(db)), aliasDomains: ["me.test"] });
+		const cookie = await signIn(db);
+		for (let i = 0; i < 30; i += 1) {
+			await db.prepare("INSERT INTO aliases (address, num_id, uid, created_at, updated_at) VALUES (?, ?, ?, 1, 1)").bind(`bulk${i}@me.test`, 100 + i, `b${i}`).run();
+		}
+		const page = await (await app.fetch(new Request("https://alias.test/?per=25", { headers: { cookie } }), env)).text();
+		expect([...page.matchAll(/data-copy="/g)]).toHaveLength(25);
+		expect(page).toContain('href="/?per=25&amp;page=2"');
+		expect(page).toMatch(/<option value="25" selected>/);
+		expect(page).toContain('<details class="create" open>');
+		const unknown = await (await app.fetch(new Request("https://alias.test/?per=7", { headers: { cookie } }), env)).text();
+		expect([...unknown.matchAll(/data-copy="/g)]).toHaveLength(34);
 	});
 
 	it("has a copy button for each alias, shown only by the page script", async () => {

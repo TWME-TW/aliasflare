@@ -366,6 +366,10 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Halakan juga catch-all yang sudah menghantar mel ke tempat lain (contohnya ke Mailflare) ke Worker ini. Mel yang dihantarnya ke sana hari ini akan datang ke sini. Biarkan tidak dipilih untuk domain yang menerima mel lain.",
 	"common.copy": "Salin",
 	"common.copied": "Disalin {value}",
+	"new.kind": "Jenis alias",
+	"new.kind.custom": "Nama pilihan anda",
+	"dash.perPage": "{count} setiap halaman",
+	"dash.perPageLabel": "Baris setiap halaman",
 };
 
 export default dictionary;
