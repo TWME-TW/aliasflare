@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "ज़ोन (Zone)",
 	"cf.tokenScope": "टोकन फ़ॉर्म के पहले मेनू में, हर अनुमति के सामने दिखाया गया स्कोप चुनें। ज़ोन अनुमतियों के लिए Zone Resources के तहत Include → Specific zone चुनें और हर उपनाम (alias) डोमेन का ज़ोन जोड़ें, ताकि टोकन कोई और डोमेन न बदल सके। Email Sending एक खाता अनुमति है: Account Resources के तहत अपना खाता शामिल करें।",
 	"cf.scopeAccount": "खाता (Account)",
+	"cf.replaceCatchAll": "मौजूदा catch-all बदलें",
+	"cf.replaceCatchAllHelp": "जो catch-all पहले से कहीं और मेल भेजता है (जैसे Mailflare को), उसे भी इस Worker पर भेजें। वह मेल जो आज वहाँ जाता है, उसके बजाय यहाँ आएगा। जिन डोमेन पर दूसरी मेल आती है, उनके लिए इसे बंद रखें।",
 };
 
 export default dictionary;

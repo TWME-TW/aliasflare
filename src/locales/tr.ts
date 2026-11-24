@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "bölge (Zone)",
 	"cf.tokenScope": "Token formunun ilk menüsünde, her iznin önünde gösterilen kapsamı seçin. Bölge izinleri için Zone Resources altında Include → Specific zone seçeneğini belirleyin ve her takma ad alan adının bölgesini ekleyin; böylece token başka hiçbir alan adını değiştiremez. Email Sending bir hesap iznidir: Account Resources altında hesabınızı ekleyin.",
 	"cf.scopeAccount": "hesap (Account)",
+	"cf.replaceCatchAll": "Mevcut catch-all'ları değiştir",
+	"cf.replaceCatchAllHelp": "Başka bir yere (örneğin Mailflare'e) e-posta gönderen bir catch-all'ı da bu Worker'a yönlendirir. Bugün oraya giden e-postalar bunun yerine buraya gelir. Başka e-posta alan alan adlarında kapalı bırakın.",
 };
 
 export default dictionary;

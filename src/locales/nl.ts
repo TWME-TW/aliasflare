@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "zone (Zone)",
 	"cf.tokenScope": "Kies in het eerste menu van het tokenformulier het bereik dat voor elk recht wordt getoond. Kies voor de zonerechten onder Zone Resources Include → Specific zone en voeg de zone van elk aliasdomein toe, zodat het token geen ander domein kan wijzigen. Email Sending is een accountrecht: neem onder Account Resources je account op.",
 	"cf.scopeAccount": "account (Account)",
+	"cf.replaceCatchAll": "Bestaande catch-alls vervangen",
+	"cf.replaceCatchAllHelp": "Laat ook een catch-all die al ergens anders mail naartoe stuurt (bijvoorbeeld naar Mailflare) naar deze Worker verwijzen. Mail die er nu naartoe gaat, komt dan hier terecht. Laat dit uit staan voor domeinen die andere mail ontvangen.",
 };
 
 export default dictionary;

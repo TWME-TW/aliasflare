@@ -377,6 +377,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "منطقة (Zone)",
 	"cf.tokenScope": "في القائمة الأولى من نموذج الرمز، اختر النطاق الظاهر أمام كل إذن. لأذونات المنطقة، ضمن Zone Resources اختر Include → Specific zone وأضف منطقة كل نطاق بديل، حتى لا يتمكن الرمز من تغيير أي نطاق آخر. Email Sending إذن على مستوى الحساب: ضمن Account Resources، أدرج حسابك.",
 	"cf.scopeAccount": "حساب (Account)",
+	"cf.replaceCatchAll": "استبدال catch-all الحالية",
+	"cf.replaceCatchAllHelp": "وجّه أيضًا إلى هذا Worker أي catch-all يرسل البريد إلى مكان آخر بالفعل (مثل Mailflare). فالبريد الذي يُرسل إلى هناك اليوم سيصل إلى هنا بدلًا من ذلك. اتركه معطّلًا للنطاقات التي تستقبل بريدًا آخر.",
 };
 
 export default dictionary;

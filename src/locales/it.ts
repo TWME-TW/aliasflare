@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "zona (Zone)",
 	"cf.tokenScope": "Nel primo menu del modulo del token scegli l'ambito mostrato davanti a ogni permesso. Per i permessi di zona, in Zone Resources scegli Include → Specific zone e aggiungi la zona di ogni dominio alias, così il token non potrà modificare nessun altro dominio. Email Sending è un permesso di account: in Account Resources, includi il tuo account.",
 	"cf.scopeAccount": "account (Account)",
+	"cf.replaceCatchAll": "Sostituisci i catch-all esistenti",
+	"cf.replaceCatchAllHelp": "Indirizza a questo Worker anche un catch-all che già invia posta altrove (ad esempio a Mailflare). La posta che oggi viene inviata lì arriverà invece qui. Lascialo disattivato per i domini che ricevono altra posta.",
 };
 
 export default dictionary;

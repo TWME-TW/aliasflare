@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Зона (Zone)",
 	"cf.tokenScope": "У першому меню форми токена оберіть область, позначену перед кожним дозволом. Для дозволів зони в розділі Zone Resources оберіть Include → Specific zone і додайте зону кожного alias-домену, щоб токен не міг змінити інші домени. Email Sending — це дозвіл облікового запису: у розділі Account Resources додайте свій обліковий запис.",
 	"cf.scopeAccount": "Обліковий запис (Account)",
+	"cf.replaceCatchAll": "Замінити наявні catch-all",
+	"cf.replaceCatchAllHelp": "Також спрямовує на цей Worker catch-all, який уже надсилає пошту деінде (наприклад, до Mailflare). Пошта, яку він зараз туди надсилає, натомість приходитиме сюди. Вимкніть для доменів, які отримують іншу пошту.",
 };
 
 export default dictionary;

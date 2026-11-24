@@ -377,6 +377,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "කලාපය (Zone)",
 	"cf.tokenScope": "ටෝකන් පෝරමයේ පළමු මෙනුවේ, සෑම අවසරයක් ඉදිරියෙන්ම පෙන්වන විෂය පථය තෝරන්න. කලාප අවසර සඳහා Zone Resources යටතේ Include → Specific zone තෝරා, සෑම alias වසමකම කලාපය එකතු කරන්න, එවිට ටෝකනයට වෙනත් වසමක් වෙනස් කළ නොහැක. Email Sending යනු ගිණුම් අවසරයකි: Account Resources යටතේ ඔබේ ගිණුම ඇතුළත් කරන්න.",
 	"cf.scopeAccount": "ගිණුම (Account)",
+	"cf.replaceCatchAll": "පවතින catch-all ප්‍රතිස්ථාපනය කරන්න",
+	"cf.replaceCatchAllHelp": "දැනටමත් වෙනත් තැනකට තැපෑල යවන catch-all එකද (උදාහරණයක් ලෙස Mailflare වෙත) මෙම Worker වෙත යොමු කරන්න. එය අද එහට යවන තැපෑල ඒ වෙනුවට මෙහි පැමිණෙනු ඇත. වෙනත් තැපෑල ලැබෙන වසම් සඳහා මෙය ක්‍රියාවිරහිතව තබන්න.",
 };
 
 export default dictionary;

@@ -377,6 +377,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "영역（Zone）",
 	"cf.tokenScope": "토큰 양식의 첫 번째 메뉴에서 각 권한 앞에 표시된 범위를 선택하세요. 영역 권한은 Zone Resources에서 Include → Specific zone을 선택하고 각 별칭 도메인의 영역을 추가하여, 토큰이 다른 도메인을 변경하지 못하도록 하세요. Email Sending은 계정 권한입니다. Account Resources에서 계정을 포함하세요.",
 	"cf.scopeAccount": "계정（Account）",
+	"cf.replaceCatchAll": "기존 catch-all 대체",
+	"cf.replaceCatchAllHelp": "이미 다른 곳(예: Mailflare)으로 메일을 보내는 catch-all도 이 Worker로 연결합니다. 현재 그곳으로 가던 메일이 대신 여기로 옵니다. 다른 메일을 받는 도메인에서는 끄세요.",
 };
 
 export default dictionary;

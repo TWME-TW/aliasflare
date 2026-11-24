@@ -356,6 +356,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "区域（Zone）",
 	"cf.tokenScope": "在令牌表单的第一个菜单中，选择每项权限前面显示的范围。区域权限请在 Zone Resources 下选择 Include → Specific zone，并添加每个别名域名所在的区域，使该令牌无法更改其他域名。Email Sending 是账户权限：请在 Account Resources 下包含你的账户。",
 	"cf.scopeAccount": "账户（Account）",
+	"cf.replaceCatchAll": "替换现有的 catch-all",
+	"cf.replaceCatchAllHelp": "同时将已把邮件发送到其他地方（例如 Mailflare）的 catch-all 指向此 Worker。它当前发往那里的邮件将改为发到这里。对于接收其他邮件的域名请保持关闭。",
 };
 
 export default dictionary;

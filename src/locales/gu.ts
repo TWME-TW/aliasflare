@@ -371,6 +371,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "ટોકન ફોર્મના પહેલા મેનુમાં, દરેક પરવાનગીની આગળ બતાવેલ scope પસંદ કરો. zone પરવાનગીઓ માટે Zone Resources હેઠળ Include → Specific zone પસંદ કરો અને દરેક alias ડોમેનનો zone ઉમેરો, જેથી ટોકન બીજું કોઈ ડોમેન બદલી ન શકે. Email Sending એ account પરવાનગી છે: Account Resources હેઠળ તમારો account ઉમેરો.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "હાલના catch-all બદલો",
+	"cf.replaceCatchAllHelp": "પહેલેથી બીજે ક્યાંય મેઇલ મોકલતા catch-all ને (જેમ કે Mailflare પર) પણ આ Worker તરફ નિર્દેશિત કરો. તે આજે ત્યાં મોકલે છે તે મેઇલ તેના બદલે અહીં આવશે. બીજો મેઇલ મેળવતા ડોમેન માટે તેને બંધ રાખો.",
 };
 
 export default dictionary;

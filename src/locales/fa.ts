@@ -377,6 +377,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "در اولین منوی فرم توکن، scope نشان‌داده‌شده جلوی هر دسترسی را انتخاب کنید. برای دسترسی‌های zone، زیر Zone Resources گزینه Include → Specific zone را انتخاب کنید و zone هر دامنهٔ alias را اضافه کنید تا توکن نتواند دامنهٔ دیگری را تغییر دهد. Email Sending یک دسترسی account است: زیر Account Resources، account خود را اضافه کنید.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "جایگزینی catch-allهای موجود",
+	"cf.replaceCatchAllHelp": "یک catch-all که از قبل ایمیل را جای دیگری می‌فرستد (مثلاً به Mailflare) را هم به این Worker وصل می‌کند. ایمیلی که امروز به آنجا می‌فرستد، به‌جایش به اینجا می‌رسد. برای دامنه‌هایی که ایمیل دیگری دریافت می‌کنند خاموش بگذارید.",
 };
 
 export default dictionary;

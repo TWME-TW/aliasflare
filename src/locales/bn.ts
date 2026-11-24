@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "জোন (Zone)",
 	"cf.tokenScope": "টোকেন ফর্মের প্রথম মেনুতে প্রতিটি অনুমতির সামনে দেখানো স্কোপ বেছে নিন। জোন অনুমতির জন্য Zone Resources-এর অধীনে Include → Specific zone বেছে নিন এবং প্রতিটি alias ডোমেইনের জোন যোগ করুন, যাতে টোকেন অন্য কোনো ডোমেইন পরিবর্তন করতে না পারে। Email Sending একটি অ্যাকাউন্ট অনুমতি: Account Resources-এর অধীনে আপনার অ্যাকাউন্ট যোগ করুন।",
 	"cf.scopeAccount": "অ্যাকাউন্ট (Account)",
+	"cf.replaceCatchAll": "বিদ্যমান catch-all প্রতিস্থাপন করুন",
+	"cf.replaceCatchAllHelp": "যে catch-all ইতিমধ্যে অন্য কোথাও মেইল পাঠায় (যেমন Mailflare-এ), তাকেও এই Worker-এ নির্দেশ করুন। সে আজ যে মেইল সেখানে পাঠায়, তার বদলে তা এখানে আসবে। অন্য মেইল গ্রহণ করে এমন ডোমেইনের জন্য এটি বন্ধ রাখুন।",
 };
 
 export default dictionary;

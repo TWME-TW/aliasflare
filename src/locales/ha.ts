@@ -377,6 +377,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "A menu na farko na fom ɗin token, zaɓi scope da ake nunawa a gaban kowane izini. Don izinin zone, a ƙarƙashin Zone Resources zaɓi Include → Specific zone kuma ƙara zone na kowane alias domain, don token ɗin ya kasa canja wani domain. Email Sending izinin account ne: a ƙarƙashin Account Resources, haɗa account ɗinka.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "Maye gurbin catch-all da ke wanzu",
+	"cf.replaceCatchAllHelp": "Haka kuma a nuna wa wannan Worker catch-all da ke aika saƙo a wani wuri tuni (misali zuwa Mailflare). Saƙon da yake aikawa can yau zai zo nan maimakon. A bar shi a kashe ga domains da ke karɓar wasu saƙonni.",
 };
 
 export default dictionary;

@@ -371,6 +371,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "டோக்கன் படிவத்தின் முதல் மெனுவில், ஒவ்வொரு அனுமதிக்கும் முன் காட்டப்படும் scope ஐத் தேர்ந்தெடுக்கவும். zone அனுமதிகளுக்கு Zone Resources இன் கீழ் Include → Specific zone ஐத் தேர்ந்தெடுத்து, ஒவ்வொரு alias டொமைனின் zone ஐயும் சேர்க்கவும், இதனால் டோக்கன் வேறு எந்த டொமைனையும் மாற்ற முடியாது. Email Sending என்பது account அனுமதி: Account Resources இன் கீழ் உங்கள் account ஐச் சேர்க்கவும்.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "இருக்கும் catch-all களை மாற்று",
+	"cf.replaceCatchAllHelp": "ஏற்கனவே வேறிடத்திற்கு அஞ்சல் அனுப்பும் catch-all ஐ (எடுத்துக்காட்டாக Mailflare க்கு) இந்த Worker க்கும் சுட்டிக்காட்டவும். அது இன்று அங்கு அனுப்பும் அஞ்சல் அதற்குப் பதிலாக இங்கு வரும். வேறு அஞ்சல் பெறும் டொமைன்களுக்கு இதை அணைத்து வைக்கவும்.",
 };
 
 export default dictionary;

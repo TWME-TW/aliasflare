@@ -528,7 +528,7 @@ app.post("/connection/cloudflare", async (c) => {
 	const domains = settings.aliasDomains.filter((domain) => chosen.includes(domain));
 	if (!domains.length) return redirectWithNotice(c, "/connection", "notice.needAliasDomains");
 	if (!token) return redirectWithNotice(c, "/connection", "notice.needCloudflareToken");
-	const setup = await setUpCloudflare({ token, domains, workerName: config.workerName });
+	const setup = await setUpCloudflare({ token, domains, workerName: config.workerName, replaceCatchAll: form.replaceCatchAll === "1" });
 	return renderConnection(c, config, setup);
 });
 

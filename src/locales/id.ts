@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "zona (Zone)",
 	"cf.tokenScope": "Di menu pertama formulir token, pilih cakupan yang ditampilkan di depan setiap izin. Untuk izin zona, di bagian Zone Resources pilih Include → Specific zone dan tambahkan zona dari setiap domain alias, agar token tidak dapat mengubah domain lain. Email Sending adalah izin akun: di bagian Account Resources, sertakan akun Anda.",
 	"cf.scopeAccount": "akun (Account)",
+	"cf.replaceCatchAll": "Ganti catch-all yang ada",
+	"cf.replaceCatchAllHelp": "Arahkan juga catch-all yang sudah mengirim email ke tempat lain (misalnya ke Mailflare) ke Worker ini. Email yang saat ini dikirim ke sana akan masuk ke sini. Biarkan nonaktif untuk domain yang menerima email lain.",
 };
 
 export default dictionary;

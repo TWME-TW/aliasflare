@@ -356,6 +356,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "ゾーン（Zone）",
 	"cf.tokenScope": "トークンフォームの最初のメニューで、各権限の前に表示されているスコープを選択してください。ゾーン権限は、Zone Resources で Include → Specific zone を選び、各エイリアスドメインのゾーンを追加してください。これによりトークンは他のドメインを変更できなくなります。Email Sending はアカウント権限です。Account Resources で、あなたのアカウントを含めてください。",
 	"cf.scopeAccount": "アカウント（Account）",
+	"cf.replaceCatchAll": "既存のキャッチオールを置き換える",
+	"cf.replaceCatchAllHelp": "すでに別の宛先（例: Mailflare）へメールを送っているキャッチオールも、このWorkerに向けます。現在そこに送られているメールは代わりにここへ届くようになります。他のメールを受信しているドメインではオフのままにしてください。",
 };
 
 export default dictionary;

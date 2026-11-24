@@ -356,6 +356,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "區域（Zone）",
 	"cf.tokenScope": "在 token 表單的第一個選單，選擇每個權限前面標示的範圍。區域權限請在 Zone Resources 選 Include → Specific zone，逐一加入每個別名網域的區域，讓 token 不能更動其他網域。Email Sending 是帳號權限：請在 Account Resources 加入你的帳號。",
 	"cf.scopeAccount": "帳號（Account）",
+	"cf.replaceCatchAll": "取代現有的 catch-all",
+	"cf.replaceCatchAllHelp": "已經把信送往其他地方（例如 Mailflare）的 catch-all，也改為指向這個 Worker。原本送到那裡的信之後會改送到這裡。用來接收其他信件的網域請不要勾選。",
 };
 
 export default dictionary;

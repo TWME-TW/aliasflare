@@ -114,7 +114,7 @@ async function enableSending(token: string, zoneId: string, domain: string): Pro
 	}
 }
 
-export async function setUpDomain(input: { token: string; domain: string; workerName: string }): Promise<DomainSetup> {
+export async function setUpDomain(input: { token: string; domain: string; workerName: string; replaceCatchAll?: boolean }): Promise<DomainSetup> {
 	const { token, domain, workerName } = input;
 	const reverseDomain = reverseDomainFor(domain);
 	const steps: SetupStep[] = [];
@@ -143,9 +143,9 @@ export async function setUpDomain(input: { token: string; domain: string; worker
 		}
 		await enableRouting(token, found, domain);
 		const current = await cf<Rule>(token, `${zonePath}/email/routing/rules/catch_all`).catch(() => null);
-		if (current?.enabled && !toWorker(current.actions, workerName)) {
+		if (current?.enabled && !toWorker(current.actions, workerName) && !input.replaceCatchAll) {
 			const where = current.actions.map((action) => [action.type, ...(action.value ?? [])].join(" ")).join(", ");
-			throw new Error(`The catch-all of ${domain} already sends mail elsewhere (${where}); it was left unchanged. Point it at the Worker ${workerName} in the Cloudflare dashboard if this domain is only for aliases.`);
+			throw new Error(`The catch-all of ${domain} already sends mail elsewhere (${where}); it was left unchanged. If this domain is only for aliases, tick “Replace existing catch-alls” and run the setup again.`);
 		}
 		await cf(token, `${zonePath}/email/routing/rules/catch_all`, {
 			method: "PUT",
@@ -186,8 +186,8 @@ export async function setUpDomain(input: { token: string; domain: string; worker
 	return { domain, steps };
 }
 
-export async function setUpCloudflare(input: { token: string; domains: string[]; workerName: string }): Promise<DomainSetup[]> {
+export async function setUpCloudflare(input: { token: string; domains: string[]; workerName: string; replaceCatchAll?: boolean }): Promise<DomainSetup[]> {
 	const results: DomainSetup[] = [];
-	for (const domain of input.domains) results.push(await setUpDomain({ token: input.token, domain, workerName: input.workerName }));
+	for (const domain of input.domains) results.push(await setUpDomain({ token: input.token, domain, workerName: input.workerName, replaceCatchAll: input.replaceCatchAll }));
 	return results;
 }

@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "జోన్ (Zone)",
 	"cf.tokenScope": "టోకెన్ ఫారమ్‌లోని మొదటి మెనూలో ప్రతి అనుమతికి ముందు చూపే స్కోప్‌ను ఎంచుకోండి. జోన్ అనుమతుల కోసం Zone Resources కింద Include → Specific zone ఎంచుకుని, ప్రతి alias డొమైన్ యొక్క జోన్‌ను జోడించండి, తద్వారా టోకెన్ మరే ఇతర డొమైన్‌ను మార్చలేదు. Email Sending అనేది ఖాతా అనుమతి: Account Resources కింద మీ ఖాతాను చేర్చండి.",
 	"cf.scopeAccount": "ఖాతా (Account)",
+	"cf.replaceCatchAll": "ఇప్పటికే ఉన్న catch-all లను భర్తీ చేయండి",
+	"cf.replaceCatchAllHelp": "ఇప్పటికే వేరే చోటికి మెయిల్ పంపుతున్న catch-all ను (ఉదాహరణకు Mailflare కు) ఈ Worker కు కూడా చూపండి. అది ఈరోజు అక్కడికి పంపే మెయిల్ బదులుగా ఇక్కడికి వస్తుంది. ఇతర మెయిల్ అందుకునే డొమైన్‌ల కోసం దీనిని ఆఫ్ చేసి ఉంచండి.",
 };
 
 export default dictionary;

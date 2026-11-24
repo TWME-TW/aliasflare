@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "vùng (Zone)",
 	"cf.tokenScope": "Trong menu đầu tiên của biểu mẫu token, chọn phạm vi được hiển thị trước mỗi quyền. Với quyền vùng, trong Zone Resources, chọn Include → Specific zone và thêm vùng của từng miền bí danh, để token không thể thay đổi miền khác. Email Sending là quyền tài khoản: trong Account Resources, hãy bao gồm tài khoản của bạn.",
 	"cf.scopeAccount": "tài khoản (Account)",
+	"cf.replaceCatchAll": "Thay thế các catch-all hiện có",
+	"cf.replaceCatchAllHelp": "Cũng trỏ catch-all đang gửi thư đến nơi khác (chẳng hạn Mailflare) tới Worker này. Thư mà nó đang gửi đến đó sẽ chuyển về đây. Hãy tắt tùy chọn này với các tên miền đang nhận thư khác.",
 };
 
 export default dictionary;

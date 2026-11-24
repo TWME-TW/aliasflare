@@ -371,6 +371,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "ಟೋಕನ್ ಫಾರ್ಮ್‌ನ ಮೊದಲ ಮೆನುವಿನಲ್ಲಿ, ಪ್ರತಿ ಅನುಮತಿಯ ಮುಂದೆ ತೋರಿಸಿರುವ scope ಆರಿಸಿ. zone ಅನುಮತಿಗಳಿಗಾಗಿ Zone Resources ಅಡಿಯಲ್ಲಿ Include → Specific zone ಆರಿಸಿ ಮತ್ತು ಪ್ರತಿ alias ಡೊಮೇನ್‌ನ zone ಸೇರಿಸಿ, ಇದರಿಂದ ಟೋಕನ್ ಬೇರೆ ಯಾವುದೇ ಡೊಮೇನ್ ಬದಲಾಯಿಸಲಾಗದು. Email Sending ಒಂದು account ಅನುಮತಿ: Account Resources ಅಡಿಯಲ್ಲಿ ನಿಮ್ಮ account ಸೇರಿಸಿ.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "ಇರುವ catch-all ಗಳನ್ನು ಬದಲಿಸಿ",
+	"cf.replaceCatchAllHelp": "ಈಗಾಗಲೇ ಬೇರೆಡೆ ಮೇಲ್ ಕಳುಹಿಸುತ್ತಿರುವ catch-all ಅನ್ನು (ಉದಾಹರಣೆಗೆ Mailflare ಗೆ) ಈ Worker ಗೂ ತೋರಿಸಿ. ಅದು ಇಂದು ಅಲ್ಲಿಗೆ ಕಳುಹಿಸುವ ಮೇಲ್ ಬದಲಾಗಿ ಇಲ್ಲಿಗೆ ಬರುತ್ತದೆ. ಬೇರೆ ಮೇಲ್ ಬರುವ ಡೊಮೇನ್‌ಗಳಿಗೆ ಇದನ್ನು ಆಫ್ ಆಗಿಯೇ ಇಡಿ.",
 };
 
 export default dictionary;

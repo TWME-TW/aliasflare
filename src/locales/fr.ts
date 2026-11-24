@@ -377,6 +377,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "Dans le premier menu du formulaire du jeton, choisissez le périmètre affiché devant chaque autorisation. Pour les autorisations de zone, sous Zone Resources, choisissez Include → Specific zone et ajoutez la zone de chaque domaine alias, afin que le jeton ne puisse modifier aucun autre domaine. Email Sending est une autorisation de compte : sous Account Resources, incluez votre compte.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "Remplacer les catch-all existants",
+	"cf.replaceCatchAllHelp": "Redirige aussi vers ce Worker un catch-all qui envoie déjà du courrier ailleurs (par exemple vers Mailflare). Le courrier qu'il envoie aujourd'hui là-bas arrivera ici à la place. Désactivez cette option pour les domaines qui reçoivent d'autres courriers.",
 };
 
 export default dictionary;

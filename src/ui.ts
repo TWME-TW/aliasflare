@@ -600,6 +600,7 @@ ${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.to
 	([scope, name, level]) => html`<li><span class="pill scope ${scope}">${t(scope === "zone" ? "cf.scopeZone" : "cf.scopeAccount")}</span><span class="perm-name">${name}</span><span class="perm-level">${level}</span></li>`,
 )}</ul>
 <p class="help">${t("cf.tokenScope")}</p>
+${checkbox("replaceCatchAll", false, t("cf.replaceCatchAll"), t("cf.replaceCatchAllHelp"))}
 <label for="workerName">${t("cf.workerName")}</label>
 <input id="workerName" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
 <p class="help">${t("cf.workerNameHelp")}</p>${fixedNote("workerName")}

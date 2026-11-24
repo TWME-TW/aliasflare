@@ -377,6 +377,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "Kwenye menyu ya kwanza ya fomu ya token, chagua scope inayoonyeshwa mbele ya kila ruhusa. Kwa ruhusa za zone, chini ya Zone Resources chagua Include → Specific zone na uongeze zone ya kila domain ya alias, ili token isiweze kubadilisha domain nyingine. Email Sending ni ruhusa ya account: chini ya Account Resources, jumuisha account yako.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "Badilisha catch-all zilizopo",
+	"cf.replaceCatchAllHelp": "Elekeza pia kwenye Worker hii catch-all ambayo tayari inatuma barua mahali pengine (kwa mfano kwa Mailflare). Barua inazotuma huko leo sasa zitafika hapa badala yake. Iache imezimwa kwa vikoa vinavyopokea barua nyingine.",
 };
 
 export default dictionary;

@@ -362,6 +362,8 @@ const dictionary: Dictionary = {
 	"cf.scopeZone": "โซน (Zone)",
 	"cf.tokenScope": "ในเมนูแรกของฟอร์มโทเค็น ให้เลือกขอบเขตที่แสดงอยู่หน้าสิทธิ์แต่ละรายการ สำหรับสิทธิ์ระดับโซน ภายใต้ Zone Resources ให้เลือก Include → Specific zone และเพิ่มโซนของแต่ละโดเมนนามแฝง เพื่อให้โทเค็นไม่สามารถเปลี่ยนโดเมนอื่นได้ Email Sending เป็นสิทธิ์ระดับบัญชี: ภายใต้ Account Resources ให้รวมบัญชีของคุณ",
 	"cf.scopeAccount": "บัญชี (Account)",
+	"cf.replaceCatchAll": "แทนที่ catch-all ที่มีอยู่",
+	"cf.replaceCatchAllHelp": "ให้ catch-all ที่ส่งอีเมลไปที่อื่นอยู่แล้ว (เช่น Mailflare) ชี้มายัง Worker นี้ด้วย อีเมลที่ส่งไปที่นั่นในปัจจุบันจะมาถึงที่นี่แทน ให้ปิดไว้สำหรับโดเมนที่รับอีเมลอื่น",
 };
 
 export default dictionary;

@@ -379,6 +379,8 @@ export const en = {
 	"cf.scopeZone": "Zone",
 	"cf.tokenScope": "Pick the scope shown in front of each permission in the first menu of the token form. For the zone permissions, under Zone Resources choose Include → Specific zone and add the zone of each alias domain, so the token can change no other domain. Email Sending is an account permission: under Account Resources, include your account.",
 	"cf.scopeAccount": "Account",
+	"cf.replaceCatchAll": "Replace existing catch-alls",
+	"cf.replaceCatchAllHelp": "Also point a catch-all that already sends mail elsewhere (for example to Mailflare) at this Worker. Mail it sends there today then comes here instead. Leave it off for domains that receive other mail.",
 };
 
 export type MessageKey = keyof typeof en;
