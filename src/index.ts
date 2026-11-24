@@ -295,18 +295,21 @@ app.get("/settings", async (c) =>
 
 app.post("/settings", async (c) => {
 	const form = await c.req.parseBody();
+	// The page saves each change as it happens (X-Autosave) and expects JSON; without script it posts the form.
+	const reply = (key: MessageKey, ok: boolean, params?: Record<string, string>) =>
+		c.req.header("X-Autosave") === "1"
+			? c.json({ ok, message: c.get("t")(key, params) }, ok ? 200 : 400)
+			: redirectWithNotice(c, "/settings", key, params);
 	const destination = typeof form.defaultDestination === "string" ? form.defaultDestination.trim() : "";
 	const reverseDomain = c.get("config").reverseDomain;
-	if (destination && !extractEmail(destination)) return redirectWithNotice(c, "/settings", "notice.badDestination");
-	if (destination && reverseDomain && domainOf(destination) === reverseDomain) {
-		return redirectWithNotice(c, "/settings", "notice.destinationOnReverse");
-	}
+	if (destination && !extractEmail(destination)) return reply("notice.badDestination", false);
+	if (destination && reverseDomain && domainOf(destination) === reverseDomain) return reply("notice.destinationOnReverse", false);
 	const aliasDomains = (typeof form.aliasDomains === "string" ? form.aliasDomains : "")
 		.split(/[\s,]+/)
 		.map((domain) => domain.trim().toLowerCase())
 		.filter(Boolean);
 	const badDomain = aliasDomains.find((domain) => !DOMAIN_PATTERN.test(domain) || domain === reverseDomain);
-	if (badDomain) return redirectWithNotice(c, "/settings", "notice.badAliasDomain", { value: badDomain });
+	if (badDomain) return reply("notice.badAliasDomain", false, { value: badDomain });
 	const settings = normalizeSettings({
 		simpleloginApi: form.simpleloginApi === "1",
 		addyApi: form.addyApi === "1",
@@ -323,7 +326,7 @@ app.post("/settings", async (c) => {
 		defaultDestination: destination,
 	});
 	await saveSettings(c.env.DB, settings);
-	return redirectWithNotice(c, "/settings", "notice.settingsSaved");
+	return reply("notice.settingsSaved", true);
 });
 
 function renderConnection(c: C, config: AppConfig, setup?: SetupStep[]) {

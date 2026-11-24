@@ -26,6 +26,7 @@ const STYLE = raw(`
 	--primary:#8ab4f8; --primary-text:#202124; --primary-hover:#aecbfa; --nav-active:#004a77; --nav-active-text:#c2e7ff;
 	--danger:#f2b8b5; --danger-soft:#3c1f1e; --ok:#81c995; --ok-soft:#1e3324; --warn-soft:#3a3220; --focus:rgba(138,180,248,.3); } }
 * { box-sizing:border-box; }
+[hidden] { display:none !important; }
 html { -webkit-text-size-adjust:100%; }
 body { margin:0; font:15px/1.5 var(--font); background:var(--bg); color:var(--text); min-height:100vh; }
 a { color:var(--primary); text-decoration:none; } a:hover { text-decoration:underline; }
@@ -124,6 +125,10 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	td input[type=text], td input[type=email], td select { max-width:none; font-size:16px; }
 }
 .mobile-only { display:none; }
+.toast { position:fixed; inset-inline:0; bottom:24px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); z-index:10;
+	padding:12px 20px; border-radius:12px; background:#323232; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
+.toast.bad { background:var(--danger); color:#fff; }
+@media (prefers-color-scheme: dark) { .toast { background:#e8eaed; color:#202124; } .toast.bad { background:#f2b8b5; color:#601410; } }
 `);
 
 /** Lucide icons (ISC license), inlined so the page needs no extra requests. */
@@ -154,7 +159,7 @@ function languageMenu(t: Translate, path = "/", extraClass = ""): Html {
 <select id="lang-${extraClass || "main"}" name="locale" data-autosubmit>
 ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${locale === t.locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
 </select>
-<button type="submit" data-autosubmit-button>${t("lang.apply")}</button>
+<noscript><button type="submit">${t("lang.apply")}</button></noscript>
 </form>`;
 }
 
@@ -330,7 +335,7 @@ export function settingsPage(t: Translate, input: { settings: Settings; reverseD
 		t("settings.title"),
 		html`<main>
 ${noticeBox(notice)}
-<form class="sections" method="post" action="/settings">
+<form class="sections" method="post" action="/settings" data-autosave data-msg-failed="${t("link.error")}">
 <section>
 <h2>${t("settings.section")}</h2>
 <label for="defaultDestination">${t("settings.destination")}</label>
@@ -379,9 +384,10 @@ ${checkbox("addyApi", settings.addyApi, t("set.addyApi"), t("set.addyApiHelp", {
 ${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings.randomAliasFormat === format ? "selected" : ""}>${t(`set.format.${format}`)}</option>`)}
 </select>
 
-<p><button class="primary">${t("settings.saveButton")}</button></p>
+<noscript><p><button class="primary">${t("settings.saveButton")}</button></p></noscript>
 </section>
 </form>
+<div class="toast" role="status" aria-live="polite" data-toast hidden></div>
 </main>`,
 		{ t, nav: true, current: "/settings", path: "/settings" },
 	);

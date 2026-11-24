@@ -110,8 +110,39 @@ export const APP_SCRIPT = `(() => {
   "use strict";
   for (const select of document.querySelectorAll("select[data-autosubmit]")) {
     select.addEventListener("change", () => select.form && select.form.requestSubmit());
-    const button = select.form && select.form.querySelector("[data-autosubmit-button]");
-    if (button) button.hidden = true;
+  }
+
+  // Settings save as soon as something changes; a short message confirms it.
+  const toast = document.querySelector("[data-toast]");
+  let toastTimer = 0;
+  const show = (message, ok) => {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.toggle("bad", !ok);
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, ok ? 2500 : 6000);
+  };
+  for (const form of document.querySelectorAll("form[data-autosave]")) {
+    let latest = 0;
+    const save = async () => {
+      const id = ++latest;
+      try {
+        const response = await fetch(form.action, {
+          method: "POST",
+          body: new URLSearchParams(new FormData(form)),
+          headers: { "X-Autosave": "1", Accept: "application/json" },
+          credentials: "same-origin",
+        });
+        const result = await response.json().catch(() => null);
+        if (id !== latest) return; // a newer change is already on its way
+        show((result && (result.message || result.error)) || form.dataset.msgFailed, !!(response.ok && result && result.ok));
+      } catch {
+        if (id === latest) show(form.dataset.msgFailed, false);
+      }
+    };
+    form.addEventListener("change", save);
+    form.addEventListener("submit", (event) => { event.preventDefault(); save(); });
   }
   for (const input of document.querySelectorAll("input[data-select]")) {
     input.addEventListener("focus", () => input.select());
