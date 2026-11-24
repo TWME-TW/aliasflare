@@ -242,6 +242,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			"List-Unsubscribe": `<${origin}/unsubscribe/${await sign("unsubscribe", forwardId)}>`,
 			"List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
 			[LOOP_HEADER]: aliasAddress,
+			"X-Original-To": aliasAddress,
 		};
 		if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
 		if (references.length) headers.References = references.join(" ");
@@ -250,7 +251,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const subject = email.subject?.trim() || "(no subject)";
 		const result = await env.EMAIL.send({
 			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
-			to: destination,
+			// Cloudflare will not take a To header of our own, so the alias goes in the display name:
+			// the message still reads as sent to the alias, and the real mailbox stays the recipient.
+			to: { name: aliasAddress, email: destination },
 			replyTo: reverseAddress,
 			subject: spoofed ? `${translator(settings.language)("banner.spoofSubject")} ${subject}` : subject,
 			headers,

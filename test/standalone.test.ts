@@ -83,7 +83,9 @@ describe("mail through Email Routing", () => {
 		expect(sent).toHaveLength(1);
 		const from = sent[0]!.from as { email: string };
 		expect(from.email).toMatch(/^reply\+[a-z0-9_]+@r\.a\.test$/);
-		expect(sent[0]!.to).toBe("owner@gmail.test");
+		// Delivered to the real mailbox, but shown as sent to the alias.
+		expect(sent[0]!.to).toEqual({ name: "shop@a.test", email: "owner@gmail.test" });
+		expect(sent[0]!.headers?.["X-Original-To"]).toBe("shop@a.test");
 		expect(sent[0]!.headers?.["List-Unsubscribe"]).toMatch(/^<https:\/\/alias\.test\/unsubscribe\//);
 		expect(await db.prepare("SELECT mailbox_id FROM aliases WHERE address = 'shop@a.test'").first("mailbox_id")).toBe("");
 	});
