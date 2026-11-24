@@ -8,6 +8,8 @@ describe("client APIs on a fresh install", () => {
 	it("are all off until turned on in Settings", async () => {
 		expect(DEFAULT_SETTINGS.simpleloginApi).toBe(false);
 		expect(DEFAULT_SETTINGS.addyApi).toBe(false);
+		// The banner names the alias and the sender; off unless asked for, so it is not passed on by accident.
+		expect(DEFAULT_SETTINGS.showBanner).toBe(false);
 		const env = { DB: testDb(), SIGNING_SECRET: TEST_SECRET } as unknown as Env;
 		for (const path of ["/api/user_info", "/api/v4/alias/options", "/api/v1/account-details"]) {
 			const response = await app.fetch(new Request(`https://alias.test${path}`, { headers: { Authentication: "af_x", Authorization: "Bearer af_x" } }), env);

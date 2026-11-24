@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	defaultDestination: "",
 	autoForwardNewAliases: true,
 	removeTrackers: true,
-	showBanner: true,
+	showBanner: false,
 	language: "en",
 	simpleloginApi: false,
 	addyApi: false,
