@@ -258,7 +258,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "Dari addy.io",
 	"imp.fromCsv": "Dari file ekspor",
 	"imp.apiKey": "Kunci API",
-	"imp.slKeyHelp": "Buat di SimpleLogin pada Settings → API keys. Hanya dipakai untuk impor ini dan tidak disimpan.",
+	"imp.slKeyHelp": "Buat di SimpleLogin pada API Keys (app.simplelogin.io/dashboard/api_key). Hanya dipakai untuk impor ini dan tidak disimpan.",
 	"imp.addyKeyHelp": "Buat di addy.io pada Settings → API keys. Hanya dipakai untuk impor ini dan tidak disimpan.",
 	"imp.server": "Server",
 	"imp.serverHelp": "Ubah ini hanya jika Anda menghosting SimpleLogin atau addy.io sendiri.",

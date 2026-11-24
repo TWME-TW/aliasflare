@@ -258,7 +258,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "Từ addy.io",
 	"imp.fromCsv": "Từ tệp xuất",
 	"imp.apiKey": "Khóa API",
-	"imp.slKeyHelp": "Tạo một khóa trong SimpleLogin tại Settings → API keys. Khóa chỉ được dùng cho lần nhập này và không được lưu.",
+	"imp.slKeyHelp": "Tạo một khóa trong SimpleLogin tại API Keys (app.simplelogin.io/dashboard/api_key). Khóa chỉ được dùng cho lần nhập này và không được lưu.",
 	"imp.addyKeyHelp": "Tạo một khóa trong addy.io tại Settings → API keys. Khóa chỉ được dùng cho lần nhập này và không được lưu.",
 	"imp.server": "Máy chủ",
 	"imp.serverHelp": "Chỉ thay đổi mục này nếu bạn tự lưu trữ SimpleLogin hoặc addy.io.",

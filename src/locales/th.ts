@@ -258,7 +258,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "จาก addy.io",
 	"imp.fromCsv": "จากไฟล์ที่ส่งออก",
 	"imp.apiKey": "คีย์ API",
-	"imp.slKeyHelp": "สร้างได้ใน SimpleLogin ที่ Settings → API keys ใช้สำหรับการนำเข้าครั้งนี้เท่านั้นและไม่ถูกบันทึก",
+	"imp.slKeyHelp": "สร้างได้ใน SimpleLogin ที่ API Keys (app.simplelogin.io/dashboard/api_key) ใช้สำหรับการนำเข้าครั้งนี้เท่านั้นและไม่ถูกบันทึก",
 	"imp.addyKeyHelp": "สร้างได้ใน addy.io ที่ Settings → API keys ใช้สำหรับการนำเข้าครั้งนี้เท่านั้นและไม่ถูกบันทึก",
 	"imp.server": "เซิร์ฟเวอร์",
 	"imp.serverHelp": "เปลี่ยนเฉพาะเมื่อคุณโฮสต์ SimpleLogin หรือ addy.io เอง",

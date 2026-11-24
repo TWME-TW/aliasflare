@@ -252,7 +252,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "从 addy.io 导入",
 	"imp.fromCsv": "从导出文件导入",
 	"imp.apiKey": "API key",
-	"imp.slKeyHelp": "在 SimpleLogin 的「Settings → API keys」创建。仅用于本次导入，不会保存。",
+	"imp.slKeyHelp": "在 SimpleLogin 的「API Keys (app.simplelogin.io/dashboard/api_key)」创建。仅用于本次导入，不会保存。",
 	"imp.addyKeyHelp": "在 addy.io 的「Settings → API keys」创建。仅用于本次导入，不会保存。",
 	"imp.server": "服务器",
 	"imp.serverHelp": "只有自行托管 SimpleLogin 或 addy.io 时才需要修改。",

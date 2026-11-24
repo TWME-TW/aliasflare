@@ -273,7 +273,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "Kutoka addy.io",
 	"imp.fromCsv": "Kutoka faili ya kuhamisha",
 	"imp.apiKey": "Ufunguo wa API",
-	"imp.slKeyHelp": "Unda mmoja katika SimpleLogin chini ya Settings → API keys. Unatumika kwa uletaji huu pekee na haujahifadhiwa.",
+	"imp.slKeyHelp": "Unda mmoja katika SimpleLogin chini ya API Keys (app.simplelogin.io/dashboard/api_key). Unatumika kwa uletaji huu pekee na haujahifadhiwa.",
 	"imp.addyKeyHelp": "Unda mmoja katika addy.io chini ya Settings → API keys. Unatumika kwa uletaji huu pekee na haujahifadhiwa.",
 	"imp.server": "Seva",
 	"imp.serverHelp": "Badilisha hii tu ikiwa unaendesha SimpleLogin au addy.io mwenyewe.",

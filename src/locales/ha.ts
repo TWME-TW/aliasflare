@@ -273,7 +273,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "Daga addy.io",
 	"imp.fromCsv": "Daga fayil ɗin fitarwa",
 	"imp.apiKey": "Maɓallin API",
-	"imp.slKeyHelp": "Ƙirƙiri ɗaya a SimpleLogin ƙarƙashin Settings → API keys. Ana amfani da shi don wannan shigo da kawai kuma ba a adana shi.",
+	"imp.slKeyHelp": "Ƙirƙiri ɗaya a SimpleLogin ƙarƙashin API Keys (app.simplelogin.io/dashboard/api_key). Ana amfani da shi don wannan shigo da kawai kuma ba a adana shi.",
 	"imp.addyKeyHelp": "Ƙirƙiri ɗaya a addy.io ƙarƙashin Settings → API keys. Ana amfani da shi don wannan shigo da kawai kuma ba a adana shi.",
 	"imp.server": "Sabar",
 	"imp.serverHelp": "Canja wannan kawai idan kai da kanka ke tafiyar da SimpleLogin ko addy.io.",

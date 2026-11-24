@@ -273,7 +273,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "Desde addy.io",
 	"imp.fromCsv": "Desde un archivo de exportación",
 	"imp.apiKey": "Clave de API",
-	"imp.slKeyHelp": "Crea una en SimpleLogin, en Settings → API keys. Se usa solo para esta importación y no se guarda.",
+	"imp.slKeyHelp": "Crea una en SimpleLogin, en API Keys (app.simplelogin.io/dashboard/api_key). Se usa solo para esta importación y no se guarda.",
 	"imp.addyKeyHelp": "Crea una en addy.io, en Settings → API keys. Se usa solo para esta importación y no se guarda.",
 	"imp.server": "Servidor",
 	"imp.serverHelp": "Cámbialo solo si alojas SimpleLogin o addy.io por tu cuenta.",

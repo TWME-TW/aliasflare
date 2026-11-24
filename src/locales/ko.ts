@@ -273,7 +273,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "addy.io에서 가져오기",
 	"imp.fromCsv": "내보낸 파일에서 가져오기",
 	"imp.apiKey": "API 키",
-	"imp.slKeyHelp": "SimpleLogin의 Settings → API keys에서 만드세요. 이번 가져오기에만 사용되며 저장되지 않습니다.",
+	"imp.slKeyHelp": "SimpleLogin의 API Keys (app.simplelogin.io/dashboard/api_key)에서 만드세요. 이번 가져오기에만 사용되며 저장되지 않습니다.",
 	"imp.addyKeyHelp": "addy.io의 Settings → API keys에서 만드세요. 이번 가져오기에만 사용되며 저장되지 않습니다.",
 	"imp.server": "서버",
 	"imp.serverHelp": "SimpleLogin 또는 addy.io를 직접 호스팅하는 경우에만 변경하세요.",

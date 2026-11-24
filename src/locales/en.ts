@@ -275,7 +275,7 @@ export const en = {
 	"imp.fromAddy": "From addy.io",
 	"imp.fromCsv": "From an export file",
 	"imp.apiKey": "API key",
-	"imp.slKeyHelp": "Create one in SimpleLogin under Settings → API keys. It is used for this import only and is not saved.",
+	"imp.slKeyHelp": "In SimpleLogin, open the account menu at the top right and choose API Keys (app.simplelogin.io/dashboard/api_key). The key is used for this import only and is not saved.",
 	"imp.addyKeyHelp": "Create one in addy.io under Settings → API keys. It is used for this import only and is not saved.",
 	"imp.server": "Server",
 	"imp.serverHelp": "Change this only if you host SimpleLogin or addy.io yourself.",

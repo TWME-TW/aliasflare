@@ -258,7 +258,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "addy.io నుండి",
 	"imp.fromCsv": "ఎగుమతి ఫైల్ నుండి",
 	"imp.apiKey": "API కీ",
-	"imp.slKeyHelp": "SimpleLoginలో Settings → API keys కింద ఒకటి సృష్టించండి. ఇది ఈ దిగుమతికి మాత్రమే ఉపయోగిస్తారు, సేవ్ చేయరు.",
+	"imp.slKeyHelp": "SimpleLoginలో API Keys (app.simplelogin.io/dashboard/api_key) కింద ఒకటి సృష్టించండి. ఇది ఈ దిగుమతికి మాత్రమే ఉపయోగిస్తారు, సేవ్ చేయరు.",
 	"imp.addyKeyHelp": "addy.ioలో Settings → API keys కింద ఒకటి సృష్టించండి. ఇది ఈ దిగుమతికి మాత్రమే ఉపయోగిస్తారు, సేవ్ చేయరు.",
 	"imp.server": "సర్వర్",
 	"imp.serverHelp": "మీరు SimpleLogin లేదా addy.ioను స్వయంగా హోస్ట్ చేస్తే మాత్రమే దీన్ని మార్చండి.",

@@ -273,7 +273,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "addy.io වෙතින්",
 	"imp.fromCsv": "අපනයන ගොනුවකින්",
 	"imp.apiKey": "API යතුර",
-	"imp.slKeyHelp": "SimpleLogin හි Settings → API keys යටතේ එකක් සාදන්න. එය භාවිතා වන්නේ මෙම ආනයනයට පමණි, සුරකින්නේ නැත.",
+	"imp.slKeyHelp": "SimpleLogin හි API Keys (app.simplelogin.io/dashboard/api_key) යටතේ එකක් සාදන්න. එය භාවිතා වන්නේ මෙම ආනයනයට පමණි, සුරකින්නේ නැත.",
 	"imp.addyKeyHelp": "addy.io හි Settings → API keys යටතේ එකක් සාදන්න. එය භාවිතා වන්නේ මෙම ආනයනයට පමණි, සුරකින්නේ නැත.",
 	"imp.server": "සේවාදායකය",
 	"imp.serverHelp": "ඔබ SimpleLogin හෝ addy.io ඔබම සත්කාරකත්වය දරන්නේ නම් පමණක් මෙය වෙනස් කරන්න.",

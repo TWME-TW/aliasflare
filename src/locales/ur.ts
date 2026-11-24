@@ -273,7 +273,7 @@ const dictionary: Dictionary = {
 	"imp.fromAddy": "addy.io سے",
 	"imp.fromCsv": "ایکسپورٹ فائل سے",
 	"imp.apiKey": "API کی",
-	"imp.slKeyHelp": "SimpleLogin میں Settings → API keys کے تحت ایک بنائیں۔ یہ صرف اس امپورٹ کے لیے استعمال ہوتی ہے اور محفوظ نہیں کی جاتی۔",
+	"imp.slKeyHelp": "SimpleLogin میں API Keys (app.simplelogin.io/dashboard/api_key) کے تحت ایک بنائیں۔ یہ صرف اس امپورٹ کے لیے استعمال ہوتی ہے اور محفوظ نہیں کی جاتی۔",
 	"imp.addyKeyHelp": "addy.io میں Settings → API keys کے تحت ایک بنائیں۔ یہ صرف اس امپورٹ کے لیے استعمال ہوتی ہے اور محفوظ نہیں کی جاتی۔",
 	"imp.server": "سرور",
 	"imp.serverHelp": "اسے صرف تب بدلیں جب آپ SimpleLogin یا addy.io خود ہوسٹ کرتے ہوں۔",
