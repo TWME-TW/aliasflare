@@ -234,7 +234,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "ஒவ்வொரு மாற்றுப்பெயர் டொமைனுக்கும், எ.கா. a.com, இது அமைக்கிறது: a.com-இல் ஒவ்வொரு முகவரிக்கும் வரும் அஞ்சலை இந்த Worker-க்கு அனுப்பும் catch-all; subaddressing-உடன் தலைகீழ் மாற்றுப்பெயர் டொமைன் r.a.com மற்றும் reply+…@r.a.com-க்கான ஒரு விதி; இரண்டுக்கும் Email Sending. மீண்டும் இயக்குவது பாதுகாப்பானது.",
 	"cf.token": "Cloudflare API டோக்கன்",
-	"cf.tokenHelp": "இந்த அனுமதிகளுடன் zone-க்கான டோக்கனை உருவாக்கவும்: Zone Read, Zone Settings Edit, Email Routing Rules Edit மற்றும் Email Sending Edit. இது இந்த அமைப்புக்கு மட்டுமே பயன்படுத்தப்படும், சேமிக்கப்படாது; வைத்துக்கொள்ள CLOUDFLARE_API_TOKEN ரகசியத்தை அமைக்கவும்.",
+	"cf.tokenHelp": "My Profile → API Tokens கீழ் இந்த அனுமதிகளுடன் ஒரு தனிப்பயன் டோக்கனை உருவாக்கவும். இது இந்த அமைப்புக்கு மட்டுமே பயன்படுத்தப்படும், சேமிக்கப்படாது; வைத்துக்கொள்ள CLOUDFLARE_API_TOKEN ரகசியத்தை அமைக்கவும்.",
 	"cf.workerName": "Worker பெயர்",
 	"cf.workerNameHelp": "இந்த Worker எந்தப் பெயரில் வரிசைப்படுத்தப்பட்டதோ அந்தப் பெயர்.",
 	"cf.run": "தானாக அமை",
@@ -368,6 +368,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "அமைக்க வேண்டிய மாற்றுப்பெயர் டொமைன்கள்",
 	"cf.reverseIs": "{reverse}-இல் தலைகீழ் மாற்றுப்பெயர்கள்",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "இவை அனைத்தும் zone அனுமதிகள் (Zone), account அனுமதிகள் (Account) அல்ல: டோக்கன் படிவத்தில் முதல் மெனுவில் Zone ஐத் தேர்ந்தெடுக்கவும், பின்னர் அனுமதி, பின்னர் அணுகல் நிலை. Zone Resources இன் கீழ் Include → Specific zone ஐத் தேர்ந்தெடுத்து, ஒவ்வொரு alias டொமைனின் zone ஐயும் சேர்க்கவும், இதனால் டோக்கன் வேறு எதையும் மாற்ற முடியாது.",
 };
 
 export default dictionary;

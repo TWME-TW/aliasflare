@@ -219,7 +219,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "以別名網域 a.com 為例，這會設定：a.com 的 catch-all，把所有地址的信送到這個 Worker；反向別名網域 r.a.com，開啟子地址並以一條規則處理 reply+…@r.a.com；以及兩者的 Email Sending。重複執行是安全的。",
 	"cf.token": "Cloudflare API token",
-	"cf.tokenHelp": "為這些區域建立一個具備以下權限的 token：Zone Read、Zone Settings Edit、Email Routing Rules Edit 和 Email Sending Edit。它只用於這次設定，不會儲存；若要保留，請設定 CLOUDFLARE_API_TOKEN secret。",
+	"cf.tokenHelp": "在 My Profile → API Tokens 建立自訂 token，並加入下列權限。它只用於這次設定，不會儲存；若要保留，請設定 CLOUDFLARE_API_TOKEN secret。",
 	"cf.workerName": "Worker 名稱",
 	"cf.workerNameHelp": "部署這個 Worker 時使用的名稱。",
 	"cf.run": "自動設定",
@@ -353,6 +353,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "要設定的別名網域",
 	"cf.reverseIs": "反向別名位於 {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "區域（Zone）",
+	"cf.tokenScope": "這些都是區域（Zone）權限，不是帳號（Account）權限：在 token 表單的第一個選單選 Zone，再選權限名稱和存取等級。在 Zone Resources 選 Include → Specific zone，逐一加入每個別名網域的區域，讓這個 token 不能更動其他東西。",
 };
 
 export default dictionary;

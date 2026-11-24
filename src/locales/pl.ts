@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Dla każdej domeny aliasów, np. a.com, to ustawia: catch-all na a.com, który wysyła pocztę na dowolny adres do tego Workera; domenę aliasów zwrotnych r.a.com z subadresowaniem i jedną regułą dla reply+…@r.a.com; oraz Email Sending dla obu. Ponowne uruchomienie jest bezpieczne.",
 	"cf.token": "Token API Cloudflare",
-	"cf.tokenHelp": "Utwórz token dla stref z tymi uprawnieniami: Zone Read, Zone Settings Edit, Email Routing Rules Edit i Email Sending Edit. Jest używany tylko do tej konfiguracji i nie jest zapisywany; aby go zachować, ustaw sekret CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Utwórz własny token w My Profile → API Tokens z poniższymi uprawnieniami. Jest używany tylko do tej konfiguracji i nie jest zapisywany; aby go zachować, ustaw sekret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nazwa Workera",
 	"cf.workerNameHelp": "Nazwa, pod którą wdrożono tego Workera.",
 	"cf.run": "Skonfiguruj automatycznie",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Domeny aliasów do skonfigurowania",
 	"cf.reverseIs": "aliasy zwrotne na {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "strefa (Zone)",
+	"cf.tokenScope": "To są uprawnienia strefy (Zone), a nie uprawnienia konta (Account): w formularzu tokenu wybierz Zone w pierwszym menu, następnie uprawnienie, a potem poziom dostępu. W sekcji Zone Resources wybierz Include → Specific zone i dodaj strefę każdej domeny aliasu, aby token nie mógł zmienić niczego innego.",
 };
 
 export default dictionary;

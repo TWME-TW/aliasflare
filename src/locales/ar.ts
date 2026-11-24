@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "لكل نطاق اسم مستعار، مثل a.com، يُعدّ هذا: catch-all على a.com يرسل بريد كل عنوان إلى هذا Worker؛ ونطاق الاسم المستعار العكسي r.a.com مع subaddressing وقاعدة واحدة لـ reply+…@r.a.com؛ وEmail Sending للاثنين. إعادة التشغيل آمنة.",
 	"cf.token": "رمز Cloudflare API",
-	"cf.tokenHelp": "أنشئ رمزًا للمناطق بهذه الأذونات: Zone Read وZone Settings Edit وEmail Routing Rules Edit وEmail Sending Edit. يُستخدم لهذا الإعداد فقط ولا يُحفظ؛ ولحفظه، اضبط السر CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "أنشئ رمزًا مخصصًا من My Profile → API Tokens بالأذونات الواردة أدناه. يُستخدم لهذا الإعداد فقط ولا يُحفظ؛ ولحفظه، اضبط السر CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "اسم الـ Worker",
 	"cf.workerNameHelp": "الاسم الذي نُشر به هذا الـ Worker.",
 	"cf.run": "الإعداد تلقائيًا",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "نطاقات الأسماء المستعارة المراد إعدادها",
 	"cf.reverseIs": "الأسماء المستعارة العكسية على {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "منطقة (Zone)",
+	"cf.tokenScope": "كل هذه أذونات للمنطقة (Zone) وليست أذونات حساب (Account): في نموذج الرمز، اختر Zone من القائمة الأولى، ثم الإذن، ثم مستوى الوصول. ضمن Zone Resources، اختر Include → Specific zone وأضف منطقة كل نطاق بديل، حتى لا يتمكن الرمز من تغيير أي شيء آخر.",
 };
 
 export default dictionary;

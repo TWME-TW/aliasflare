@@ -89,6 +89,11 @@ form.inline { display:inline; margin:0; }
 /* Chips and messages */
 .pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--muted); }
 .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
+.perms { list-style:none; padding:0; margin:10px 0 0; display:grid; gap:6px; }
+.perms li { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; }
+.pill.scope { background:var(--nav-active); color:var(--nav-active-text); }
+.perm-name { font-weight:600; color:var(--text); }
+.perm-level { font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; padding:1px 8px; border-radius:6px; background:var(--ok-soft); color:var(--ok); }
 .notice { padding:12px 18px; border-radius:16px; margin:0; background:var(--nav-active); color:var(--nav-active-text); }
 .notice.bad { background:#fce8e6; color:#b3261e; }
 @media (prefers-color-scheme: dark) { .notice.bad { background:#601410; color:#f2b8b5; } }
@@ -535,6 +540,15 @@ ${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.app
 	);
 }
 
+/** What the Cloudflare token needs, as the token form names it: every one is a zone permission. */
+const TOKEN_PERMISSIONS: [string, string][] = [
+	["Zone", "Read"],
+	["Zone Settings", "Edit"],
+	["DNS", "Edit"],
+	["Email Routing Rules", "Edit"],
+	["Email Sending", "Edit"],
+];
+
 export function connectionPage(
 	t: Translate,
 	input: {
@@ -581,6 +595,10 @@ ${cloudflare.domains.length
 	: html`<p class="help">${t("notice.needAliasDomains")} <a href="/settings#clients">${t("nav.settings")} →</a></p>`}
 </fieldset>
 ${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.tokenHelp"))}
+<ul class="perms">${TOKEN_PERMISSIONS.map(
+	([name, level]) => html`<li><span class="pill scope">${t("cf.scopeZone")}</span><span class="perm-name">${name}</span><span class="perm-level">${level}</span></li>`,
+)}</ul>
+<p class="help">${t("cf.tokenScope")}</p>
 <label for="workerName">${t("cf.workerName")}</label>
 <input id="workerName" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
 <p class="help">${t("cf.workerNameHelp")}</p>${fixedNote("workerName")}

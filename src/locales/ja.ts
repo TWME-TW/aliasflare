@@ -219,7 +219,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "各エイリアス用ドメイン（例: a.com）について、次の設定を行います: a.com のキャッチオールで、すべてのアドレス宛てのメールをこの Worker に送信; リバースエイリアス用ドメイン r.a.com のサブアドレス機能と、reply+…@r.a.com のルール1つ; 両方の Email Sending。再実行しても安全です。",
 	"cf.token": "Cloudflare API トークン",
-	"cf.tokenHelp": "対象ゾーンに対して次の権限を持つトークンを作成してください: Zone Read、Zone Settings Edit、Email Routing Rules Edit、Email Sending Edit。このセットアップにのみ使用され、保存されません。保存したい場合は CLOUDFLARE_API_TOKEN シークレットを設定してください。",
+	"cf.tokenHelp": "My Profile → API Tokens で、以下の権限を持つカスタムトークンを作成してください。このセットアップにのみ使用され、保存されません。保存したい場合は CLOUDFLARE_API_TOKEN シークレットを設定してください。",
 	"cf.workerName": "Worker 名",
 	"cf.workerNameHelp": "この Worker をデプロイしたときの名前。",
 	"cf.run": "自動で設定",
@@ -353,6 +353,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "設定するエイリアス用ドメイン",
 	"cf.reverseIs": "{reverse} 上のリバースエイリアス",
 	"cf.step.catchall": "キャッチオール",
+	"cf.scopeZone": "ゾーン（Zone）",
+	"cf.tokenScope": "これらはすべてゾーン権限（Zone）であり、アカウント権限（Account）ではありません。トークンのフォームでは、最初のメニューで Zone を選択し、次に権限、続けてアクセスレベルを選びます。Zone Resources で Include → Specific zone を選び、各エイリアスドメインのゾーンを追加してください。これにより、トークンが他の何も変更できなくなります。",
 };
 
 export default dictionary;

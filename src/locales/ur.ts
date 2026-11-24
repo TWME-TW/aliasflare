@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "ہر عرف ڈومین کے لیے، جیسے a.com، یہ ترتیب دیتا ہے: a.com پر ایک catch-all جو ہر پتے کی میل اس Worker کو بھیجتا ہے؛ subaddressing کے ساتھ ریورس عرف ڈومین r.a.com اور reply+…@r.a.com کے لیے ایک قاعدہ؛ اور دونوں کے لیے Email Sending۔ دوبارہ چلانا محفوظ ہے۔",
 	"cf.token": "Cloudflare API ٹوکن",
-	"cf.tokenHelp": "ان اجازتوں کے ساتھ zone کے لیے ایک ٹوکن بنائیں: Zone Read، Zone Settings Edit، Email Routing Rules Edit اور Email Sending Edit۔ یہ صرف اس سیٹ اپ کے لیے استعمال ہوتا ہے اور محفوظ نہیں کیا جاتا؛ اسے رکھنے کے لیے CLOUDFLARE_API_TOKEN سیکرٹ ترتیب دیں۔",
+	"cf.tokenHelp": "My Profile → API Tokens کے تحت نیچے دی گئی اجازتوں کے ساتھ ایک حسبِ ضرورت ٹوکن بنائیں۔ یہ صرف اس سیٹ اپ کے لیے استعمال ہوتا ہے اور محفوظ نہیں کیا جاتا؛ اسے رکھنے کے لیے CLOUDFLARE_API_TOKEN سیکرٹ ترتیب دیں۔",
 	"cf.workerName": "Worker کا نام",
 	"cf.workerNameHelp": "وہ نام جس سے یہ Worker ڈپلائے کیا گیا تھا۔",
 	"cf.run": "خود بخود سیٹ اپ کریں",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "ترتیب دیے جانے والے عرف ڈومینز",
 	"cf.reverseIs": "{reverse} پر ریورس عرف",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "یہ تمام zone اجازتیں (Zone) ہیں، account اجازتیں (Account) نہیں: ٹوکن فارم میں پہلے مینو سے Zone منتخب کریں، پھر اجازت، پھر رسائی کی سطح۔ Zone Resources کے تحت Include → Specific zone منتخب کریں اور ہر alias ڈومین کا zone شامل کریں، تاکہ ٹوکن کچھ اور تبدیل نہ کر سکے۔",
 };
 
 export default dictionary;

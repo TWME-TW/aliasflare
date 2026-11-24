@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "สำหรับแต่ละโดเมนนามแฝง เช่น a.com ขั้นตอนนี้จะตั้งค่า: catch-all บน a.com ที่ส่งอีเมลทุกที่อยู่มายัง Worker นี้; โดเมนนามแฝงย้อนกลับ r.a.com พร้อม subaddressing และหนึ่งกฎสำหรับ reply+…@r.a.com; และ Email Sending สำหรับทั้งสองโดเมน การรันซ้ำปลอดภัย",
 	"cf.token": "โทเค็น API ของ Cloudflare",
-	"cf.tokenHelp": "สร้างโทเค็นสำหรับโซนด้วยสิทธิ์เหล่านี้: Zone Read, Zone Settings Edit, Email Routing Rules Edit และ Email Sending Edit ใช้สำหรับการตั้งค่านี้เท่านั้นและไม่ถูกเก็บไว้ หากต้องการเก็บ ให้ตั้งค่าลับ CLOUDFLARE_API_TOKEN",
+	"cf.tokenHelp": "สร้างโทเค็นที่กำหนดเองใน My Profile → API Tokens พร้อมสิทธิ์ด้านล่าง ใช้สำหรับการตั้งค่านี้เท่านั้นและไม่ถูกเก็บไว้ หากต้องการเก็บ ให้ตั้งค่าลับ CLOUDFLARE_API_TOKEN",
 	"cf.workerName": "ชื่อ Worker",
 	"cf.workerNameHelp": "ชื่อที่ใช้ตอนปรับใช้ Worker นี้",
 	"cf.run": "ตั้งค่าอัตโนมัติ",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "โดเมนนามแฝงที่จะตั้งค่า",
 	"cf.reverseIs": "นามแฝงย้อนกลับบน {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "โซน (Zone)",
+	"cf.tokenScope": "ทั้งหมดนี้เป็นสิทธิ์ระดับโซน (Zone) ไม่ใช่สิทธิ์ระดับบัญชี (Account): ในฟอร์มโทเค็น ให้เลือก Zone ในเมนูแรก จากนั้นเลือกสิทธิ์ และระดับการเข้าถึง ภายใต้ Zone Resources ให้เลือก Include → Specific zone แล้วเพิ่มโซนของแต่ละโดเมนนามแฝง เพื่อให้โทเค็นไม่สามารถเปลี่ยนแปลงสิ่งอื่นได้",
 };
 
 export default dictionary;

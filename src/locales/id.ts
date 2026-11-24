@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Untuk setiap domain alias, misalnya a.com, ini mengatur: catch-all di a.com yang mengirim email untuk alamat apa pun ke Worker ini; domain alias balik r.a.com dengan subalamat dan satu aturan untuk reply+…@r.a.com; serta Email Sending untuk keduanya. Menjalankannya lagi aman.",
 	"cf.token": "Token API Cloudflare",
-	"cf.tokenHelp": "Buat token untuk zona dengan izin berikut: Zone Read, Zone Settings Edit, Email Routing Rules Edit, dan Email Sending Edit. Token hanya dipakai untuk pengaturan ini dan tidak disimpan; untuk menyimpannya, atur secret CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Buat token kustom di My Profile → API Tokens dengan izin berikut. Token hanya dipakai untuk pengaturan ini dan tidak disimpan; untuk menyimpannya, atur secret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nama Worker",
 	"cf.workerNameHelp": "Nama yang dipakai saat Worker ini di-deploy.",
 	"cf.run": "Siapkan otomatis",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Domain alias yang akan diatur",
 	"cf.reverseIs": "alias balik di {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "zona (Zone)",
+	"cf.tokenScope": "Semua ini adalah izin zona (Zone), bukan izin akun (Account): di formulir token, pilih Zone di menu pertama, lalu izinnya, lalu tingkat aksesnya. Di bagian Zone Resources, pilih Include → Specific zone dan tambahkan zona dari setiap domain alias, agar token tidak dapat mengubah yang lain.",
 };
 
 export default dictionary;

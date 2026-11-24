@@ -234,7 +234,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "ਹਰੇਕ ਉਪਨਾਮ ਡੋਮੇਨ ਲਈ, ਜਿਵੇਂ a.com, ਇਹ ਸੈੱਟ ਕਰਦਾ ਹੈ: a.com 'ਤੇ ਇੱਕ catch-all ਜੋ ਹਰ ਪਤੇ ਦੀ ਮੇਲ ਇਸ Worker ਨੂੰ ਭੇਜਦਾ ਹੈ; subaddressing ਵਾਲਾ ਰਿਵਰਸ-ਉਪਨਾਮ ਡੋਮੇਨ r.a.com ਅਤੇ reply+…@r.a.com ਲਈ ਇੱਕ ਨਿਯਮ; ਅਤੇ ਦੋਹਾਂ ਲਈ Email Sending। ਮੁੜ ਚਲਾਉਣਾ ਸੁਰੱਖਿਅਤ ਹੈ।",
 	"cf.token": "Cloudflare API ਟੋਕਨ",
-	"cf.tokenHelp": "ਇਨ੍ਹਾਂ ਇਜਾਜ਼ਤਾਂ ਨਾਲ ਜ਼ੋਨ ਲਈ ਇੱਕ ਟੋਕਨ ਬਣਾਓ: Zone Read, Zone Settings Edit, Email Routing Rules Edit ਅਤੇ Email Sending Edit। ਇਹ ਸਿਰਫ਼ ਇਸ ਸੈੱਟਅੱਪ ਲਈ ਵਰਤਿਆ ਜਾਂਦਾ ਹੈ ਅਤੇ ਸੰਭਾਲਿਆ ਨਹੀਂ ਜਾਂਦਾ; ਇਸਨੂੰ ਰੱਖਣ ਲਈ CLOUDFLARE_API_TOKEN ਸੀਕਰੇਟ ਸੈੱਟ ਕਰੋ।",
+	"cf.tokenHelp": "My Profile → API Tokens ਹੇਠ ਹੇਠਾਂ ਦਿੱਤੀਆਂ ਇਜਾਜ਼ਤਾਂ ਨਾਲ ਇੱਕ ਕਸਟਮ ਟੋਕਨ ਬਣਾਓ। ਇਹ ਸਿਰਫ਼ ਇਸ ਸੈੱਟਅੱਪ ਲਈ ਵਰਤਿਆ ਜਾਂਦਾ ਹੈ ਅਤੇ ਸੰਭਾਲਿਆ ਨਹੀਂ ਜਾਂਦਾ; ਇਸਨੂੰ ਰੱਖਣ ਲਈ CLOUDFLARE_API_TOKEN ਸੀਕਰੇਟ ਸੈੱਟ ਕਰੋ।",
 	"cf.workerName": "Worker ਦਾ ਨਾਮ",
 	"cf.workerNameHelp": "ਉਹ ਨਾਮ ਜਿਸ ਨਾਲ ਇਹ Worker ਡਿਪਲੌਏ ਕੀਤਾ ਗਿਆ ਸੀ।",
 	"cf.run": "ਆਪਣੇ ਆਪ ਸੈੱਟ ਕਰੋ",
@@ -368,6 +368,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "ਸੈੱਟ ਕਰਨ ਵਾਲੇ ਉਪਨਾਮ ਡੋਮੇਨ",
 	"cf.reverseIs": "{reverse} 'ਤੇ ਰਿਵਰਸ ਉਪਨਾਮ",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "ਜ਼ੋਨ (Zone)",
+	"cf.tokenScope": "ਇਹ ਸਾਰੀਆਂ ਜ਼ੋਨ ਇਜਾਜ਼ਤਾਂ (Zone) ਹਨ, ਅਕਾਊਂਟ ਇਜਾਜ਼ਤਾਂ (Account) ਨਹੀਂ: ਟੋਕਨ ਫਾਰਮ ਵਿੱਚ ਪਹਿਲੇ ਮੀਨੂ ਤੋਂ Zone ਚੁਣੋ, ਫਿਰ ਇਜਾਜ਼ਤ, ਫਿਰ ਪਹੁੰਚ ਪੱਧਰ। Zone Resources ਹੇਠ Include → Specific zone ਚੁਣੋ ਅਤੇ ਹਰੇਕ alias ਡੋਮੇਨ ਦਾ ਜ਼ੋਨ ਜੋੜੋ, ਤਾਂ ਜੋ ਟੋਕਨ ਹੋਰ ਕੁਝ ਨਾ ਬਦਲ ਸਕੇ।",
 };
 
 export default dictionary;

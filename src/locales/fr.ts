@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Pour chaque domaine d'alias, par exemple a.com, ceci configure : un catch-all sur a.com qui envoie le courrier de toute adresse vers ce Worker ; le domaine d'alias inversé r.a.com avec sous-adresses et une règle pour reply+…@r.a.com ; et Email Sending pour les deux. Le relancer est sans risque.",
 	"cf.token": "Jeton d'API Cloudflare",
-	"cf.tokenHelp": "Créez un jeton pour les zones avec ces autorisations : Zone Read, Zone Settings Edit, Email Routing Rules Edit et Email Sending Edit. Il sert uniquement à cette configuration et n'est pas stocké ; pour le conserver, définissez le secret CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Créez un jeton personnalisé dans My Profile → API Tokens avec les autorisations suivantes. Il ne sert qu'à cette configuration et n'est pas stocké ; pour le conserver, définissez le secret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nom du Worker",
 	"cf.workerNameHelp": "Le nom avec lequel ce Worker a été déployé.",
 	"cf.run": "Configurer automatiquement",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Domaines d'alias à configurer",
 	"cf.reverseIs": "alias inversés sur {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "Il s'agit d'autorisations de zone (Zone), et non de compte (Account) : dans le formulaire du jeton, choisissez Zone dans le premier menu, puis l'autorisation, puis le niveau d'accès. Sous Zone Resources, choisissez Include → Specific zone et ajoutez la zone de chaque domaine alias, afin que le jeton ne puisse rien modifier d'autre.",
 };
 
 export default dictionary;

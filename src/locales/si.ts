@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "සෑම අන්වර්ථ වසමක් සඳහාම, උදා. a.com, මෙය සකසයි: a.com හි සෑම ලිපිනයකටම එන තැපෑල මෙම Worker වෙත යවන catch-all එකක්; subaddressing සහිත ප්‍රතිලෝම අන්වර්ථ වසම r.a.com සහ reply+…@r.a.com සඳහා එක් නීතියක්; දෙකටම Email Sending. නැවත ධාවනය කිරීම ආරක්ෂිතයි.",
 	"cf.token": "Cloudflare API ටෝකනය",
-	"cf.tokenHelp": "මෙම අවසර සහිත කලාපය සඳහා ටෝකනයක් සාදන්න: Zone Read, Zone Settings Edit, Email Routing Rules Edit සහ Email Sending Edit. එය මෙම සැකසුම සඳහා පමණක් භාවිතා වන අතර ගබඩා නොකෙරේ; එය තබා ගැනීමට CLOUDFLARE_API_TOKEN රහස් අගය සකසන්න.",
+	"cf.tokenHelp": "My Profile → API Tokens යටතේ පහත අවසර සහිතව අභිරුචි ටෝකනයක් සාදන්න. එය මෙම සැකසුම සඳහා පමණක් භාවිතා වන අතර ගබඩා නොකෙරේ; එය තබා ගැනීමට CLOUDFLARE_API_TOKEN රහස් අගය සකසන්න.",
 	"cf.workerName": "Worker නම",
 	"cf.workerNameHelp": "මෙම Worker යෙදවූ නම.",
 	"cf.run": "ස්වයංක්‍රීයව සකසන්න",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "සැකසිය යුතු අන්වර්ථ වසම්",
 	"cf.reverseIs": "{reverse} හි ප්‍රතිලෝම අන්වර්ථ",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "කලාපය (Zone)",
+	"cf.tokenScope": "මේවා සියල්ලම කලාප අවසර (Zone) වන අතර ගිණුම් අවසර (Account) නොවේ: ටෝකන පෝරමයේ පළමු මෙනුවෙන් Zone තෝරන්න, ඉන්පසු අවසරය, ඉන්පසු ප්‍රවේශ මට්ටම. Zone Resources යටතේ Include → Specific zone තෝරා, සෑම alias වසමකම කලාපය එකතු කරන්න, එවිට ටෝකනයට වෙනත් කිසිවක් වෙනස් කළ නොහැක.",
 };
 
 export default dictionary;

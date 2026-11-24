@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Với mỗi tên miền bí danh, ví dụ a.com, thao tác này thiết lập: catch-all trên a.com gửi thư đến mọi địa chỉ tới Worker này; tên miền bí danh ngược r.a.com với địa chỉ phụ và một quy tắc cho reply+…@r.a.com; và Email Sending cho cả hai. Chạy lại cũng an toàn.",
 	"cf.token": "Token API Cloudflare",
-	"cf.tokenHelp": "Tạo token cho các vùng với các quyền sau: Zone Read, Zone Settings Edit, Email Routing Rules Edit và Email Sending Edit. Token chỉ dùng cho lần thiết lập này và không được lưu; để giữ lại, hãy đặt bí mật CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Tạo token tùy chỉnh trong My Profile → API Tokens với các quyền bên dưới. Token chỉ dùng cho lần thiết lập này và không được lưu; để giữ lại, hãy đặt bí mật CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Tên Worker",
 	"cf.workerNameHelp": "Tên mà Worker này đã được triển khai.",
 	"cf.run": "Thiết lập tự động",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Tên miền bí danh cần thiết lập",
 	"cf.reverseIs": "bí danh ngược trên {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "vùng (Zone)",
+	"cf.tokenScope": "Tất cả đều là quyền vùng (Zone), không phải quyền tài khoản (Account): trong biểu mẫu token, chọn Zone ở menu đầu tiên, rồi chọn quyền, sau đó chọn mức truy cập. Trong Zone Resources, chọn Include → Specific zone và thêm vùng của từng miền bí danh, để token không thể thay đổi gì khác.",
 };
 
 export default dictionary;

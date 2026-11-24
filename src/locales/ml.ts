@@ -234,7 +234,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "ഓരോ അപരനാമ ഡൊമെയ്‌നിനും, ഉദാ. a.com, ഇത് സജ്ജീകരിക്കുന്നു: a.com-ൽ ഏത് വിലാസത്തിലേക്കുള്ള മെയിലും ഈ Worker-ലേക്ക് അയയ്ക്കുന്ന ഒരു catch-all; subaddressing ഉള്ള റിവേഴ്സ്-അപരനാമ ഡൊമെയ്‌ൻ r.a.com, reply+…@r.a.com-നുള്ള ഒരു നിയമം; രണ്ടിനും Email Sending. ഇത് വീണ്ടും പ്രവർത്തിപ്പിക്കുന്നത് സുരക്ഷിതമാണ്.",
 	"cf.token": "Cloudflare API ടോക്കൺ",
-	"cf.tokenHelp": "ഈ അനുമതികളോടെ zone-നായി ഒരു ടോക്കൺ സൃഷ്ടിക്കുക: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. ഇത് ഈ സജ്ജീകരണത്തിന് മാത്രമാണ് ഉപയോഗിക്കുന്നത്, സംഭരിക്കില്ല; സൂക്ഷിക്കണമെങ്കിൽ CLOUDFLARE_API_TOKEN സീക്രട്ട് സജ്ജീകരിക്കുക.",
+	"cf.tokenHelp": "My Profile → API Tokens-ൽ താഴെയുള്ള അനുമതികളോടെ ഒരു കസ്റ്റം ടോക്കൺ സൃഷ്ടിക്കുക. ഇത് ഈ സജ്ജീകരണത്തിന് മാത്രമാണ് ഉപയോഗിക്കുന്നത്, സംഭരിക്കില്ല; സൂക്ഷിക്കണമെങ്കിൽ CLOUDFLARE_API_TOKEN സീക്രട്ട് സജ്ജീകരിക്കുക.",
 	"cf.workerName": "Worker പേര്",
 	"cf.workerNameHelp": "ഈ Worker ഡിപ്ലോയ് ചെയ്ത പേര്.",
 	"cf.run": "സ്വയമേവ സജ്ജമാക്കുക",
@@ -368,6 +368,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "സജ്ജീകരിക്കേണ്ട അപരനാമ ഡൊമെയ്‌നുകൾ",
 	"cf.reverseIs": "{reverse}-ലെ റിവേഴ്സ് അപരനാമങ്ങൾ",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "ഇവയെല്ലാം zone അനുമതികൾ (Zone) ആണ്, account അനുമതികൾ (Account) അല്ല: ടോക്കൺ ഫോമിൽ ആദ്യ മെനുവിൽ Zone തിരഞ്ഞെടുക്കുക, പിന്നെ അനുമതി, പിന്നെ ആക്സസ് നില. Zone Resources-ന് കീഴിൽ Include → Specific zone തിരഞ്ഞെടുത്ത് ഓരോ alias ഡൊമെയ്‌നിന്റെയും zone ചേർക്കുക, അങ്ങനെ ടോക്കണിന് മറ്റൊന്നും മാറ്റാനാകില്ല.",
 };
 
 export default dictionary;

@@ -242,7 +242,7 @@ export const en = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "For each alias domain, say a.com, this sets up: a catch-all on a.com that sends mail for every address to this Worker; the reverse-alias domain r.a.com with subaddressing and one rule for reply+…@r.a.com; and Email Sending for both. Running it again is safe.",
 	"cf.token": "Cloudflare API token",
-	"cf.tokenHelp": "Create a token for the zones with these permissions: Zone Read, Zone Settings Edit, Email Routing Rules Edit and Email Sending Edit. It is used for this setup only and is not stored; to keep one, set the CLOUDFLARE_API_TOKEN secret.",
+	"cf.tokenHelp": "Create a custom token under My Profile → API Tokens with the permissions below. It is used for this setup only and is not stored; to keep one, set the CLOUDFLARE_API_TOKEN secret.",
 	"cf.workerName": "Worker name",
 	"cf.workerNameHelp": "The name this Worker was deployed with.",
 	"cf.run": "Set up automatically",
@@ -376,6 +376,8 @@ export const en = {
 	"cf.domains": "Alias domains to set up",
 	"cf.reverseIs": "reverse aliases on {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "All of these are zone permissions, not account permissions: in the token form, pick Zone in the first menu, then the permission, then the access level. Under Zone Resources, choose Include → Specific zone and add the zone of each alias domain, so the token can change nothing else.",
 };
 
 export type MessageKey = keyof typeof en;

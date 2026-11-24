@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "प्रत्येक उपनाव डोमेनसाठी, उदा. a.com, हे सेट करते: a.com वर एक catch-all जो प्रत्येक पत्त्याचा मेल या Worker कडे पाठवतो; subaddressing सह रिव्हर्स-उपनाव डोमेन r.a.com आणि reply+…@r.a.com साठी एक नियम; आणि दोन्हींसाठी Email Sending. पुन्हा चालवणे सुरक्षित आहे.",
 	"cf.token": "Cloudflare API टोकन",
-	"cf.tokenHelp": "या परवानग्यांसह झोनसाठी एक टोकन तयार करा: Zone Read, Zone Settings Edit, Email Routing Rules Edit आणि Email Sending Edit. हे टोकन फक्त या सेटअपसाठी वापरले जाते आणि जतन केले जात नाही; ते ठेवण्यासाठी CLOUDFLARE_API_TOKEN सीक्रेट सेट करा.",
+	"cf.tokenHelp": "My Profile → API Tokens अंतर्गत खालील परवानग्यांसह एक कस्टम टोकन तयार करा. हे टोकन फक्त या सेटअपसाठी वापरले जाते आणि जतन केले जात नाही; ते ठेवण्यासाठी CLOUDFLARE_API_TOKEN सीक्रेट सेट करा.",
 	"cf.workerName": "Worker चे नाव",
 	"cf.workerNameHelp": "ज्या नावाने हा Worker डिप्लॉय केला होता ते.",
 	"cf.run": "आपोआप सेट करा",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "सेट करायची उपनाव डोमेन",
 	"cf.reverseIs": "{reverse} वरील रिव्हर्स उपनावे",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "झोन (Zone)",
+	"cf.tokenScope": "हे सर्व झोन परवानग्या (Zone) आहेत, खाते परवानग्या (Account) नाहीत: टोकन फॉर्ममध्ये पहिल्या मेनूमधून Zone निवडा, नंतर परवानगी, नंतर अॅक्सेस पातळी निवडा. Zone Resources अंतर्गत Include → Specific zone निवडा आणि प्रत्येक alias डोमेनचा झोन जोडा, जेणेकरून टोकन इतर काहीही बदलू शकणार नाही.",
 };
 
 export default dictionary;

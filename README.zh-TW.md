@@ -66,7 +66,7 @@ npx wrangler deploy
 ### 2. 註冊通行金鑰
 
 1. 開啟 `https://aliasflare.<你的子網域>.workers.dev/`，會進入設定頁。
-2. 從 Worker 的日誌取得**一次性設定碼**：Cloudflare 主控台 → Workers & Pages → aliasflare → Observability → Logs，或執行 `npx wrangler tail aliasflare`，再按「寫入新的設定碼」。也可以設定 `SETUP_CODE` secret 改用自己的設定碼。
+2. 取得**一次性設定碼**：執行 `npx wrangler tail aliasflare`，再到設定頁按「寫入新的設定碼」，設定碼就會出現在終端機（Cloudflare 主控台裡 Worker 的 *Observability* 分頁也看得到日誌）。也可以設定 `SETUP_CODE` secret 改用自己的設定碼。
 3. 輸入設定碼並註冊通行金鑰。
 
 ### 3. 設定
@@ -79,8 +79,11 @@ npx wrangler deploy
 **自動設定。** 在「連線」頁勾選網域、貼上 API token，按「自動設定」。在「My Profile → API Tokens」為這些區域建立具備以下權限的 token：
 - Zone → Zone → Read
 - Zone → Zone Settings → Edit
+- Zone → DNS → Edit
 - Zone → Email Routing Rules → Edit
 - Zone → Email Sending → Edit
+
+這些都是**區域（Zone）**權限，不是帳號（Account）權限：在第一個選單選 *Zone*。在 *Zone Resources* 選 *Include → Specific zone*，逐一加入每個別名網域的區域，讓 token 不能更動其他東西。
 
 每個網域都會：啟用 Email Routing 並把 catch-all 指向 Worker；在 `r.<網域>` 啟用 Email Routing、開啟子地址，並建立 `reply@r.<網域>` 規則；兩者都加入 Email Sending。已經把信送往其他地方的 catch-all 不會被更改。重複執行是安全的，token 只用一次、不會儲存。
 

@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "ప్రతి మారుపేరు డొమైన్‌కు, ఉదా. a.com, ఇది ఈ సెటప్ చేస్తుంది: a.comపై ప్రతి చిరునామాకు మెయిల్‌ను ఈ Workerకు పంపే catch-all; subaddressingతో రివర్స్-మారుపేరు డొమైన్ r.a.com మరియు reply+…@r.a.com కోసం ఒక నియమం; రెండింటికీ Email Sending. మళ్లీ నడపడం సురక్షితం.",
 	"cf.token": "Cloudflare API టోకెన్",
-	"cf.tokenHelp": "ఈ అనుమతులతో జోన్ కోసం టోకెన్‌ను సృష్టించండి: Zone Read, Zone Settings Edit, Email Routing Rules Edit మరియు Email Sending Edit. ఇది ఈ సెటప్ కోసం మాత్రమే ఉపయోగించబడుతుంది, నిల్వ చేయబడదు; దానిని ఉంచుకోవాలంటే CLOUDFLARE_API_TOKEN సీక్రెట్‌ను సెట్ చేయండి.",
+	"cf.tokenHelp": "My Profile → API Tokens కింద కింది అనుమతులతో ఒక కస్టమ్ టోకెన్‌ను సృష్టించండి. ఇది ఈ సెటప్ కోసం మాత్రమే ఉపయోగించబడుతుంది, నిల్వ చేయబడదు; దానిని ఉంచుకోవాలంటే CLOUDFLARE_API_TOKEN సీక్రెట్‌ను సెట్ చేయండి.",
 	"cf.workerName": "Worker పేరు",
 	"cf.workerNameHelp": "ఈ Workerను డిప్లాయ్ చేసిన పేరు.",
 	"cf.run": "ఆటోమేటిక్‌గా సెట్ చేయండి",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "సెటప్ చేయవలసిన మారుపేరు డొమైన్‌లు",
 	"cf.reverseIs": "{reverse}పై రివర్స్ మారుపేర్లు",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "జోన్ (Zone)",
+	"cf.tokenScope": "ఇవన్నీ జోన్ అనుమతులు (Zone), ఖాతా అనుమతులు (Account) కావు: టోకెన్ ఫారమ్‌లో మొదటి మెనూలో Zone ఎంచుకోండి, తర్వాత అనుమతి, తర్వాత యాక్సెస్ స్థాయి. Zone Resources కింద Include → Specific zone ఎంచుకుని, ప్రతి alias డొమైన్ యొక్క జోన్‌ను జోడించండి, తద్వారా టోకెన్ మరేదీ మార్చలేదు.",
 };
 
 export default dictionary;

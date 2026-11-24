@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "별칭 도메인마다(예: a.com) 다음을 설정합니다: a.com의 catch-all로 모든 주소의 메일을 이 Worker로 보내기, 서브주소 지정과 reply+…@r.a.com 규칙 하나가 포함된 역방향 별칭 도메인 r.a.com, 그리고 두 도메인 모두에 대한 Email Sending. 다시 실행해도 안전합니다.",
 	"cf.token": "Cloudflare API 토큰",
-	"cf.tokenHelp": "다음 권한으로 영역용 토큰을 만드세요: Zone Read, Zone Settings Edit, Email Routing Rules Edit, Email Sending Edit. 이 설정에만 사용되며 저장되지 않습니다. 보관하려면 CLOUDFLARE_API_TOKEN 시크릿을 설정하세요.",
+	"cf.tokenHelp": "My Profile → API Tokens에서 아래 권한을 가진 사용자 지정 토큰을 만드세요. 이 토큰은 이 설정에만 사용되며 저장되지 않습니다. 보관하려면 CLOUDFLARE_API_TOKEN 시크릿을 설정하세요.",
 	"cf.workerName": "Worker 이름",
 	"cf.workerNameHelp": "이 Worker를 배포할 때 사용한 이름입니다.",
 	"cf.run": "자동으로 설정",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "설정할 별칭 도메인",
 	"cf.reverseIs": "{reverse}의 역방향 별칭",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "영역（Zone）",
+	"cf.tokenScope": "이 항목들은 모두 계정 권한(Account)이 아니라 영역 권한(Zone)입니다. 토큰 양식의 첫 번째 메뉴에서 Zone을 고른 다음 권한, 그다음 액세스 수준을 선택하세요. Zone Resources에서 Include → Specific zone을 선택하고 각 별칭 도메인의 영역을 추가하여 토큰이 다른 것을 변경할 수 없도록 하세요.",
 };
 
 export default dictionary;

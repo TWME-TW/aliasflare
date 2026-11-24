@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Kwa kila kikoa cha lakabu, kwa mfano a.com, hii huweka: catch-all kwenye a.com inayotuma barua za kila anwani kwa Worker hii; kikoa cha lakabu ya kinyume r.a.com chenye subaddressing na kanuni moja ya reply+…@r.a.com; na Email Sending kwa vyote viwili. Kuendesha tena ni salama.",
 	"cf.token": "Tokeni ya API ya Cloudflare",
-	"cf.tokenHelp": "Unda tokeni kwa zone zenye ruhusa hizi: Zone Read, Zone Settings Edit, Email Routing Rules Edit na Email Sending Edit. Hutumika kwa usanidi huu tu na haihifadhiwi; ili kuihifadhi, weka siri ya CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Unda token maalum katika My Profile → API Tokens ukiwa na ruhusa zilizo hapa chini. Hutumika kwa usanidi huu tu na haihifadhiwi; ili kuihifadhi, weka siri ya CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Jina la Worker",
 	"cf.workerNameHelp": "Jina ambalo Worker hii ilitumwa nalo.",
 	"cf.run": "Sanidi kiotomatiki",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Vikoa vya lakabu vya kuweka",
 	"cf.reverseIs": "lakabu za kinyume kwenye {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "Zote hizi ni ruhusa za zone (Zone), si ruhusa za account (Account): kwenye fomu ya token, chagua Zone kwenye menyu ya kwanza, kisha ruhusa, kisha kiwango cha ufikiaji. Chini ya Zone Resources, chagua Include → Specific zone na uongeze zone ya kila domain ya alias, ili token isiweze kubadilisha kitu kingine.",
 };
 
 export default dictionary;

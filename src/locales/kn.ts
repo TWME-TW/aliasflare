@@ -234,7 +234,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "ಪ್ರತಿ ಅಲಿಯಾಸ್ ಡೊಮೇನ್‌ಗೆ, ಉದಾ. a.com, ಇದು ಹೊಂದಿಸುತ್ತದೆ: a.com ನಲ್ಲಿ ಪ್ರತಿ ವಿಳಾಸದ ಮೇಲ್ ಅನ್ನು ಈ Worker ಗೆ ಕಳುಹಿಸುವ catch-all; subaddressing ಜೊತೆಗೆ ರಿವರ್ಸ್-ಅಲಿಯಾಸ್ ಡೊಮೇನ್ r.a.com ಮತ್ತು reply+…@r.a.com ಗೆ ಒಂದು ನಿಯಮ; ಎರಡಕ್ಕೂ Email Sending. ಮತ್ತೆ ಚಲಾಯಿಸುವುದು ಸುರಕ್ಷಿತ.",
 	"cf.token": "Cloudflare API ಟೋಕನ್",
-	"cf.tokenHelp": "ಈ ಅನುಮತಿಗಳೊಂದಿಗೆ zone ಗೆ ಟೋಕನ್ ರಚಿಸಿ: Zone Read, Zone Settings Edit, Email Routing Rules Edit ಮತ್ತು Email Sending Edit. ಇದನ್ನು ಈ ಸೆಟಪ್‌ಗೆ ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ, ಉಳಿಸಲಾಗುವುದಿಲ್ಲ; ಉಳಿಸಿಕೊಳ್ಳಲು CLOUDFLARE_API_TOKEN ಸೀಕ್ರೆಟ್ ಅನ್ನು ಹೊಂದಿಸಿ.",
+	"cf.tokenHelp": "My Profile → API Tokens ಅಡಿಯಲ್ಲಿ ಕೆಳಗಿನ ಅನುಮತಿಗಳೊಂದಿಗೆ ಕಸ್ಟಮ್ ಟೋಕನ್ ರಚಿಸಿ. ಇದನ್ನು ಈ ಸೆಟಪ್‌ಗೆ ಮಾತ್ರ ಬಳಸಲಾಗುತ್ತದೆ, ಉಳಿಸಲಾಗುವುದಿಲ್ಲ; ಉಳಿಸಿಕೊಳ್ಳಲು CLOUDFLARE_API_TOKEN ಸೀಕ್ರೆಟ್ ಅನ್ನು ಹೊಂದಿಸಿ.",
 	"cf.workerName": "Worker ಹೆಸರು",
 	"cf.workerNameHelp": "ಈ Worker ಅನ್ನು ಯಾವ ಹೆಸರಿನಲ್ಲಿ ನಿಯೋಜಿಸಲಾಗಿತ್ತೋ ಆ ಹೆಸರು.",
 	"cf.run": "ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಹೊಂದಿಸಿ",
@@ -368,6 +368,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "ಹೊಂದಿಸಬೇಕಾದ ಅಲಿಯಾಸ್ ಡೊಮೇನ್‌ಗಳು",
 	"cf.reverseIs": "{reverse} ನಲ್ಲಿರುವ ರಿವರ್ಸ್ ಅಲಿಯಾಸ್‌ಗಳು",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "ಇವೆಲ್ಲವೂ zone ಅನುಮತಿಗಳು (Zone), account ಅನುಮತಿಗಳು (Account) ಅಲ್ಲ: ಟೋಕನ್ ಫಾರ್ಮ್‌ನಲ್ಲಿ ಮೊದಲ ಮೆನುವಿನಲ್ಲಿ Zone ಆರಿಸಿ, ನಂತರ ಅನುಮತಿ, ನಂತರ ಪ್ರವೇಶ ಮಟ್ಟ. Zone Resources ಅಡಿಯಲ್ಲಿ Include → Specific zone ಆರಿಸಿ ಮತ್ತು ಪ್ರತಿ alias ಡೊಮೇನ್‌ನ zone ಸೇರಿಸಿ, ಇದರಿಂದ ಟೋಕನ್ ಬೇರೆ ಯಾವುದನ್ನೂ ಬದಲಾಯಿಸಲಾಗದು.",
 };
 
 export default dictionary;

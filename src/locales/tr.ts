@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Her takma ad alan adı için, örneğin a.com, bu şunları ayarlar: a.com üzerinde, her adrese gelen e-postayı bu Worker'a gönderen bir catch-all; alt adresleme ve reply+…@r.a.com için bir kuralla birlikte ters takma ad alan adı r.a.com; ve ikisi için Email Sending. Yeniden çalıştırmak güvenlidir.",
 	"cf.token": "Cloudflare API belirteci",
-	"cf.tokenHelp": "Bölgeler için şu izinlerle bir token oluşturun: Zone Read, Zone Settings Edit, Email Routing Rules Edit ve Email Sending Edit. Yalnızca bu kurulum için kullanılır ve saklanmaz; saklamak için CLOUDFLARE_API_TOKEN gizli anahtarını ayarlayın.",
+	"cf.tokenHelp": "My Profile → API Tokens altında aşağıdaki izinlerle özel bir token oluşturun. Yalnızca bu kurulum için kullanılır ve saklanmaz; saklamak için CLOUDFLARE_API_TOKEN gizli anahtarını ayarlayın.",
 	"cf.workerName": "Worker adı",
 	"cf.workerNameHelp": "Bu Worker'ın dağıtıldığı ad.",
 	"cf.run": "Otomatik kur",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Ayarlanacak takma ad alan adları",
 	"cf.reverseIs": "{reverse} üzerindeki ters takma adlar",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "bölge (Zone)",
+	"cf.tokenScope": "Bunların tümü bölge izinleri (Zone), hesap izinleri (Account) değildir: token formunda ilk menüden Zone seçin, ardından izni, sonra erişim düzeyini seçin. Zone Resources altında Include → Specific zone seçeneğini belirleyin ve her takma ad alan adının bölgesini ekleyin; böylece token başka hiçbir şeyi değiştiremez.",
 };
 
 export default dictionary;

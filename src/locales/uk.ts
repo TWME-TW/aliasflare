@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Для кожного домену псевдонімів, наприклад a.com, це налаштовує: catch-all на a.com, що надсилає листи на будь-яку адресу до цього Worker; домен зворотних псевдонімів r.a.com із субадресацією та одним правилом для reply+…@r.a.com; а також Email Sending для обох. Повторний запуск безпечний.",
 	"cf.token": "Токен API Cloudflare",
-	"cf.tokenHelp": "Створіть токен для зон із такими дозволами: Zone Read, Zone Settings Edit, Email Routing Rules Edit і Email Sending Edit. Він використовується лише для цього налаштування й не зберігається; щоб зберегти його, встановіть секрет CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Створіть власний токен у розділі My Profile → API Tokens з наведеними нижче дозволами. Він використовується лише для цього налаштування й не зберігається; щоб зберегти його, встановіть секрет CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Назва Worker",
 	"cf.workerNameHelp": "Назва, з якою розгорнуто цей Worker.",
 	"cf.run": "Налаштувати автоматично",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Домени псевдонімів для налаштування",
 	"cf.reverseIs": "зворотні псевдоніми на {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Зона (Zone)",
+	"cf.tokenScope": "Усі ці дозволи стосуються зони (Zone), а не облікового запису (Account): у формі токена в першому меню оберіть Zone, потім дозвіл, потім рівень доступу. У розділі Zone Resources оберіть Include → Specific zone і додайте зону кожного alias-домену, щоб токен не міг змінити нічого іншого.",
 };
 
 export default dictionary;

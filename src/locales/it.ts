@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Per ogni dominio alias, ad esempio a.com, configura: un catch-all su a.com che invia la posta di qualsiasi indirizzo a questo Worker; il dominio di alias inverso r.a.com con sottoindirizzi e una regola per reply+…@r.a.com; ed Email Sending per entrambi. Eseguirlo di nuovo è sicuro.",
 	"cf.token": "Token API di Cloudflare",
-	"cf.tokenHelp": "Crea un token per le zone con questi permessi: Zone Read, Zone Settings Edit, Email Routing Rules Edit ed Email Sending Edit. Viene usato solo per questa configurazione e non viene memorizzato; per conservarlo, imposta il secret CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Crea un token personalizzato in My Profile → API Tokens con i permessi seguenti. Viene usato solo per questa configurazione e non viene memorizzato; per conservarlo, imposta il secret CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Nome del Worker",
 	"cf.workerNameHelp": "Il nome con cui è stato distribuito questo Worker.",
 	"cf.run": "Configura automaticamente",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Domini degli alias da configurare",
 	"cf.reverseIs": "alias inversi su {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "zona (Zone)",
+	"cf.tokenScope": "Si tratta di permessi di zona (Zone), non di account (Account): nel modulo del token scegli Zone nel primo menu, poi il permesso e infine il livello di accesso. In Zone Resources scegli Include → Specific zone e aggiungi la zona di ogni dominio alias, così il token non potrà modificare altro.",
 };
 
 export default dictionary;

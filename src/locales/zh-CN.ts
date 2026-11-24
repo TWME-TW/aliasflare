@@ -219,7 +219,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "对于每个别名域名（例如 a.com），此操作会设置：a.com 上的 catch-all，将所有地址的邮件发送到此 Worker；反向别名域名 r.a.com，启用子地址功能，并为 reply+…@r.a.com 添加一条规则；两者均启用 Email Sending。可以安全地重复运行。",
 	"cf.token": "Cloudflare API token",
-	"cf.tokenHelp": "为相应区域创建具有以下权限的令牌：Zone Read、Zone Settings Edit、Email Routing Rules Edit 和 Email Sending Edit。令牌仅用于本次设置，不会被存储；如需保留，请设置 CLOUDFLARE_API_TOKEN 密钥。",
+	"cf.tokenHelp": "在 My Profile → API Tokens 中创建自定义令牌，并授予以下权限。该令牌仅用于本次设置，不会被存储；如需保留，请设置 CLOUDFLARE_API_TOKEN 密钥。",
 	"cf.workerName": "Worker 名称",
 	"cf.workerNameHelp": "部署此 Worker 时使用的名称。",
 	"cf.run": "自动设置",
@@ -353,6 +353,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "要设置的别名域名",
 	"cf.reverseIs": "{reverse} 上的反向别名",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "区域（Zone）",
+	"cf.tokenScope": "这些都是区域权限（Zone），而非账户权限（Account）：在令牌表单中，先在第一个菜单选择 Zone，再选择权限，然后选择访问级别。在 Zone Resources 下，选择 Include → Specific zone，并添加每个别名域名所在的区域，使该令牌无法更改其他内容。",
 };
 
 export default dictionary;

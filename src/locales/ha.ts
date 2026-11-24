@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "Ga kowane domain na laƙabi, misali a.com, wannan yana saitawa: catch-all a kan a.com wanda ke aika saƙon kowane adireshi zuwa wannan Worker; domain ɗin laƙabin juyawa r.a.com tare da subaddressing da doka ɗaya don reply+…@r.a.com; da Email Sending ga duka biyun. Sake gudanar da shi lafiyayye ne.",
 	"cf.token": "Token na API na Cloudflare",
-	"cf.tokenHelp": "Ƙirƙiri token don zones da waɗannan izini: Zone Read, Zone Settings Edit, Email Routing Rules Edit da Email Sending Edit. Ana amfani da shi ga wannan saitin kaɗai kuma ba a adana shi ba; don ajiye shi, saita sirrin CLOUDFLARE_API_TOKEN.",
+	"cf.tokenHelp": "Ƙirƙiri token na al'ada a ƙarƙashin My Profile → API Tokens tare da izinin da ke ƙasa. Ana amfani da shi ga wannan saitin kaɗai kuma ba a adana shi ba; don ajiye shi, saita sirrin CLOUDFLARE_API_TOKEN.",
 	"cf.workerName": "Sunan Worker",
 	"cf.workerNameHelp": "Sunan da aka tura wannan Worker da shi.",
 	"cf.run": "Saita kai tsaye",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "Domains na laƙabi da za a saita",
 	"cf.reverseIs": "laƙabin juyawa a kan {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "Duk waɗannan izinin zone ne (Zone), ba izinin account ba (Account): a cikin fom ɗin token, zaɓi Zone a menu na farko, sannan izini, sannan matakin shiga. A ƙarƙashin Zone Resources, zaɓi Include → Specific zone kuma ƙara zone na kowane alias domain, don token ɗin ya kasa canja wani abu.",
 };
 
 export default dictionary;

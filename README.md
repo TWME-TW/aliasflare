@@ -75,7 +75,7 @@ npx wrangler deploy
 ### 2. Register your passkey
 
 1. Open `https://aliasflare.<you>.workers.dev/`. You land on the setup page.
-2. Get the **one-time setup code** from the Worker's logs: Cloudflare dashboard → Workers & Pages → aliasflare → Observability → Logs, or `npx wrangler tail aliasflare`, then press *Write a new code to the logs*. To use your own code instead, set a `SETUP_CODE` secret.
+2. Get the **one-time setup code**: run `npx wrangler tail aliasflare` and press *Write a new code to the logs* on the setup page; the code appears in the terminal. (It is also in the Worker's logs in the Cloudflare dashboard, under the Worker's *Observability* tab.) To use your own code instead, set a `SETUP_CODE` secret.
 3. Enter the code and register a passkey.
 
 ### 3. Settings
@@ -88,8 +88,11 @@ npx wrangler deploy
 **Automatically.** On **Connection**, tick the domains, paste an API token and click **Set up automatically**. Create the token under *My Profile → API Tokens* with these permissions for the zones:
 - Zone → Zone → Read
 - Zone → Zone Settings → Edit
+- Zone → DNS → Edit
 - Zone → Email Routing Rules → Edit
 - Zone → Email Sending → Edit
+
+All of them are **zone** permissions (pick *Zone* in the first menu), not account permissions. Under *Zone Resources*, choose *Include → Specific zone* and add each alias domain's zone, so the token can change nothing else.
 
 For each domain this enables Email Routing and points the catch-all at the Worker, enables Email Routing on `r.<domain>` with subaddressing and a rule for `reply@r.<domain>`, and onboards both for Email Sending. A catch-all that already sends mail somewhere else is left unchanged. Running it again is safe. The token is used once and not stored.
 

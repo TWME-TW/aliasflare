@@ -240,7 +240,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "برای هر دامنه نام مستعار، مثلاً a.com، این کار را انجام می‌دهد: یک catch-all روی a.com که ایمیل هر نشانی را به این Worker می‌فرستد؛ دامنه نام مستعار معکوس r.a.com با subaddressing و یک قانون برای reply+…@r.a.com؛ و Email Sending برای هر دو. اجرای دوباره آن بی‌خطر است.",
 	"cf.token": "توکن API ‏Cloudflare",
-	"cf.tokenHelp": "یک توکن برای zone با این دسترسی‌ها بسازید: Zone Read، Zone Settings Edit، Email Routing Rules Edit و Email Sending Edit. فقط برای این راه‌اندازی استفاده می‌شود و ذخیره نمی‌شود؛ برای نگه‌داشتن آن، رمز CLOUDFLARE_API_TOKEN را تنظیم کنید.",
+	"cf.tokenHelp": "در My Profile → API Tokens یک توکن سفارشی با دسترسی‌های زیر بسازید. فقط برای این راه‌اندازی استفاده می‌شود و ذخیره نمی‌شود؛ برای نگه‌داشتن آن، رمز CLOUDFLARE_API_TOKEN را تنظیم کنید.",
 	"cf.workerName": "نام Worker",
 	"cf.workerNameHelp": "نامی که این Worker با آن مستقر شده است.",
 	"cf.run": "راه‌اندازی خودکار",
@@ -374,6 +374,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "دامنه‌های نام مستعار برای تنظیم",
 	"cf.reverseIs": "نام‌های مستعار معکوس روی {reverse}",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "Zone",
+	"cf.tokenScope": "همه این‌ها دسترسی‌های zone (Zone) هستند، نه دسترسی‌های account (Account): در فرم توکن، در اولین منو Zone را انتخاب کنید، سپس دسترسی و بعد سطح دسترسی. زیر Zone Resources گزینه Include → Specific zone را انتخاب کنید و zone هر دامنهٔ alias را اضافه کنید تا توکن نتواند چیز دیگری را تغییر دهد.",
 };
 
 export default dictionary;

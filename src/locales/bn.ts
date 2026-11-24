@@ -225,7 +225,7 @@ const dictionary: Dictionary = {
 	"cf.title": "Cloudflare Email Routing",
 	"cf.help": "প্রতিটি অ্যালিয়াস ডোমেইনের জন্য, যেমন a.com, এটি সেট করে: a.com-এ একটি catch-all যা প্রতিটি ঠিকানার মেইল এই Worker-এ পাঠায়; রিভার্স-অ্যালিয়াস ডোমেইন r.a.com subaddressing সহ এবং reply+…@r.a.com-এর জন্য একটি নিয়মসহ; এবং দুটির জন্যই Email Sending। আবার চালানো নিরাপদ।",
 	"cf.token": "Cloudflare API টোকেন",
-	"cf.tokenHelp": "এই অনুমতিগুলোসহ জোনের জন্য একটি টোকেন তৈরি করুন: Zone Read, Zone Settings Edit, Email Routing Rules Edit ও Email Sending Edit। এটি শুধু এই সেটআপের জন্য ব্যবহৃত হয় এবং সংরক্ষণ করা হয় না; রাখতে চাইলে CLOUDFLARE_API_TOKEN সিক্রেট সেট করুন।",
+	"cf.tokenHelp": "My Profile → API Tokens-এ নিচের অনুমতিসহ একটি কাস্টম টোকেন তৈরি করুন। এটি শুধু এই সেটআপের জন্য ব্যবহৃত হয় এবং সংরক্ষণ করা হয় না; রাখতে চাইলে CLOUDFLARE_API_TOKEN সিক্রেট সেট করুন।",
 	"cf.workerName": "Worker-এর নাম",
 	"cf.workerNameHelp": "যে নামে এই Worker ডিপ্লয় করা হয়েছিল।",
 	"cf.run": "স্বয়ংক্রিয়ভাবে সেট করুন",
@@ -359,6 +359,8 @@ const dictionary: Dictionary = {
 	"cf.domains": "সেট করার জন্য অ্যালিয়াস ডোমেইন",
 	"cf.reverseIs": "{reverse}-এ রিভার্স অ্যালিয়াস",
 	"cf.step.catchall": "Catch-all",
+	"cf.scopeZone": "জোন (Zone)",
+	"cf.tokenScope": "এগুলো সবই জোন অনুমতি (Zone), অ্যাকাউন্ট অনুমতি (Account) নয়: টোকেন ফর্মে প্রথম মেনুতে Zone বেছে নিন, তারপর অনুমতি, তারপর অ্যাক্সেস স্তর। Zone Resources-এর অধীনে Include → Specific zone বেছে নিন এবং প্রতিটি alias ডোমেনের জোন যোগ করুন, যাতে টোকেন অন্য কিছু পরিবর্তন করতে না পারে।",
 };
 
 export default dictionary;
