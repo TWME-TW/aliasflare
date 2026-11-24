@@ -128,6 +128,13 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	td input[type=text], td input[type=email], td select { max-width:none; font-size:16px; }
 }
 .mobile-only { display:none; }
+.toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
+.toolbar input[type=search], .toolbar input[type=text] { flex:1 1 220px; width:auto; }
+.toolbar select { width:auto; }
+.bulk { padding:10px 12px; border-radius:16px; background:var(--bg); }
+th.pick, td.pick { width:36px; }
+td.pick input, th.pick input { width:18px; height:18px; accent-color:var(--primary); }
+.pager { display:flex; gap:16px; justify-content:center; align-items:center; margin-top:12px; }
 form.note input { width:100%; min-width:12ch; }
 .toast { position:fixed; inset-inline:0; bottom:24px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); z-index:10;
 	padding:12px 20px; border-radius:12px; background:#323232; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
@@ -278,11 +285,46 @@ function statusPill(t: Translate, status: string): Html {
 	return html`<span class="pill ${tone}">${translated(t, `status.${status}`, status)}</span>`;
 }
 
+export type AliasListState = { query: string; filter: "all" | "active" | "disabled" | "pinned" | "deleted"; page: number; perPage: number; total: number };
+
 export function dashboardPage(
 	t: Translate,
-	input: { settings: Settings; aliases: (AliasRow & { contacts: number })[]; activity: ActivityItem[]; missing: MessageKey[]; notice?: string },
+	input: {
+		settings: Settings;
+		aliases: (AliasRow & { contacts: number })[];
+		list: AliasListState;
+		activity: ActivityItem[];
+		missing: MessageKey[];
+		notice?: string;
+	},
 ): Html {
-	const { settings, aliases, activity, missing, notice } = input;
+	const { settings, aliases, list, activity, missing, notice } = input;
+	const listUrl = (changes: Partial<AliasListState>) => {
+		const next = { ...list, ...changes };
+		const params = new URLSearchParams();
+		if (next.query) params.set("q", next.query);
+		if (next.filter !== "all") params.set("filter", next.filter);
+		if (next.page > 1) params.set("page", String(next.page));
+		const search = params.toString();
+		return search ? `/?${search}` : "/";
+	};
+	const lastPage = Math.max(1, Math.ceil(list.total / list.perPage));
+	const deletedView = list.filter === "deleted";
+	const actions: [string, string][] = deletedView
+		? [
+				["restore", t("bulk.restore")],
+				["forget", t("bulk.forget")],
+			]
+		: [
+				["all", t("mode.all")],
+				["no_promotions", t("mode.no_promotions")],
+				["none", t("mode.none")],
+				["pin", t("bulk.pin")],
+				["unpin", t("bulk.unpin")],
+				["note", t("bulk.note")],
+				["destination", t("bulk.destination")],
+				["delete", t("bulk.delete")],
+			];
 	return page(
 		t("dash.title"),
 		html`<main>
@@ -294,15 +336,35 @@ ${!settings.defaultDestination ? html`<p class="notice">${t("dash.setDestination
 <section>
 <h2>${t("dash.title")}</h2>
 <p class="help">${t("dash.aliasesHelp")}</p>
+<form class="toolbar" method="get" action="/" role="search">
+<input type="search" name="q" value="${list.query}" placeholder="${t("dash.searchPlaceholder")}" aria-label="${t("dash.search")}" />
+<select name="filter" aria-label="${t("dash.filter")}" data-autosubmit>
+${(["all", "active", "disabled", "pinned", "deleted"] as const).map((filter) => html`<option value="${filter}" ${list.filter === filter ? "selected" : ""}>${t(`dash.filter.${filter}`)}</option>`)}
+</select>
+<button>${t("dash.searchButton")}</button>
+</form>
+<p class="muted">${t("dash.results", { count: String(list.total) })}${list.query || list.filter !== "all" ? html` · <a href="/">${t("dash.clear")}</a>` : ""}</p>
 ${aliases.length === 0
-	? html`<p class="muted">${t("dash.noAliases")}</p>`
-	: html`<table class="rt">
-<thead><tr><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th></tr></thead>
+	? html`<p class="muted">${list.query || list.filter !== "all" ? t("dash.noResults") : t("dash.noAliases")}</p>`
+	: html`<form id="bulk" class="toolbar bulk" method="post" action="/aliases/bulk" data-bulk
+ data-confirm-delete="${t("bulk.confirmDelete")}" data-confirm-forget="${t("bulk.confirmForget")}" data-none-selected="${t("bulk.noneSelected")}">
+<input type="hidden" name="back" value="${listUrl({})}" />
+<span class="muted" data-selected-count data-template="${t("bulk.selected", { count: "{count}" })}">${t("bulk.selected", { count: "0" })}</span>
+<select name="action" aria-label="${t("bulk.action")}" required>
+<option value="">${t("bulk.choose")}</option>
+${actions.map(([value, label]) => html`<option value="${value}" ${value === "note" || value === "destination" ? html`data-needs-value` : ""}>${label}</option>`)}
+</select>
+<input type="text" name="value" placeholder="${t("bulk.value")}" aria-label="${t("bulk.value")}" data-bulk-value />
+<button class="primary">${t("bulk.apply")}</button>
+</form>
+<table class="rt">
+<thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th></tr></thead>
 <tbody>
 ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return html`<tr>
-<td data-label="${t("dash.colAlias")}"><a href="${base}"><code>${alias.address}</code></a></td>
+<td class="pick"><input type="checkbox" form="bulk" name="ids" value="${alias.address}" aria-label="${t("dash.select", { alias: alias.address })}" data-pick /></td>
+<td data-label="${t("dash.colAlias")}"><a href="${base}"><code>${alias.address}</code></a>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
 <td data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
 <input type="text" name="note" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
@@ -316,7 +378,14 @@ ${aliases.map((alias) => {
 <td data-label="${t("dash.colContacts")}">${alias.contacts}</td>
 </tr>`;
 })}
-</tbody></table>`}
+</tbody></table>
+${lastPage > 1
+	? html`<nav class="pager" aria-label="${t("dash.pages")}">
+${list.page > 1 ? html`<a href="${listUrl({ page: list.page - 1 })}">← ${t("dash.prev")}</a>` : ""}
+<span class="muted">${list.page} / ${lastPage}</span>
+${list.page < lastPage ? html`<a href="${listUrl({ page: list.page + 1 })}">${t("dash.next")} →</a>` : ""}
+</nav>`
+	: ""}`}
 <p class="help">${t("dash.modesHelp")}</p>
 </section>
 

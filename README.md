@@ -32,6 +32,7 @@ Mailflare keeps your mail. mailflare-alias forwards a copy to the inbox you alre
   - a warning when the sender failed DMARC, so it may be spoofed.
 - **Forwarding modes per alias.** *Forward everything*, *Block promotions* (list mail) or *Forward nothing*.
 - **Blocklist.** Block an address, or a domain with its subdomains, across all aliases.
+- **Search and batch editing.** Search the alias list by address, note, name or forwarding address, filter it (forwarding, not forwarding, pinned, deleted), then tick aliases to change their forwarding mode, pin them, set a note or forwarding address, delete, restore or permanently delete them in one go.
 - **Notes** on each alias, edited right in the alias list. Aliases that appear because mail arrived for them are noted *Created by catchall option*, as in SimpleLogin.
 
 **Apps and browser extensions**

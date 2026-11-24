@@ -269,14 +269,40 @@ for (const path of ["/", "/settings", "/connection", "/blocklist", "/blocklist/*
 	app.use(path, requireAdmin);
 }
 
+const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
+export type AliasFilter = (typeof ALIAS_FILTERS)[number];
+const ALIASES_PER_PAGE = 100;
+
 app.get("/", async (c) => {
 	const db = c.env.DB;
 	const settings = await loadSettings(db);
-	const { results: aliases } = await db
-		.prepare(
-			"SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases WHERE deleted_at IS NULL ORDER BY pinned DESC, created_at DESC LIMIT 500",
-		)
-		.all<AliasRow & { contacts: number }>();
+	const query = (c.req.query("q") ?? "").trim().slice(0, 100);
+	const requested = c.req.query("filter") as AliasFilter;
+	const filter: AliasFilter = ALIAS_FILTERS.includes(requested) ? requested : "all";
+	const pageNumber = Math.max(1, Math.floor(Number(c.req.query("page")) || 1));
+	const where = [filter === "deleted" ? "deleted_at IS NOT NULL" : "deleted_at IS NULL"];
+	const params: unknown[] = [];
+	if (filter === "active") where.push("forward_mode != 'none'");
+	if (filter === "disabled") where.push("forward_mode = 'none'");
+	if (filter === "pinned") where.push("pinned = 1");
+	if (query) {
+		const fields = ["address", "COALESCE(note, '')", "COALESCE(name, '')", "COALESCE(destination, '')"];
+		where.push(`(${fields.map((field) => `${field} LIKE ? ESCAPE '!'`).join(" OR ")})`);
+		const like = `%${query.toLowerCase().replace(/[!%_]/g, (char) => `!${char}`)}%`;
+		params.push(like, like, like, like);
+	}
+	const clause = `WHERE ${where.join(" AND ")}`;
+	const [{ results: aliases }, counted] = await Promise.all([
+		db
+			.prepare(
+				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases ${clause}
+				 ORDER BY pinned DESC, created_at DESC LIMIT ? OFFSET ?`,
+			)
+			.bind(...params, ALIASES_PER_PAGE, (pageNumber - 1) * ALIASES_PER_PAGE)
+			.all<AliasRow & { contacts: number }>(),
+		db.prepare(`SELECT COUNT(*) AS total FROM aliases ${clause}`).bind(...params).first<{ total: number }>(),
+	]);
+	const list = { query, filter, page: pageNumber, perPage: ALIASES_PER_PAGE, total: counted?.total ?? 0 };
 	const { results: activity } = await db
 		.prepare(
 			`SELECT kind, status, alias, detail, at FROM (
@@ -291,7 +317,7 @@ app.get("/", async (c) => {
 		)
 		.all<ActivityItem>();
 	return c.html(
-		dashboardPage(c.get("t"), { settings, aliases, activity, missing: missingConnection(c.get("config")), notice: c.req.query("notice") }),
+		dashboardPage(c.get("t"), { settings, aliases, list, activity, missing: missingConnection(c.get("config")), notice: c.req.query("notice") }),
 	);
 });
 
@@ -566,6 +592,58 @@ app.post("/passkeys/:id/delete", async (c) => {
 	// Never remove the last passkey, or nobody could sign in again.
 	const result = await c.env.DB.prepare("DELETE FROM passkeys WHERE id = ? AND (SELECT COUNT(*) FROM passkeys) > 1").bind(c.req.param("id")).run();
 	return redirectWithNotice(c, "/passkeys", result.meta.changes > 0 ? "notice.passkeyRemoved" : "notice.lastPasskey");
+});
+
+// Batch actions on the aliases ticked in the list.
+const BULK_ACTIONS = ["all", "no_promotions", "none", "pin", "unpin", "note", "destination", "delete", "restore", "forget"] as const;
+
+app.post("/aliases/bulk", async (c) => {
+	const form = await c.req.parseBody({ all: true });
+	const back = typeof form.back === "string" && /^\/(\?[^\s]*)?$/.test(form.back) ? form.back : "/";
+	const done = (key: MessageKey, params?: Record<string, string>) =>
+		c.redirect(`${back}${back.includes("?") ? "&" : "?"}notice=${encodeURIComponent(c.get("t")(key, params))}`);
+	const action = form.action as (typeof BULK_ACTIONS)[number];
+	const ids = [...new Set((Array.isArray(form.ids) ? form.ids : [form.ids]).filter((id): id is string => typeof id === "string").map(normalizeEmail))].slice(0, 500);
+	if (!BULK_ACTIONS.includes(action) || ids.length === 0) return done("notice.bulkBad");
+	const value = typeof form.value === "string" ? form.value.trim() : "";
+	const db = c.env.DB;
+	let destination: string | null = null;
+	if (action === "destination") {
+		destination = value ? extractEmail(value) : null;
+		if (value && !destination) return done("notice.badDestination");
+		const reverseDomain = c.get("config").reverseDomain;
+		if (destination && ((reverseDomain && domainOf(destination) === reverseDomain) || ids.includes(destination))) return done("notice.loop");
+	}
+	const timestamp = now();
+	const statement = (sql: string, ...bind: unknown[]) => ids.map((id) => db.prepare(sql).bind(...bind, id));
+	const statements =
+		action === "all" || action === "no_promotions" || action === "none"
+			? statement("UPDATE aliases SET forward_mode = ?, forward_enabled = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL", action, action === "none" ? 0 : 1, timestamp)
+			: action === "pin" || action === "unpin"
+				? statement("UPDATE aliases SET pinned = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL", action === "pin" ? 1 : 0, timestamp)
+				: action === "note"
+					? statement("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?", value.slice(0, 200) || null, timestamp)
+					: action === "destination"
+						? statement("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?", destination, timestamp)
+						: action === "delete"
+							? statement(
+									"UPDATE aliases SET deleted_at = ?, forward_mode = 'none', forward_enabled = 0, pinned = 0, updated_at = ? WHERE address = ? AND deleted_at IS NULL",
+									timestamp,
+									timestamp,
+								)
+							: action === "restore"
+								? statement("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ? AND deleted_at IS NOT NULL", timestamp)
+								: // Permanently deleting is only offered for deleted aliases, and only removes those.
+									ids.flatMap((id) => [
+										db.prepare("DELETE FROM contacts WHERE alias_address = ? AND EXISTS (SELECT 1 FROM aliases WHERE address = ? AND deleted_at IS NOT NULL)").bind(id, id),
+										db.prepare("DELETE FROM aliases WHERE address = ? AND deleted_at IS NOT NULL").bind(id),
+									]);
+	let changed = 0;
+	for (let i = 0; i < statements.length; i += 100) {
+		for (const result of await db.batch(statements.slice(i, i + 100))) changed += result.meta.changes ?? 0;
+	}
+	if (action === "forget") changed = Math.min(changed, ids.length);
+	return done("notice.bulkDone", { count: String(Math.min(changed, ids.length)) });
 });
 
 app.post("/aliases/:address/mode", async (c) => {

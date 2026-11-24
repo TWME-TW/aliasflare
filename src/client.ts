@@ -123,6 +123,43 @@ export const APP_SCRIPT = `(() => {
     });
   }
 
+  // Alias list: select all, the selected count, and batch actions.
+  const bulk = document.querySelector("form[data-bulk]");
+  if (bulk) {
+    const picks = () => [...document.querySelectorAll("input[data-pick]")];
+    const all = document.querySelector("[data-select-all]");
+    const counter = bulk.querySelector("[data-selected-count]");
+    const action = bulk.querySelector("select[name=action]");
+    const value = bulk.querySelector("[data-bulk-value]");
+    const refresh = () => {
+      const checked = picks().filter((box) => box.checked).length;
+      if (counter) counter.textContent = counter.dataset.template.replace("{count}", String(checked));
+      if (all) {
+        all.checked = checked > 0 && checked === picks().length;
+        all.indeterminate = checked > 0 && checked < picks().length;
+      }
+    };
+    const showValue = () => {
+      const option = action && action.selectedOptions[0];
+      if (value) value.hidden = !(option && option.hasAttribute("data-needs-value"));
+    };
+    if (all) all.addEventListener("change", () => { for (const box of picks()) box.checked = all.checked; refresh(); });
+    for (const box of picks()) box.addEventListener("change", refresh);
+    if (action) action.addEventListener("change", showValue);
+    showValue();
+    refresh();
+    bulk.addEventListener("submit", (event) => {
+      if (!picks().some((box) => box.checked)) {
+        event.preventDefault();
+        show(bulk.dataset.noneSelected, false);
+        return;
+      }
+      const chosen = action ? action.value : "";
+      const question = chosen === "delete" ? bulk.dataset.confirmDelete : chosen === "forget" ? bulk.dataset.confirmForget : "";
+      if (question && !confirm(question)) event.preventDefault();
+    });
+  }
+
   // Settings save as soon as something changes; a short message confirms it.
   const toast = document.querySelector("[data-toast]");
   let toastTimer = 0;
