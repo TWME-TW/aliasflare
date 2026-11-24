@@ -171,6 +171,18 @@ export const APP_SCRIPT = `(() => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.hidden = true; }, ok ? 2500 : 6000);
   };
+  for (const button of document.querySelectorAll("button[data-copy]")) {
+    if (!navigator.clipboard) continue;
+    button.hidden = false;
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copy);
+        show(button.dataset.msgCopied, true);
+      } catch {
+        show(button.dataset.copy, false);
+      }
+    });
+  }
   for (const form of document.querySelectorAll("form[data-autosave]")) {
     let latest = 0;
     const save = async () => {

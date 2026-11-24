@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "Cuenta (Account)",
 	"cf.replaceCatchAll": "Reemplazar los catch-all existentes",
 	"cf.replaceCatchAllHelp": "También apunta a este Worker un catch-all que ya envía correo a otro lugar (por ejemplo, a Mailflare). El correo que hoy se envía allí llegará aquí en su lugar. Desactívalo en los dominios que reciben otro correo.",
+	"common.copy": "Copiar",
+	"common.copied": "Copiado {value}",
 };
 
 export default dictionary;

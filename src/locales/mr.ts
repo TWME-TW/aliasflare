@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "खाते (Account)",
 	"cf.replaceCatchAll": "विद्यमान catch-all बदला",
 	"cf.replaceCatchAllHelp": "आधीपासून इतरत्र मेल पाठवणारा catch-all (उदा. Mailflare कडे) या Worker कडेही वळवा. तो आज तिथे पाठवत असलेला मेल त्याऐवजी इथे येईल. इतर मेल मिळणाऱ्या डोमेनसाठी हे बंद ठेवा.",
+	"common.copy": "कॉपी करा",
+	"common.copied": "{value} कॉपी केले",
 };
 
 export default dictionary;

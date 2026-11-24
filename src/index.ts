@@ -380,6 +380,8 @@ app.use("*", async (c, next) => {
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
 export type AliasFilter = (typeof ALIAS_FILTERS)[number];
 const ALIASES_PER_PAGE = 100;
+/** When an alias was created or last forwarded or replied through, for "newest or most recently used first". */
+const LAST_USED = `MAX(aliases.created_at, COALESCE((SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address), 0))`;
 
 app.get("/", async (c) => {
 	const db = c.env.DB;
@@ -404,7 +406,7 @@ app.get("/", async (c) => {
 		db
 			.prepare(
 				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases ${clause}
-				 ORDER BY pinned DESC, created_at DESC LIMIT ? OFFSET ?`,
+				 ORDER BY pinned DESC, ${LAST_USED} DESC, num_id DESC LIMIT ? OFFSET ?`,
 			)
 			.bind(...params, ALIASES_PER_PAGE, (pageNumber - 1) * ALIASES_PER_PAGE)
 			.all<AliasRow & { contacts: number }>(),

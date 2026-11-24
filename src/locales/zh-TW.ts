@@ -358,6 +358,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "帳號（Account）",
 	"cf.replaceCatchAll": "取代現有的 catch-all",
 	"cf.replaceCatchAllHelp": "已經把信送往其他地方（例如 Mailflare）的 catch-all，也改為指向這個 Worker。原本送到那裡的信之後會改送到這裡。用來接收其他信件的網域請不要勾選。",
+	"common.copy": "複製",
+	"common.copied": "已複製 {value}",
 };
 
 export default dictionary;

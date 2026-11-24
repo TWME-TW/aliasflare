@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "Account",
 	"cf.replaceCatchAll": "Badilisha catch-all zilizopo",
 	"cf.replaceCatchAllHelp": "Elekeza pia kwenye Worker hii catch-all ambayo tayari inatuma barua mahali pengine (kwa mfano kwa Mailflare). Barua inazotuma huko leo sasa zitafika hapa badala yake. Iache imezimwa kwa vikoa vinavyopokea barua nyingine.",
+	"common.copy": "Nakili",
+	"common.copied": "Imenakiliwa {value}",
 };
 
 export default dictionary;

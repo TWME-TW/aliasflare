@@ -89,6 +89,8 @@ form.inline { display:inline; margin:0; }
 /* Chips and messages */
 .pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--muted); }
 .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
+.alias-cell { display:inline-flex; align-items:center; gap:2px; flex-wrap:wrap; }
+button.copy { min-height:28px; padding:0 8px; }
 .perms { list-style:none; padding:0; margin:10px 0 0; display:grid; gap:6px; }
 .perms li { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; }
 .pill.scope { background:var(--nav-active); color:var(--nav-active-text); }
@@ -191,6 +193,13 @@ function icon(name: keyof typeof ICONS): Html {
 
 /** The app mark: an envelope with a return arrow, in Mailflare's blue. */
 const LOGO = raw(`<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa5ff"/><stop offset="1" stop-color="#1a63e0"/></linearGradient></defs><rect x="3" y="7" width="26" height="19" rx="4" fill="url(#lg)"/><path d="M4.5 9.5 16 18l11.5-8.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/><circle cx="25" cy="23" r="6" fill="#fff"/><path d="M27.5 23h-5m2-2.2L22.3 23l2.2 2.2" fill="none" stroke="#1a63e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`);
+
+const COPY_ICON = raw('<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>');
+
+/** Copies the address to the clipboard. Hidden until the page script shows it, since it needs script. */
+function copyButton(t: Translate, value: string): Html {
+	return html`<button type="button" class="ghost copy" data-copy="${value}" data-msg-copied="${t("common.copied", { value })}" title="${t("common.copy")}" aria-label="${t("common.copy")}: ${value}" hidden>${COPY_ICON}</button>`;
+}
 
 export type PageOptions = { t: Translate; nav?: boolean; script?: boolean; current?: string; path?: string };
 
@@ -420,7 +429,7 @@ ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return html`<tr>
 <td class="pick"><input type="checkbox" form="bulk" name="ids" value="${alias.address}" aria-label="${t("dash.select", { alias: alias.address })}" data-pick /></td>
-<td data-label="${t("dash.colAlias")}"><a href="${base}"><code>${alias.address}</code></a>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
+<td data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
 <td data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
 <input type="text" name="note" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
@@ -707,7 +716,7 @@ export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: Cont
 <p class="m0"><a href="/">${t("alias.back")}</a></p>
 ${noticeBox(notice)}
 <section>
-<h2><code>${alias.address}</code></h2>
+<h2 class="alias-cell"><code>${alias.address}</code>${copyButton(t, alias.address)}</h2>
 <p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)}</p>
 <form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <label for="note">${t("alias.note")}</label>

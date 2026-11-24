@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "hesap (Account)",
 	"cf.replaceCatchAll": "Mevcut catch-all'ları değiştir",
 	"cf.replaceCatchAllHelp": "Başka bir yere (örneğin Mailflare'e) e-posta gönderen bir catch-all'ı da bu Worker'a yönlendirir. Bugün oraya giden e-postalar bunun yerine buraya gelir. Başka e-posta alan alan adlarında kapalı bırakın.",
+	"common.copy": "Kopyala",
+	"common.copied": "{value} kopyalandı",
 };
 
 export default dictionary;

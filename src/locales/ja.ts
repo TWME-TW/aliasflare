@@ -358,6 +358,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "アカウント（Account）",
 	"cf.replaceCatchAll": "既存のキャッチオールを置き換える",
 	"cf.replaceCatchAllHelp": "すでに別の宛先（例: Mailflare）へメールを送っているキャッチオールも、このWorkerに向けます。現在そこに送られているメールは代わりにここへ届くようになります。他のメールを受信しているドメインではオフのままにしてください。",
+	"common.copy": "コピー",
+	"common.copied": "{value} をコピーしました",
 };
 
 export default dictionary;

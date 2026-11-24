@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "tài khoản (Account)",
 	"cf.replaceCatchAll": "Thay thế các catch-all hiện có",
 	"cf.replaceCatchAllHelp": "Cũng trỏ catch-all đang gửi thư đến nơi khác (chẳng hạn Mailflare) tới Worker này. Thư mà nó đang gửi đến đó sẽ chuyển về đây. Hãy tắt tùy chọn này với các tên miền đang nhận thư khác.",
+	"common.copy": "Sao chép",
+	"common.copied": "Đã sao chép {value}",
 };
 
 export default dictionary;

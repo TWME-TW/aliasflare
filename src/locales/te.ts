@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "ఖాతా (Account)",
 	"cf.replaceCatchAll": "ఇప్పటికే ఉన్న catch-all లను భర్తీ చేయండి",
 	"cf.replaceCatchAllHelp": "ఇప్పటికే వేరే చోటికి మెయిల్ పంపుతున్న catch-all ను (ఉదాహరణకు Mailflare కు) ఈ Worker కు కూడా చూపండి. అది ఈరోజు అక్కడికి పంపే మెయిల్ బదులుగా ఇక్కడికి వస్తుంది. ఇతర మెయిల్ అందుకునే డొమైన్‌ల కోసం దీనిని ఆఫ్ చేసి ఉంచండి.",
+	"common.copy": "కాపీ చేయండి",
+	"common.copied": "{value} కాపీ చేయబడింది",
 };
 
 export default dictionary;

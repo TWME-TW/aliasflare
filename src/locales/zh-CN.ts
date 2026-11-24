@@ -358,6 +358,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "账户（Account）",
 	"cf.replaceCatchAll": "替换现有的 catch-all",
 	"cf.replaceCatchAllHelp": "同时将已把邮件发送到其他地方（例如 Mailflare）的 catch-all 指向此 Worker。它当前发往那里的邮件将改为发到这里。对于接收其他邮件的域名请保持关闭。",
+	"common.copy": "复制",
+	"common.copied": "已复制 {value}",
 };
 
 export default dictionary;

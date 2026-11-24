@@ -373,6 +373,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "Account",
 	"cf.replaceCatchAll": "ಇರುವ catch-all ಗಳನ್ನು ಬದಲಿಸಿ",
 	"cf.replaceCatchAllHelp": "ಈಗಾಗಲೇ ಬೇರೆಡೆ ಮೇಲ್ ಕಳುಹಿಸುತ್ತಿರುವ catch-all ಅನ್ನು (ಉದಾಹರಣೆಗೆ Mailflare ಗೆ) ಈ Worker ಗೂ ತೋರಿಸಿ. ಅದು ಇಂದು ಅಲ್ಲಿಗೆ ಕಳುಹಿಸುವ ಮೇಲ್ ಬದಲಾಗಿ ಇಲ್ಲಿಗೆ ಬರುತ್ತದೆ. ಬೇರೆ ಮೇಲ್ ಬರುವ ಡೊಮೇನ್‌ಗಳಿಗೆ ಇದನ್ನು ಆಫ್ ಆಗಿಯೇ ಇಡಿ.",
+	"common.copy": "ನಕಲಿಸಿ",
+	"common.copied": "{value} ನಕಲಿಸಲಾಗಿದೆ",
 };
 
 export default dictionary;

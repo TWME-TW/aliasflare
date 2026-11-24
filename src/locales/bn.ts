@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"cf.scopeAccount": "অ্যাকাউন্ট (Account)",
 	"cf.replaceCatchAll": "বিদ্যমান catch-all প্রতিস্থাপন করুন",
 	"cf.replaceCatchAllHelp": "যে catch-all ইতিমধ্যে অন্য কোথাও মেইল পাঠায় (যেমন Mailflare-এ), তাকেও এই Worker-এ নির্দেশ করুন। সে আজ যে মেইল সেখানে পাঠায়, তার বদলে তা এখানে আসবে। অন্য মেইল গ্রহণ করে এমন ডোমেইনের জন্য এটি বন্ধ রাখুন।",
+	"common.copy": "কপি করুন",
+	"common.copied": "{value} কপি করা হয়েছে",
 };
 
 export default dictionary;

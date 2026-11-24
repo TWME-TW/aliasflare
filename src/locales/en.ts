@@ -381,6 +381,8 @@ export const en = {
 	"cf.scopeAccount": "Account",
 	"cf.replaceCatchAll": "Replace existing catch-alls",
 	"cf.replaceCatchAllHelp": "Also point a catch-all that already sends mail elsewhere (for example to Mailflare) at this Worker. Mail it sends there today then comes here instead. Leave it off for domains that receive other mail.",
+	"common.copy": "Copy",
+	"common.copied": "Copied {value}",
 };
 
 export type MessageKey = keyof typeof en;
