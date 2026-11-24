@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOCALES, negotiateLocale, translator } from "../src/i18n";
+import { LOCALES, negotiateLocale, textDirection, translator } from "../src/i18n";
 import { bannerHtml } from "../src/transform";
 
 describe("i18n", () => {
@@ -20,7 +20,12 @@ describe("i18n", () => {
 		expect(negotiateLocale("zh-HK")).toBe("zh-TW");
 		expect(negotiateLocale("zh-CN,zh;q=0.9")).toBe("zh-CN");
 		expect(negotiateLocale("ja-JP")).toBe("ja");
-		expect(negotiateLocale("fr-FR,de;q=0.5")).toBe("en");
+		expect(negotiateLocale("fr-FR,de;q=0.5")).toBe("fr");
+		expect(negotiateLocale("pt-PT")).toBe("pt-PT");
+		expect(negotiateLocale("pt")).toBe("pt-BR");
+		expect(negotiateLocale("zh-Hant-HK")).toBe("zh-TW");
+		expect(negotiateLocale("zh-Hans")).toBe("zh-CN");
+		expect(negotiateLocale("xx-YY, en;q=0.2")).toBe("en");
 		expect(negotiateLocale("en;q=0.1, ja;q=0.9")).toBe("ja");
 		expect(negotiateLocale(null)).toBe("en");
 	});
@@ -40,5 +45,14 @@ describe("i18n", () => {
 			expect(out, locale).not.toContain("<img");
 			expect(out, locale).toContain("<b>a@x.com</b>");
 		}
+	});
+
+	it("matches Mailflare's languages plus Traditional Chinese, with right-to-left where needed", () => {
+		expect(Object.keys(LOCALES)).toHaveLength(35);
+		expect(textDirection("ar")).toBe("rtl");
+		expect(textDirection("fa")).toBe("rtl");
+		expect(textDirection("ur")).toBe("rtl");
+		expect(textDirection("he" as never)).toBe("ltr");
+		expect(textDirection("zh-TW")).toBe("ltr");
 	});
 });

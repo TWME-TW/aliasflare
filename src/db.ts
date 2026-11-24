@@ -20,6 +20,15 @@ export type AliasRow = {
 	forward_mode: ForwardMode;
 	destination: string | null;
 	note: string | null;
+	/** Integer id for SimpleLogin clients. */
+	num_id: number;
+	/** UUID for addy.io clients. */
+	uid: string;
+	/** Display name on replies sent from the alias. */
+	name: string | null;
+	pinned: number;
+	/** Set when a client deleted the alias: it stops forwarding and is hidden. */
+	deleted_at: number | null;
 	created_at: number;
 	updated_at: number;
 };
@@ -35,6 +44,8 @@ export type ContactRow = {
 	reply_count: number;
 	last_forward_at: number | null;
 	last_reply_at: number | null;
+	/** Integer id for SimpleLogin clients. */
+	num_id: number;
 	created_at: number;
 };
 
@@ -77,9 +88,10 @@ export async function ensureAlias(
 	const timestamp = now();
 	await db
 		.prepare(
-			"INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (address) DO NOTHING",
+			`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, num_id, uid, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT (address) DO NOTHING`,
 		)
-		.bind(address, mailboxId, defaults.forwardEnabled ? 1 : 0, defaults.forwardEnabled ? "all" : "none", defaults.destination, timestamp, timestamp)
+		.bind(address, mailboxId, defaults.forwardEnabled ? 1 : 0, defaults.forwardEnabled ? "all" : "none", defaults.destination, crypto.randomUUID(), timestamp, timestamp)
 		.run();
 	const row = await getAlias(db, address);
 	if (!row) throw new Error(`Alias ${address} could not be created`);
@@ -129,7 +141,8 @@ export async function ensureContact(
 		const reverseLocal = makeReverseLocal(email, includeSenderInReverseAlias);
 		const result = await db
 			.prepare(
-				"INSERT INTO contacts (id, alias_address, email, name, reverse_local, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+				`INSERT INTO contacts (id, alias_address, email, name, reverse_local, num_id, created_at)
+				 VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM contacts), ?) ON CONFLICT DO NOTHING`,
 			)
 			.bind(id, aliasAddress, email, name, reverseLocal, now())
 			.run();

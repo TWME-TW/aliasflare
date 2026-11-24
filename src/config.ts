@@ -13,10 +13,22 @@ export type AppConfig = {
 	reverseDomain: string;
 	signingSecret: string;
 	publicUrl: string;
+	/** Cloudflare API token that lets the dashboard set up Email Routing and Email Sending. */
+	cloudflareApiToken: string;
+	/** This Worker's name, which the Email Routing rule sends mail to. */
+	workerName: string;
 	mailflareService?: Fetcher;
 };
 
-type StoredKey = "mailflareUrl" | "mailflareApiKey" | "webhookSecret" | "reverseDomain" | "signingSecret" | "publicUrl";
+type StoredKey =
+	| "mailflareUrl"
+	| "mailflareApiKey"
+	| "webhookSecret"
+	| "reverseDomain"
+	| "signingSecret"
+	| "publicUrl"
+	| "cloudflareApiToken"
+	| "workerName";
 
 const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	mailflareUrl: "MAILFLARE_URL",
@@ -25,6 +37,8 @@ const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	reverseDomain: "REVERSE_ALIAS_DOMAIN",
 	signingSecret: "SIGNING_SECRET",
 	publicUrl: "PUBLIC_URL",
+	cloudflareApiToken: "CLOUDFLARE_API_TOKEN",
+	workerName: "WORKER_NAME",
 };
 
 /** Which values come from the environment, so the dashboard can show them as fixed. */
@@ -69,6 +83,8 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 		reverseDomain: pick("reverseDomain").toLowerCase(),
 		signingSecret,
 		publicUrl: pick("publicUrl").replace(/\/+$/, ""),
+		cloudflareApiToken: pick("cloudflareApiToken"),
+		workerName: pick("workerName") || "mailflare-alias",
 		mailflareService: env.MAILFLARE_SERVICE,
 	};
 }

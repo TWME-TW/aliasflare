@@ -34,10 +34,16 @@
 - **封鎖名單**：可封鎖地址，或整個網域（含子網域），對所有別名生效。
 - **別名備註**：替每個別名寫下用途。
 
+**App 與瀏覽器擴充功能**
+- **支援 SimpleLogin 與 addy.io 用戶端**：在「設定」開啟任一種 API 並建立 API 金鑰後，就能用官方的 SimpleLogin 或 addy.io App、瀏覽器擴充功能連到你的 Worker，列出、搜尋、建立、釘選、啟用、停用和刪除別名，修改備註與轉寄地址，並管理反向別名（SimpleLogin 的聯絡人）。
+- **從 App 建立的新別名**放在你設定的「別名網域」上，格式可選單字（`maple.otter42`）、隨機字元、UUID，或自訂前綴。
+
 **管理介面**
 - **通行金鑰（passkey）登入**，不用密碼，可以註冊多台裝置。
+- **在管理介面設定 Cloudflare**：填入 API token 後按一下，就會為反向別名網域開啟 Email Routing、Email Sending 並建立路由規則。
 - **連線設定在管理介面填寫**：Mailflare 網址、API key、webhook 密鑰和反向別名網域，都在註冊通行金鑰之後才填寫，部署時不需要任何 secret。
-- **多語言**：English、繁體中文、简体中文、日本語。預設跟隨瀏覽器語言，也可以在頁尾切換。
+- **35 種語言**：與 Mailflare 相同，再加上繁體中文。阿拉伯文、波斯文和烏爾都文會由右至左排版。預設跟隨瀏覽器語言，也可以在選單切換。
+- **外觀與 Mailflare 一致**，支援淺色與深色模式。
 - **支援手機、平板和桌機**：在小螢幕上，表格會變成卡片。
 
 ## 安裝
@@ -82,8 +88,28 @@
    - 填入 Mailflare 網址和反向別名網域。
    - 最後到「設定」頁面填入預設轉寄地址（你的 Gmail）。
 4. **在 Cloudflare 設定反向別名網域**
-   - Email Routing：catch-all 選「Send to a Worker」，指向 `mailflare-alias`。
-   - Email Sending：把網域加進去，並照指示加上 DNS 紀錄（需要 Workers Paid）。
+
+   反向別名的格式是 `reply+ra_x7k2…@r.example.com`。Cloudflare 的 catch-all 只能用在根網域，子網域最多只能有 200 條規則，所以改用「子地址（subaddressing）」：只要一條 `reply@r.example.com` 的規則，就能涵蓋所有反向別名。
+
+   - **自動設定**：到「連線 → Cloudflare」貼上 API token，按「自動設定」。token 在 Cloudflare 的「My Profile → API Tokens」建立，對該 zone 需要以下權限：
+     - Zone → Zone → Read
+     - Zone → Zone Settings → Edit
+     - Zone → Email Routing Rules → Edit
+     - Zone → Email Sending → Edit
+
+     頁面會列出每個步驟的結果，重複執行也沒關係。
+   - **手動設定**：
+     - Email Routing：為 `r.example.com` 啟用，在 Email Routing 設定中開啟子地址，再新增自訂地址 `reply@r.example.com`，動作選「Send to a Worker」→ `mailflare-alias`。
+     - Email Sending：加入 `r.example.com`（需要 Workers Paid）。
+5. **（選用）SimpleLogin 與 addy.io App**
+   1. 到「設定 → 應用程式與瀏覽器擴充功能」，開啟 SimpleLogin、addy.io 或兩者的支援。
+   2. 填入**別名網域**，也就是 App 可以建立新別名的網域。在 Mailflare 為這些網域設定 **catch-all**，Mailflare 才會接收原本不存在的地址的信。
+   3. 到「API 金鑰」頁面，為每個 App 或擴充功能各建立一把金鑰。
+   4. 在 App 或擴充功能選擇自架伺服器，填入 API 金鑰頁面顯示的伺服器網址（也就是 Worker 的網址）和金鑰：
+      - **SimpleLogin**：*API URL*。
+      - **addy.io**：*Instance URL*。
+
+   金鑰可以管理別名，但不能變更設定。資料庫只存金鑰的雜湊值。
 
 ## 安全性
 

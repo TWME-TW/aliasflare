@@ -2,7 +2,17 @@ import PostalMime from "postal-mime";
 import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
 import { getAlias, getContactByReverseLocal, getContactsByReverseLocals, mapForwardedToOriginal, now, recordEvent } from "./db";
-import { domainOf, extractEmail, findAddressesOnDomain, normalizeEmail, parseMessageIds, replaceAddresses, type Replacement } from "./format";
+import {
+	domainOf,
+	extractEmail,
+	findAddressesOnDomain,
+	normalizeEmail,
+	parseMessageIds,
+	replaceAddresses,
+	reverseAddress,
+	reverseLocalOf,
+	type Replacement,
+} from "./format";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings } from "./settings";
 
@@ -56,7 +66,8 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject("This address does not exist");
 		return;
 	}
-	const contact = await getContactByReverseLocal(db, recipient.slice(0, recipient.lastIndexOf("@")));
+	const reverseLocal = reverseLocalOf(recipient);
+	const contact = reverseLocal ? await getContactByReverseLocal(db, reverseLocal) : null;
 	if (!contact) {
 		message.setReject("This address does not exist");
 		return;
@@ -88,9 +99,14 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	let text = email.text ?? undefined;
 	if (settings.reverseAliasReplacement) {
 		const body = `${html ?? ""}\n${text ?? ""}`;
-		const reverseLocals = findAddressesOnDomain(body, reverseDomain).map((address) => address.slice(0, address.lastIndexOf("@")));
+		const reverseLocals = findAddressesOnDomain(body, reverseDomain)
+			.map(reverseLocalOf)
+			.filter((local): local is string => !!local);
 		const contacts = await getContactsByReverseLocals(db, reverseLocals);
-		const replacements: Replacement[] = contacts.map((found) => ({ from: `${found.reverse_local}@${reverseDomain}`, to: found.email }));
+		const replacements: Replacement[] = contacts.flatMap((found) => [
+			{ from: reverseAddress(found.reverse_local, reverseDomain), to: found.email },
+			{ from: `${found.reverse_local}@${reverseDomain}`, to: found.email },
+		]);
 		replacements.push({ from: destination, to: contact.alias_address });
 		if (html) html = replaceAddresses(html, replacements);
 		if (text) text = replaceAddresses(text, replacements);
@@ -117,7 +133,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	try {
 		await sendViaMailflare(mailflareConfig(config), {
 			mailboxId: alias.mailbox_id,
-			from: contact.alias_address,
+			from: alias.name ? `"${alias.name.replace(/["\\\r\n<>]/g, "")}" <${contact.alias_address}>` : contact.alias_address,
 			to: [contact.email],
 			subject: email.subject?.trim() || "(no subject)",
 			...(html ? { html } : {}),

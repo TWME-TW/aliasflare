@@ -2,7 +2,7 @@ import PostalMime, { type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { signToken } from "./crypto";
 import { ensureAlias, ensureContact, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
-import { domainOf, ensureAngle, extractEmail, formatSenderName, normalizeEmail, parseMessageIds, sanitizeDisplayName } from "./format";
+import { domainOf, ensureAngle, extractEmail, formatSenderName, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
 import { translator } from "./i18n";
 import { getStoredMessage, mailflareConfig, MailflareError } from "./mailflare";
 import { firstAuthenticationResults } from "./reply";
@@ -119,6 +119,7 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 			destination: settings.defaultDestination || null,
 		});
 		const destination = alias.destination || settings.defaultDestination;
+		if (alias.deleted_at) return await skip("the alias was deleted");
 		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias");
 		if (!destination) return await skip("no forwarding address");
 		if (domainOf(destination) === reverseDomain || normalizeEmail(destination) === aliasAddress) return await skip("destination would loop");
@@ -164,7 +165,7 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 			{ removeTrackers: settings.removeTrackers, banner, t: translator(settings.language) },
 		);
 
-		const reverseAddress = `${contact.reverse_local}@${reverseDomain}`;
+		const reverseAddress = reverseAddressOf(contact.reverse_local, reverseDomain);
 		const displayName = formatSenderName(settings.senderFormat, contact.name, contact.email);
 		const headers: Record<string, string> = {
 			"List-Unsubscribe": `<${origin}/unsubscribe/${await sign("unsubscribe", forwardId)}>`,

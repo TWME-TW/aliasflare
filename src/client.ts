@@ -104,3 +104,18 @@ export const PASSKEY_SCRIPT = `
   }
 })();
 `;
+
+/** Small progressive enhancements for every page: the language menu applies on change. */
+export const APP_SCRIPT = `(() => {
+  "use strict";
+  for (const select of document.querySelectorAll("select[data-autosubmit]")) {
+    select.addEventListener("change", () => select.form && select.form.requestSubmit());
+    const button = select.form && select.form.querySelector("[data-autosubmit-button]");
+    if (button) button.hidden = true;
+  }
+  for (const input of document.querySelectorAll("input[data-select]")) {
+    input.addEventListener("focus", () => input.select());
+    input.focus();
+  }
+})();
+`;

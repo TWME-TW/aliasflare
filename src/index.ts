@@ -12,11 +12,14 @@ import {
 	takeChallengeCookie,
 	type AppEnv,
 } from "./auth";
-import { PASSKEY_SCRIPT } from "./client";
-import { envOverrides, loadConfig, missingConnection, saveConfig } from "./config";
+import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
+import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
+import { setUpCloudflare, type SetupStep } from "./cloudflare";
+import { api } from "./compat/api";
+import { envOverrides, loadConfig, missingConnection, saveConfig, type AppConfig } from "./config";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
-import { domainOf, extractEmail, normalizeEmail } from "./format";
+import { domainOf, extractEmail, normalizeEmail, reverseAddress } from "./format";
 import { handleInbound, type InboundEvent } from "./forward";
 import { isLocale, LANG_COOKIE, negotiateLocale, translator, type MessageKey } from "./i18n";
 import {
@@ -34,9 +37,11 @@ import { handleReverseAliasMail } from "./reply";
 import { loadSettings, normalizeSettings, saveSettings } from "./settings";
 import {
 	aliasPage,
+	apiKeysPage,
 	blocklistPage,
 	connectionPage,
 	dashboardPage,
+	FAVICON_SVG,
 	loginPage,
 	messagePage,
 	passkeysPage,
@@ -105,8 +110,19 @@ app.get("/assets/passkey.js", (c) => {
 	return c.body(PASSKEY_SCRIPT, 200, { "Content-Type": "text/javascript; charset=utf-8" });
 });
 
-app.get("/lang/:locale", (c) => {
-	const locale = c.req.param("locale");
+app.get("/favicon.svg", (c) => {
+	c.header("Cache-Control", "public, max-age=86400");
+	return c.body(FAVICON_SVG, 200, { "Content-Type": "image/svg+xml" });
+});
+
+app.get("/assets/app.js", (c) => {
+	c.header("Cache-Control", "public, max-age=300");
+	return c.body(APP_SCRIPT, 200, { "Content-Type": "text/javascript; charset=utf-8" });
+});
+
+// The language menu submits here (GET /lang?locale=…&next=…); /lang/:locale is the no-form link form.
+app.get("/lang/:locale?", (c) => {
+	const locale = c.req.param("locale") ?? c.req.query("locale");
 	if (isLocale(locale)) {
 		setCookie(c, LANG_COOKIE, locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 	}
@@ -114,6 +130,9 @@ app.get("/lang/:locale", (c) => {
 	// Only same-site paths, so the switcher cannot be used as an open redirect.
 	return c.redirect(next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : "/");
 });
+
+// SimpleLogin and addy.io client APIs (off until enabled in Settings).
+app.route("/api", api);
 
 // Mailflare webhook: message.inbound → forward to the alias's destination.
 app.post("/webhook", async (c) => {
@@ -233,7 +252,7 @@ app.post("/logout", (c) => {
 });
 
 // Everything below is the dashboard and needs a signed-in passkey session.
-for (const path of ["/", "/settings", "/connection", "/blocklist", "/blocklist/*", "/passkeys", "/passkeys/*", "/aliases/*"]) {
+for (const path of ["/", "/settings", "/connection", "/blocklist", "/blocklist/*", "/passkeys", "/passkeys/*", "/api-keys", "/api-keys/*", "/aliases/*"]) {
 	app.use(path, requireAdmin);
 }
 
@@ -242,7 +261,7 @@ app.get("/", async (c) => {
 	const settings = await loadSettings(db);
 	const { results: aliases } = await db
 		.prepare(
-			"SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases ORDER BY created_at DESC LIMIT 500",
+			"SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases WHERE deleted_at IS NULL ORDER BY pinned DESC, created_at DESC LIMIT 500",
 		)
 		.all<AliasRow & { contacts: number }>();
 	const { results: activity } = await db
@@ -265,7 +284,12 @@ app.get("/", async (c) => {
 
 app.get("/settings", async (c) =>
 	c.html(
-		settingsPage(c.get("t"), { settings: await loadSettings(c.env.DB), reverseDomain: c.get("config").reverseDomain, notice: c.req.query("notice") }),
+		settingsPage(c.get("t"), {
+			settings: await loadSettings(c.env.DB),
+			reverseDomain: c.get("config").reverseDomain,
+			origin: publicOrigin(c),
+			notice: c.req.query("notice"),
+		}),
 	),
 );
 
@@ -277,7 +301,17 @@ app.post("/settings", async (c) => {
 	if (destination && reverseDomain && domainOf(destination) === reverseDomain) {
 		return redirectWithNotice(c, "/settings", "notice.destinationOnReverse");
 	}
+	const aliasDomains = (typeof form.aliasDomains === "string" ? form.aliasDomains : "")
+		.split(/[\s,]+/)
+		.map((domain) => domain.trim().toLowerCase())
+		.filter(Boolean);
+	const badDomain = aliasDomains.find((domain) => !DOMAIN_PATTERN.test(domain) || domain === reverseDomain);
+	if (badDomain) return redirectWithNotice(c, "/settings", "notice.badAliasDomain", { value: badDomain });
 	const settings = normalizeSettings({
+		simpleloginApi: form.simpleloginApi === "1",
+		addyApi: form.addyApi === "1",
+		aliasDomains,
+		randomAliasFormat: form.randomAliasFormat,
 		senderFormat: form.senderFormat,
 		reverseAliasReplacement: form.reverseAliasReplacement === "1",
 		includeSenderInReverseAlias: form.includeSenderInReverseAlias === "1",
@@ -292,8 +326,7 @@ app.post("/settings", async (c) => {
 	return redirectWithNotice(c, "/settings", "notice.settingsSaved");
 });
 
-app.get("/connection", (c) => {
-	const config = c.get("config");
+function renderConnection(c: C, config: AppConfig, setup?: SetupStep[]) {
 	return c.html(
 		connectionPage(c.get("t"), {
 			values: { mailflareUrl: config.mailflareUrl, reverseDomain: config.reverseDomain, publicUrl: config.publicUrl },
@@ -302,9 +335,32 @@ app.get("/connection", (c) => {
 			fixed: envOverrides(c.env),
 			webhookUrl: `${publicOrigin(c)}/webhook`,
 			missing: missingConnection(config),
+			cloudflare: { hasToken: !!config.cloudflareApiToken, workerName: config.workerName, setup },
 			notice: c.req.query("notice"),
 		}),
 	);
+}
+
+app.get("/connection", (c) => renderConnection(c, c.get("config")));
+
+// Sets up Email Routing and Email Sending for the reverse-alias domain with the stored token.
+app.post("/connection/cloudflare", async (c) => {
+	const form = await c.req.parseBody();
+	const fixed = envOverrides(c.env);
+	const text = (key: string) => (typeof form[key] === "string" ? (form[key] as string).trim() : "");
+	const values: Record<string, string> = {};
+	if (!fixed.has("cloudflareApiToken") && text("cloudflareApiToken")) values.cloudflareApiToken = text("cloudflareApiToken");
+	if (!fixed.has("workerName")) {
+		const name = text("workerName").toLowerCase();
+		if (name && !/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) return redirectWithNotice(c, "/connection", "notice.badWorkerName");
+		values.workerName = name;
+	}
+	await saveConfig(c.env.DB, values);
+	const config = await loadConfig(c.env);
+	if (!config.reverseDomain) return redirectWithNotice(c, "/connection", "notice.needReverseDomain");
+	if (!config.cloudflareApiToken) return redirectWithNotice(c, "/connection", "notice.needCloudflareToken");
+	const setup = await setUpCloudflare({ token: config.cloudflareApiToken, reverseDomain: config.reverseDomain, workerName: config.workerName });
+	return renderConnection(c, config, setup);
 });
 
 function validOrigin(value: string): string | null {
@@ -366,6 +422,34 @@ app.post("/blocklist", async (c) => {
 app.post("/blocklist/:id/delete", async (c) => {
 	await c.env.DB.prepare("DELETE FROM blocklist WHERE id = ?").bind(c.req.param("id")).run();
 	return redirectWithNotice(c, "/blocklist", "notice.unblocked");
+});
+
+async function renderApiKeys(c: C, extra: { newKey?: string; notice?: string } = {}) {
+	const settings = await loadSettings(c.env.DB);
+	return c.html(
+		apiKeysPage(c.get("t"), {
+			keys: await listApiKeys(c.env.DB),
+			enabled: { simplelogin: settings.simpleloginApi, addy: settings.addyApi },
+			origin: publicOrigin(c),
+			notice: extra.notice ?? c.req.query("notice"),
+			newKey: extra.newKey,
+		}),
+	);
+}
+
+app.get("/api-keys", (c) => renderApiKeys(c));
+
+app.post("/api-keys", async (c) => {
+	const form = await c.req.parseBody();
+	const { key } = await createApiKey(c.env.DB, typeof form.name === "string" ? form.name : "");
+	// Shown once, straight in the response; it is never stored or put in a URL.
+	c.header("Cache-Control", "no-store");
+	return renderApiKeys(c, { newKey: key });
+});
+
+app.post("/api-keys/:id/delete", async (c) => {
+	await deleteApiKey(c.env.DB, c.req.param("id"));
+	return redirectWithNotice(c, "/api-keys", "notice.keyRevoked");
 });
 
 app.get("/passkeys", async (c) => c.html(passkeysPage(c.get("t"), { passkeys: await listPasskeys(c.env.DB), notice: c.req.query("notice") })));
@@ -444,7 +528,7 @@ app.post("/aliases/:address/contacts", async (c) => {
 	if (!email || domainOf(email) === reverseDomain) return redirectWithNotice(c, base, "notice.badContact");
 	const settings = await loadSettings(c.env.DB);
 	const contact = await ensureContact(c.env.DB, alias.address, email, null, settings.includeSenderInReverseAlias);
-	return redirectWithNotice(c, base, "notice.contactCreated", { reverse: `${contact.reverse_local}@${reverseDomain}`, email });
+	return redirectWithNotice(c, base, "notice.contactCreated", { reverse: reverseAddress(contact.reverse_local, reverseDomain), email });
 });
 
 app.post("/aliases/:address/contacts/:id/block", async (c) => {

@@ -74,6 +74,24 @@ export function makeReverseLocal(senderEmail: string, includeSender: boolean): s
 	return `${readable}_${randomToken(8)}`;
 }
 
+/**
+ * Reverse aliases use plus addressing: reply+<local>@<reverse domain>. Cloudflare Email Routing
+ * matches them all with one rule for reply@<reverse domain>, since catch-all rules only exist on
+ * apex domains and a subdomain allows at most 200 literal rules.
+ */
+export const REVERSE_BASE = "reply";
+
+export function reverseAddress(reverseLocal: string, reverseDomain: string): string {
+	return `${REVERSE_BASE}+${reverseLocal}@${reverseDomain}`;
+}
+
+/** The contact's reverse_local in an address on the reverse-alias domain (also the older bare form). */
+export function reverseLocalOf(address: string): string | null {
+	const local = address.slice(0, address.lastIndexOf("@")).toLowerCase();
+	if (local.startsWith(`${REVERSE_BASE}+`)) return local.slice(REVERSE_BASE.length + 1) || null;
+	return local && local !== REVERSE_BASE ? local : null;
+}
+
 export function normalizeEmail(value: string): string {
 	return value.trim().toLowerCase();
 }

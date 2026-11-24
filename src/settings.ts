@@ -5,6 +5,16 @@ export type UnsubscribeBehavior = "disable_alias" | "block_contact" | "preserve_
 
 export const UNSUBSCRIBE_BEHAVIORS: UnsubscribeBehavior[] = ["disable_alias", "block_contact", "preserve_original"];
 
+/** How new random aliases are named: two words and digits, random characters, or a UUID. */
+export type RandomAliasFormat = "random_words" | "random_characters" | "uuid";
+export const RANDOM_ALIAS_FORMATS: RandomAliasFormat[] = ["random_words", "random_characters", "uuid"];
+
+export function isRandomAliasFormat(value: unknown): value is RandomAliasFormat {
+	return RANDOM_ALIAS_FORMATS.includes(value as RandomAliasFormat);
+}
+
+const DOMAIN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
 export type Settings = {
 	senderFormat: SenderFormat;
 	reverseAliasReplacement: boolean;
@@ -16,6 +26,13 @@ export type Settings = {
 	showBanner: boolean;
 	/** Language of the banner and link pages in forwarded mail. */
 	language: Locale;
+	/** Serve the SimpleLogin API so SimpleLogin's apps and browser extension can manage aliases. */
+	simpleloginApi: boolean;
+	/** Serve the addy.io API for addy.io's apps and browser extension. */
+	addyApi: boolean;
+	/** Domains new aliases can be created on. Mailflare must accept mail for any address there (a catch-all). */
+	aliasDomains: string[];
+	randomAliasFormat: RandomAliasFormat;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -28,6 +45,10 @@ export const DEFAULT_SETTINGS: Settings = {
 	removeTrackers: true,
 	showBanner: true,
 	language: "en",
+	simpleloginApi: false,
+	addyApi: false,
+	aliasDomains: [],
+	randomAliasFormat: "random_words",
 };
 
 function isUnsubscribeBehavior(value: unknown): value is UnsubscribeBehavior {
@@ -51,6 +72,12 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		removeTrackers: typeof raw.removeTrackers === "boolean" ? raw.removeTrackers : DEFAULT_SETTINGS.removeTrackers,
 		showBanner: typeof raw.showBanner === "boolean" ? raw.showBanner : DEFAULT_SETTINGS.showBanner,
 		language: isLocale(raw.language) ? raw.language : DEFAULT_SETTINGS.language,
+		simpleloginApi: raw.simpleloginApi === true,
+		addyApi: raw.addyApi === true,
+		aliasDomains: Array.isArray(raw.aliasDomains)
+			? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, 20)
+			: [],
+		randomAliasFormat: isRandomAliasFormat(raw.randomAliasFormat) ? raw.randomAliasFormat : DEFAULT_SETTINGS.randomAliasFormat,
 	};
 }
 

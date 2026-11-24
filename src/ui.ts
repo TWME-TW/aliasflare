@@ -2,106 +2,201 @@ import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
 import type { AliasRow, BlocklistRow, ContactRow } from "./db";
 import { FORWARD_MODES } from "./db";
-import { SENDER_FORMATS } from "./format";
-import { LOCALE_LIST, LOCALES, type MessageKey, type Translate } from "./i18n";
+import { reverseAddress, SENDER_FORMATS } from "./format";
+import { LOCALE_LIST, LOCALES, textDirection, type MessageKey, type Translate } from "./i18n";
+import type { ApiKeyRow } from "./apikeys";
+import type { SetupStep } from "./cloudflare";
 import type { PasskeyRow } from "./passkeys";
-import { UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
+import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 
+/*
+ * Visual style follows Mailflare's (Gmail-like): a #f6f8fc canvas, white cards with large radii,
+ * #0b57d0 as the accent, pill-shaped buttons and navigation, and Mailflare's dark palette.
+ */
 const STYLE = raw(`
-:root { color-scheme: light dark; --bg:#f7f7f8; --card:#fff; --text:#1d1d1f; --muted:#6b6b76; --line:#e3e3e8; --accent:#f38020; --accent-text:#b45309; --danger:#c62828; --ok:#2e7d32; }
-@media (prefers-color-scheme: dark) { :root { --bg:#141416; --card:#1d1d20; --text:#ececf1; --muted:#9a9aa6; --line:#2e2e33; --accent-text:#f9a35a; --danger:#ef5350; --ok:#66bb6a; } }
-* { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
-body { margin:0; font:15px/1.55 system-ui,-apple-system,"Segoe UI","Noto Sans TC","Noto Sans SC","Noto Sans JP",sans-serif; background:var(--bg); color:var(--text); }
-header { display:flex; align-items:center; gap:12px 18px; padding:12px 24px; border-bottom:1px solid var(--line); background:var(--card); flex-wrap:wrap; position:sticky; top:0; z-index:1; }
-header a { color:inherit; text-decoration:none; } header a.brand { font-weight:700; margin-right:auto; }
-header nav { display:flex; gap:16px; align-items:center; font-size:14px; }
-header nav a[aria-current] { color:var(--accent-text); font-weight:600; }
-a { color:var(--accent-text); }
-main { max-width:1080px; margin:0 auto; padding:24px; display:grid; gap:20px; }
-section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; min-width:0; }
-h1 { font-size:20px; margin:0 0 8px; } h2 { font-size:16px; margin:0 0 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+:root { color-scheme: light dark;
+	--bg:#f6f8fc; --card:#fff; --text:#202124; --muted:#5f6368; --line:#dadce0; --soft:#eef3fb; --hover:#e9eef6;
+	--primary:#0b57d0; --primary-text:#fff; --primary-hover:#0a4fbe; --nav-active:#d3e3fd; --nav-active-text:#041e49;
+	--danger:#b3261e; --danger-soft:#fce8e6; --ok:#146c2e; --ok-soft:#e6f4ea; --warn-soft:#fef7e0; --focus:rgba(11,87,208,.25);
+	--radius:24px; --font: Geist, "Google Sans", Roboto, system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans TC", "Noto Sans SC", "Noto Sans JP", "Noto Sans KR", "Noto Sans Arabic", "Noto Sans Devanagari", sans-serif; }
+@media (prefers-color-scheme: dark) { :root {
+	--bg:#202124; --card:#292a2d; --text:#e8eaed; --muted:#9aa0a6; --line:#3c4043; --soft:#303134; --hover:#35363a;
+	--primary:#8ab4f8; --primary-text:#202124; --primary-hover:#aecbfa; --nav-active:#004a77; --nav-active-text:#c2e7ff;
+	--danger:#f2b8b5; --danger-soft:#3c1f1e; --ok:#81c995; --ok-soft:#1e3324; --warn-soft:#3a3220; --focus:rgba(138,180,248,.3); } }
+* { box-sizing:border-box; }
+html { -webkit-text-size-adjust:100%; }
+body { margin:0; font:15px/1.5 var(--font); background:var(--bg); color:var(--text); min-height:100vh; }
+a { color:var(--primary); text-decoration:none; } a:hover { text-decoration:underline; }
+svg.i { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+/* App shell: top bar, sidebar, content */
+.topbar { display:flex; align-items:center; gap:12px; padding:12px 20px; min-height:64px; }
+.brand { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:600; color:var(--text); letter-spacing:-.01em; }
+.brand:hover { text-decoration:none; } .brand svg { width:32px; height:32px; flex:none; }
+.topbar .spacer { flex:1; }
+.shell { display:grid; grid-template-columns:248px minmax(0,1fr); gap:8px; padding:0 16px 16px 8px; align-items:start; }
+.sidebar { position:sticky; top:8px; display:flex; flex-direction:column; gap:2px; padding:4px 0; }
+.sidebar a { display:flex; align-items:center; gap:14px; height:44px; padding:0 18px; border-radius:999px; color:var(--text); font-weight:500; }
+.sidebar a:hover { background:var(--hover); text-decoration:none; }
+.sidebar a[aria-current] { background:var(--nav-active); color:var(--nav-active-text); font-weight:600; }
+.content { display:grid; gap:12px; min-width:0; }
+.content > main, form.sections { display:grid; gap:12px; }
+main.single, main.center { max-width:520px; margin:6vh auto 0; padding:0 16px; display:grid; gap:12px; }
+
+section { background:var(--card); border-radius:var(--radius); padding:22px 26px; min-width:0; }
+h1 { font-size:22px; font-weight:500; margin:0 0 8px; }
+h2 { font-size:17px; font-weight:600; margin:0 0 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+p { margin:8px 0; }
 p.help, .muted { color:var(--muted); font-size:13px; margin:4px 0 0; }
+code { font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--soft); padding:1px 6px; border-radius:6px; word-break:break-all; }
+
+/* Tables */
 table { width:100%; border-collapse:collapse; font-size:14px; }
-th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
-th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
-code { font:13px ui-monospace,SFMono-Regular,Menlo,monospace; word-break:break-all; }
-label { display:block; font-weight:500; margin:16px 0 4px; }
-input[type=text], input[type=email], input[type=password], input[type=url], select { width:100%; max-width:460px; min-height:40px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:inherit; font:inherit; }
-td input[type=text], td input[type=email], td select { max-width:240px; min-height:34px; padding:5px 8px; }
-.check { display:flex; gap:10px; align-items:flex-start; margin-top:16px; font-weight:500; } .check input { margin-top:5px; width:18px; height:18px; flex:none; }
-button { min-height:36px; padding:7px 14px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:inherit; font:inherit; cursor:pointer; white-space:nowrap; }
-button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
-button.danger { color:var(--danger); } button:disabled { opacity:.6; cursor:wait; }
+th, td { text-align:start; padding:12px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+tbody tr:last-child td { border-bottom:none; }
+tbody tr:hover { background:var(--soft); }
+th { color:var(--muted); font-weight:500; font-size:13px; }
+
+/* Forms */
+label { display:block; font-weight:500; margin:18px 0 6px; }
+input[type=text], input[type=email], input[type=password], input[type=url], select {
+	width:100%; max-width:480px; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:12px;
+	background:var(--card); color:inherit; font:inherit; }
+input:focus, select:focus, button:focus-visible, a:focus-visible { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--focus); }
+td input[type=text], td input[type=email], td select { max-width:240px; min-height:36px; padding:6px 12px; border-radius:10px; }
+.check { display:flex; gap:12px; align-items:flex-start; margin-top:18px; font-weight:500; }
+.check input { margin-top:3px; width:18px; height:18px; flex:none; accent-color:var(--primary); }
+button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 20px; border-radius:999px;
+	border:1px solid var(--line); background:var(--card); color:var(--primary); font:inherit; font-weight:500; cursor:pointer; white-space:nowrap; }
+button:hover { background:var(--soft); }
+button.primary { background:var(--primary); border-color:var(--primary); color:var(--primary-text); }
+button.primary:hover { background:var(--primary-hover); border-color:var(--primary-hover); }
+button.danger { color:var(--danger); } button.danger:hover { background:var(--danger-soft); }
+button.ghost { border-color:transparent; color:var(--muted); } button.ghost:hover { background:var(--hover); color:var(--text); }
+button:disabled { opacity:.6; cursor:wait; }
+td button { min-height:34px; padding:0 14px; font-size:14px; }
 form.inline { display:inline; margin:0; }
 .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .row input, .row select { flex:1 1 180px; }
-.pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); font-weight:500; }
-.pill.ok { color:var(--ok); border-color:var(--ok); } .pill.bad { color:var(--danger); border-color:var(--danger); }
-.notice { padding:10px 14px; border-radius:10px; border:1px solid var(--accent); margin:0; background:var(--card); }
-.error { color:var(--danger); margin:10px 0 0; }
-.center { max-width:500px; margin:8vh auto; }
-ol.steps { padding-left:20px; margin:8px 0 0; } ol.steps li { margin:6px 0; }
-footer { max-width:1080px; margin:0 auto; padding:8px 24px 32px; font-size:13px; color:var(--muted); display:flex; gap:12px; flex-wrap:wrap; }
-footer a { color:inherit; } footer a[aria-current] { color:var(--text); font-weight:600; text-decoration:none; }
 
-@media (max-width: 760px) {
-	header { padding:10px 14px; gap:8px; }
-	header nav { width:100%; overflow-x:auto; gap:14px; padding-bottom:2px; white-space:nowrap; scrollbar-width:none; }
-	header nav::-webkit-scrollbar { display:none; }
-	main { padding:14px; gap:14px; }
-	section { padding:14px; border-radius:10px; }
-	.center { margin:4vh auto; }
+/* Chips and messages */
+.pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--muted); }
+.pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
+.notice { padding:12px 18px; border-radius:16px; margin:0; background:var(--nav-active); color:var(--nav-active-text); }
+.error { color:var(--danger); margin:10px 0 0; }
+ol.steps { padding-inline-start:20px; margin:8px 0 0; } ol.steps li { margin:6px 0; }
+ul.results { list-style:none; padding:0; margin:12px 0; display:grid; gap:8px; } ul.results .muted { word-break:break-word; }
+details { margin-top:16px; } summary { cursor:pointer; color:var(--primary); font-weight:500; }
+
+/* Language menu and footer */
+.lang { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
+.lang svg.i { width:18px; height:18px; }
+.lang select { min-height:36px; width:auto; max-width:200px; padding:4px 10px; border-radius:999px; font-size:14px; }
+.lang button { min-height:36px; padding:0 14px; }
+.sidebar .lang { margin:16px 18px 0; }
+.sidebar .lang select { flex:1; max-width:none; }
+footer.page { display:flex; justify-content:center; padding:24px 16px; }
+.powered { color:var(--muted); font-size:12px; margin:12px 18px 0; }
+
+@media (max-width: 900px) {
+	.topbar { padding:8px 14px; min-height:56px; }
+	.brand { font-size:18px; }
+	.shell { display:block; padding:0 10px 16px; }
+	.sidebar { position:static; flex-direction:row; overflow-x:auto; gap:6px; padding:0 4px 10px; scrollbar-width:none; }
+	.sidebar::-webkit-scrollbar { display:none; }
+	.sidebar a { flex:none; height:38px; padding:0 14px; gap:8px; background:var(--card); font-size:14px; }
+	.sidebar .lang, .sidebar .powered { display:none; }
+	.mobile-only { display:flex !important; }
+	section { padding:18px; border-radius:20px; }
+	main.single, main.center { margin-top:3vh; }
 	input[type=text], input[type=email], input[type=password], input[type=url], select { max-width:none; font-size:16px; }
 	table.rt thead { display:none; }
 	table.rt, table.rt tbody, table.rt tr, table.rt td { display:block; width:100%; }
-	table.rt tr { border:1px solid var(--line); border-radius:10px; margin:10px 0; padding:4px 12px; }
-	table.rt td { display:flex; gap:12px; align-items:center; justify-content:space-between; border:none; padding:7px 0; text-align:right; }
-	table.rt td + td { border-top:1px dashed var(--line); }
-	table.rt td::before { content:attr(data-label); color:var(--muted); font-size:12px; text-align:left; flex:0 0 32%; }
+	table.rt tr { border:1px solid var(--line); border-radius:16px; margin:10px 0; padding:4px 14px; }
+	table.rt tbody tr:hover { background:none; }
+	table.rt td, table.rt td:first-child, table.rt td:last-child { display:flex; gap:12px; align-items:center; justify-content:space-between; border:none; padding:8px 0; text-align:end; }
+	table.rt td + td { border-top:1px solid var(--line); }
+	table.rt td::before { content:attr(data-label); color:var(--muted); font-size:12px; text-align:start; flex:0 0 32%; }
 	table.rt td:empty { display:none; }
 	table.rt td > form.row, table.rt td > .stack { flex:1; justify-content:flex-end; }
 	td input[type=text], td input[type=email], td select { max-width:none; font-size:16px; }
-	footer { padding:8px 14px 24px; }
 }
+.mobile-only { display:none; }
 `);
+
+/** Lucide icons (ISC license), inlined so the page needs no extra requests. */
+const ICONS = {
+	aliases: `<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>`,
+	blocklist: `<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>`,
+	settings: `<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>`,
+	connection: `<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>`,
+	passkeys: `<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>`,
+	apiKeys: `<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>`,
+	signOut: `<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>`,
+	globe: `<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/>`,
+} as const;
+
+function icon(name: keyof typeof ICONS): Html {
+	return html`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${raw(ICONS[name])}</svg>`;
+}
+
+/** The app mark: an envelope with a return arrow, in Mailflare's blue. */
+const LOGO = raw(`<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa5ff"/><stop offset="1" stop-color="#1a63e0"/></linearGradient></defs><rect x="3" y="7" width="26" height="19" rx="4" fill="url(#lg)"/><path d="M4.5 9.5 16 18l11.5-8.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/><circle cx="25" cy="23" r="6" fill="#fff"/><path d="M27.5 23h-5m2-2.2L22.3 23l2.2 2.2" fill="none" stroke="#1a63e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`);
 
 export type PageOptions = { t: Translate; nav?: boolean; script?: boolean; current?: string; path?: string };
 
-function languageFooter(t: Translate, path = "/"): Html {
-	const back = encodeURIComponent(path);
-	return html`<footer><span>${t("nav.language")}:</span>${LOCALE_LIST.map(
-		(locale) => html`<a href="/lang/${locale}?next=${back}" lang="${locale}" ${locale === t.locale ? "aria-current" : ""}>${LOCALES[locale]["lang.name"]}</a>`,
-	)}</footer>`;
+function languageMenu(t: Translate, path = "/", extraClass = ""): Html {
+	return html`<form class="lang ${extraClass}" method="get" action="/lang">
+<label for="lang-${extraClass || "main"}" style="margin:0;display:flex">${icon("globe")}<span class="sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">${t("nav.language")}</span></label>
+<input type="hidden" name="next" value="${path}" />
+<select id="lang-${extraClass || "main"}" name="locale" data-autosubmit>
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${locale === t.locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
+</select>
+<button type="submit" data-autosubmit-button>${t("lang.apply")}</button>
+</form>`;
 }
 
 export function page(title: string, body: Html, options: PageOptions): Html {
 	const { t } = options;
-	const link = (href: string, key: MessageKey) => html`<a href="${href}" ${options.current === href ? "aria-current" : ""}>${t(key)}</a>`;
+	const link = (href: string, key: MessageKey, name: keyof typeof ICONS) =>
+		html`<a href="${href}" ${options.current === href ? html`aria-current="page"` : ""}>${icon(name)}<span>${t(key)}</span></a>`;
+	const brand = html`<a class="brand" href="/">${LOGO}<span>mailflare-alias</span></a>`;
 	return html`<!doctype html>
-<html lang="${t.locale}">
+<html lang="${t.locale}" dir="${textDirection(t.locale)}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="robots" content="noindex" />
-<meta name="theme-color" content="#f38020" />
+<meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#202124" media="(prefers-color-scheme: dark)" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <title>${title} · mailflare-alias</title>
 <style>${STYLE}</style>
 </head>
 <body>
 ${options.nav
-	? html`<header><a class="brand" href="/">mailflare-alias</a><nav>
-${link("/", "nav.aliases")}${link("/blocklist", "nav.blocklist")}${link("/settings", "nav.settings")}${link("/connection", "nav.connection")}${link("/passkeys", "nav.passkeys")}
-<form class="inline" method="post" action="/logout"><button>${t("nav.signOut")}</button></form></nav></header>`
-	: ""}
-${body}
-${languageFooter(t, options.path)}
+	? html`<header class="topbar">${brand}<span class="spacer"></span>${languageMenu(t, options.path, "mobile-only")}
+<form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
+<div class="shell">
+<nav class="sidebar" aria-label="mailflare-alias">
+${link("/", "nav.aliases", "aliases")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
+${languageMenu(t, options.path)}
+<p class="powered">mailflare-alias · <a href="https://github.com/TWME-TW/mailflare-alias">GitHub</a></p>
+</nav>
+<div class="content">${body}</div>
+</div>`
+	: html`<header class="topbar">${brand}</header>${body}<footer class="page">${languageMenu(t, options.path)}</footer>`}
+<script src="/assets/app.js"></script>
 ${options.script ? html`<script src="/assets/passkey.js"></script>` : ""}
 </body>
 </html>`;
 }
+
+/** Served at /favicon.svg. */
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa5ff"/><stop offset="1" stop-color="#1a63e0"/></linearGradient></defs><rect x="3" y="7" width="26" height="19" rx="4" fill="url(#lg)"/><path d="M4.5 9.5 16 18l11.5-8.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="25" cy="23" r="6" fill="#fff"/><path d="M27.5 23h-5m2-2.2L22.3 23l2.2 2.2" fill="none" stroke="#1a63e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 
 function errorBox(t: Translate): Html {
 	return html`<p class="error" data-error hidden></p><span hidden data-msg-unsupported="${t("passkey.unsupported")}" data-msg-cancelled="${t("passkey.cancelled")}"></span>`;
@@ -229,15 +324,15 @@ ${activity.map(
 	);
 }
 
-export function settingsPage(t: Translate, input: { settings: Settings; reverseDomain: string; notice?: string }): Html {
-	const { settings, notice } = input;
+export function settingsPage(t: Translate, input: { settings: Settings; reverseDomain: string; origin: string; notice?: string }): Html {
+	const { settings, notice, origin } = input;
 	return page(
 		t("settings.title"),
 		html`<main>
 ${noticeBox(notice)}
+<form class="sections" method="post" action="/settings">
 <section>
 <h2>${t("settings.section")}</h2>
-<form method="post" action="/settings">
 <label for="defaultDestination">${t("settings.destination")}</label>
 <input id="defaultDestination" name="defaultDestination" type="email" value="${settings.defaultDestination}" placeholder="you@gmail.com" />
 <p class="help">${t("settings.destinationHelp")}</p>
@@ -267,10 +362,26 @@ ${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<option value="${behavior}" ${set
 </select>
 <p class="help">${t("settings.unsubscribeHelp")}<br />
 ${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<b>${t(`unsub.${behavior}`)}:</b> ${t(`unsub.${behavior}.help`)}<br />`)}</p>
+</section>
+
+<section id="clients">
+<h2>${t("set.clients")}</h2>
+<p class="help">${t("set.clientsHelp")} <a href="/api-keys">${t("nav.apiKeys")} →</a></p>
+${checkbox("simpleloginApi", settings.simpleloginApi, t("set.simpleloginApi"), t("set.simpleloginApiHelp", { url: origin }))}
+${checkbox("addyApi", settings.addyApi, t("set.addyApi"), t("set.addyApiHelp", { url: origin }))}
+
+<label for="aliasDomains">${t("set.aliasDomains")}</label>
+<input id="aliasDomains" name="aliasDomains" type="text" value="${settings.aliasDomains.join(", ")}" placeholder="mail.example.com" autocapitalize="none" spellcheck="false" />
+<p class="help">${t("set.aliasDomainsHelp")}</p>
+
+<label for="randomAliasFormat">${t("set.randomFormat")}</label>
+<select id="randomAliasFormat" name="randomAliasFormat">
+${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings.randomAliasFormat === format ? "selected" : ""}>${t(`set.format.${format}`)}</option>`)}
+</select>
 
 <p><button class="primary">${t("settings.saveButton")}</button></p>
-</form>
 </section>
+</form>
 </main>`,
 		{ t, nav: true, current: "/settings", path: "/settings" },
 	);
@@ -285,10 +396,11 @@ export function connectionPage(
 		fixed: Set<string>;
 		webhookUrl: string;
 		missing: MessageKey[];
+		cloudflare: { hasToken: boolean; workerName: string; setup?: SetupStep[] };
 		notice?: string;
 	},
 ): Html {
-	const { values, hasApiKey, hasWebhookSecret, fixed, webhookUrl, missing, notice } = input;
+	const { values, hasApiKey, hasWebhookSecret, fixed, webhookUrl, missing, cloudflare, notice } = input;
 	const fixedNote = (key: string) => (fixed.has(key) ? html`<p class="help">${t("conn.fixed")}</p>` : "");
 	const disabled = (key: string) => (fixed.has(key) ? "disabled" : "");
 	const secretField = (key: string, label: string, isSet: boolean, help: string) => html`
@@ -320,13 +432,29 @@ ${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, t("con
 <p><button class="primary">${t("conn.saveButton")}</button></p>
 </form>
 </section>
-<section>
-<h2>${t("conn.checklist")}</h2>
+<section id="cloudflare">
+<h2>${t("cf.title")}</h2>
+<p class="help">${t("cf.help")}</p>
+${cloudflare.setup
+	? html`<ul class="results">${cloudflare.setup.map(
+			(step) => html`<li><span class="pill ${step.ok ? "ok" : "bad"}">${step.ok ? "✓" : "✕"}</span> <b>${t(`cf.step.${step.step}`)}</b> <span class="muted">${step.detail}</span></li>`,
+		)}</ul>`
+	: ""}
+<form method="post" action="/connection/cloudflare">
+${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.tokenHelp"))}
+<label for="workerName">${t("cf.workerName")}</label>
+<input id="workerName" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
+<p class="help">${t("cf.workerNameHelp")}</p>${fixedNote("workerName")}
+<p><button class="primary" ${values.reverseDomain ? "" : "disabled"}>${t("cf.run")}</button></p>
+${values.reverseDomain ? "" : html`<p class="help">${t("notice.needReverseDomain")}</p>`}
+</form>
+<details><summary>${t("conn.checklist")}</summary>
 <ol class="steps">
 <li>${t("conn.step1", { domain: values.reverseDomain || t("conn.theReverseDomain") })}</li>
 <li>${t("conn.step2")}</li>
 <li>${t("conn.step3")}</li>
 </ol>
+</details>
 </section>
 </main>`,
 		{ t, nav: true, current: "/connection", path: "/connection" },
@@ -422,7 +550,7 @@ ${contacts.length === 0
 ${contacts.map(
 	(contact) => html`<tr>
 <td data-label="${t("alias.colContact")}"><span class="stack">${contact.name ? html`${contact.name}<br />` : ""}<code>${contact.email}</code></span></td>
-<td data-label="${t("alias.colReverse")}"><code>${contact.reverse_local}@${reverseDomain}</code></td>
+<td data-label="${t("alias.colReverse")}"><code>${reverseAddress(contact.reverse_local, reverseDomain)}</code></td>
 <td data-label="${t("alias.colForwarded")}"><span class="stack">${contact.forward_count}<br /><span class="muted">${when(contact.last_forward_at, t.locale)}</span></span></td>
 <td data-label="${t("alias.colReplied")}"><span class="stack">${contact.reply_count}<br /><span class="muted">${when(contact.last_reply_at, t.locale)}</span></span></td>
 <td data-label=""><form class="inline" method="post" action="${base}/contacts/${contact.id}/block">
@@ -438,4 +566,46 @@ ${contacts.map(
 
 export function messagePage(t: Translate, title: string, body: Html): Html {
 	return page(title, html`<main class="center"><section><h1>${title}</h1>${body}</section></main>`, { t });
+}
+
+export function apiKeysPage(
+	t: Translate,
+	input: { keys: ApiKeyRow[]; enabled: { simplelogin: boolean; addy: boolean }; origin: string; newKey?: string; notice?: string },
+): Html {
+	const { keys, enabled, origin, newKey, notice } = input;
+	return page(
+		t("keys.title"),
+		html`<main>
+${noticeBox(notice)}
+${newKey
+	? html`<section><h2>${t("keys.createdTitle")}</h2><p class="notice" role="status">${t("keys.created")}</p>
+<p><input type="text" readonly value="${newKey}" aria-label="${t("keys.colKey")}" data-select spellcheck="false" style="font-family:ui-monospace,monospace" /></p></section>`
+	: ""}
+<section>
+<h2>${t("keys.title")}</h2>
+<p class="help">${t("keys.help")}</p>
+${enabled.simplelogin || enabled.addy
+	? html`<p>${t("keys.serverUrl")}: <code>${origin}</code></p>
+<p class="muted">${enabled.simplelogin ? html`<span class="pill ok">SimpleLogin</span> ` : ""}${enabled.addy ? html`<span class="pill ok">addy.io</span>` : ""}</p>`
+	: html`<p class="notice">${t("keys.off")} <a href="/settings#clients">${t("nav.settings")} →</a></p>`}
+${keys.length
+	? html`<table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colCreated")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
+${keys.map(
+	(key) => html`<tr><td data-label="${t("keys.colName")}">${key.name}</td><td data-label="${t("keys.colKey")}"><code>${key.prefix}…</code></td>
+<td data-label="${t("keys.colCreated")}">${when(key.created_at, t.locale)}</td><td data-label="${t("keys.colUsed")}">${when(key.last_used_at, t.locale)}</td>
+<td><form class="inline" method="post" action="/api-keys/${key.id}/delete"><button class="danger">${t("keys.revoke")}</button></form></td></tr>`,
+)}
+</tbody></table>`
+	: html`<p class="muted">${t("keys.none")}</p>`}
+</section>
+<section>
+<h2>${t("keys.add")}</h2>
+<form method="post" action="/api-keys" class="row">
+<input name="name" type="text" maxlength="60" placeholder="${t("keys.namePlaceholder")}" aria-label="${t("keys.name")}" required />
+<button class="primary">${t("keys.create")}</button>
+</form>
+</section>
+</main>`,
+		{ t, nav: true, current: "/api-keys", path: "/api-keys" },
+	);
 }

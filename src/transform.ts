@@ -15,16 +15,16 @@ export function escapeHtml(value: string): string {
 
 /** The block shown above a forwarded message, like SimpleLogin's and addy.io's. */
 export function bannerHtml(info: BannerInfo, trackersRemoved: number, t: Translate): string {
-	const link = "color:#c2410c;text-decoration:none;font-weight:600;";
+	const link = "color:#0b57d0;text-decoration:none;font-weight:600;";
 	const warning = info.spoofWarning
-		? `<div style="margin:0 0 6px;padding:6px 8px;border-radius:4px;background:#fdecea;color:#b71c1c;">${escapeHtml(t("banner.spoof"))}</div>`
+		? `<div style="margin:0 0 6px;padding:6px 8px;border-radius:8px;background:#fce8e6;color:#b3261e;">${escapeHtml(t("banner.spoof"))}</div>`
 		: "";
 	// Escape the sentence first, then put the escaped alias and sender into it.
 	const sentTo = escapeHtml(t("banner.sentTo", { alias: "{alias}", sender: "{sender}" }))
 		.replace("{alias}", `<b>${escapeHtml(info.alias)}</b>`)
 		.replace("{sender}", escapeHtml(info.sender));
 	const trackers = trackersRemoved > 0 ? ` · ${escapeHtml(t("banner.trackers", { count: trackersRemoved }))}` : "";
-	return `<div data-mailflare-alias-banner="1" lang="${t.locale}" style="margin:0 0 16px;padding:10px 12px;border:1px solid #e3e3e8;border-radius:6px;font:12px/1.5 -apple-system,'Segoe UI',sans-serif;color:#6b6b76;">${warning}${sentTo}${trackers}<br /><a href="${escapeHtml(info.blockUrl)}" style="${link}">${escapeHtml(t("banner.block"))}</a> · <a href="${escapeHtml(info.disableUrl)}" style="${link}">${escapeHtml(t("banner.disable"))}</a></div>`;
+	return `<div data-mailflare-alias-banner="1" lang="${t.locale}" style="margin:0 0 16px;padding:10px 12px;border:1px solid #dadce0;border-radius:12px;background:#f6f8fc;font:12px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif;color:#5f6368;">${warning}${sentTo}${trackers}<br /><a href="${escapeHtml(info.blockUrl)}" style="${link}">${escapeHtml(t("banner.block"))}</a> · <a href="${escapeHtml(info.disableUrl)}" style="${link}">${escapeHtml(t("banner.disable"))}</a></div>`;
 }
 
 export function bannerText(info: BannerInfo, trackersRemoved: number, t: Translate): string {

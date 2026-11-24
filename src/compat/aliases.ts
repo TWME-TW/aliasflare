@@ -1,0 +1,295 @@
+/**
+ * Alias operations shared by the SimpleLogin and addy.io APIs. In mailflare-alias an alias is a
+ * Mailflare address; one created here starts receiving mail once Mailflare accepts mail for it,
+ * which is why new aliases may only use the configured alias domains (catch-all in Mailflare).
+ */
+import { now, type AliasRow, type ContactRow } from "../db";
+import { normalizeEmail } from "../format";
+import type { RandomAliasFormat, Settings } from "../settings";
+
+export type AliasStats = {
+	nb_forward: number;
+	nb_reply: number;
+	nb_block: number;
+	last_forward_at: number | null;
+	last_reply_at: number | null;
+	last_block_at: number | null;
+};
+
+export type AliasView = AliasRow & AliasStats;
+
+export class ClientError extends Error {
+	constructor(
+		readonly status: number,
+		message: string,
+	) {
+		super(message);
+	}
+}
+
+const STATS_COLUMNS = `
+	(SELECT COALESCE(SUM(c.forward_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_forward,
+	(SELECT COALESCE(SUM(c.reply_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_reply,
+	(SELECT COUNT(*) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped') AS nb_block,
+	(SELECT MAX(c.last_forward_at) FROM contacts c WHERE c.alias_address = a.address) AS last_forward_at,
+	(SELECT MAX(c.last_reply_at) FROM contacts c WHERE c.alias_address = a.address) AS last_reply_at,
+	(SELECT MAX(f.created_at) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped') AS last_block_at`;
+
+export type AliasQuery = {
+	deleted?: "without" | "with" | "only";
+	enabled?: boolean;
+	pinned?: boolean;
+	search?: string;
+	limit: number;
+	offset: number;
+};
+
+function whereClause(query: Omit<AliasQuery, "limit" | "offset">): { sql: string; params: unknown[] } {
+	const conditions: string[] = [];
+	const params: unknown[] = [];
+	if ((query.deleted ?? "without") === "without") conditions.push("a.deleted_at IS NULL");
+	if (query.deleted === "only") conditions.push("a.deleted_at IS NOT NULL");
+	if (query.enabled !== undefined) conditions.push(query.enabled ? "a.forward_mode != 'none'" : "a.forward_mode = 'none'");
+	if (query.pinned !== undefined) conditions.push(query.pinned ? "a.pinned = 1" : "a.pinned = 0");
+	if (query.search?.trim()) {
+		conditions.push("(a.address LIKE ? ESCAPE '\\' OR COALESCE(a.note, '') LIKE ? ESCAPE '\\' OR COALESCE(a.name, '') LIKE ? ESCAPE '\\')");
+		const like = `%${query.search.trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+		params.push(like, like, like);
+	}
+	return { sql: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "", params };
+}
+
+export async function listAliasViews(db: D1Database, query: AliasQuery): Promise<{ aliases: AliasView[]; total: number }> {
+	const where = whereClause(query);
+	const [rows, count] = await db.batch([
+		db
+			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a ${where.sql} ORDER BY a.pinned DESC, a.created_at DESC, a.num_id DESC LIMIT ? OFFSET ?`)
+			.bind(...where.params, query.limit, query.offset),
+		db.prepare(`SELECT COUNT(*) AS total FROM aliases a ${where.sql}`).bind(...where.params),
+	]);
+	return { aliases: (rows?.results ?? []) as AliasView[], total: Number((count?.results?.[0] as { total?: number } | undefined)?.total ?? 0) };
+}
+
+export async function getAliasView(db: D1Database, by: { numId: number } | { uid: string } | { address: string }): Promise<AliasView | null> {
+	const [column, value] = "numId" in by ? ["num_id", by.numId] : "uid" in by ? ["uid", by.uid] : ["address", by.address];
+	return db.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a WHERE a.${column} = ?`).bind(value).first<AliasView>();
+}
+
+/** The contact with the most recent forward or reply, for SimpleLogin's latest_activity. */
+export async function latestContact(db: D1Database, address: string): Promise<ContactRow | null> {
+	return db
+		.prepare(
+			"SELECT * FROM contacts WHERE alias_address = ? AND COALESCE(last_forward_at, last_reply_at) IS NOT NULL ORDER BY MAX(COALESCE(last_forward_at, 0), COALESCE(last_reply_at, 0)) DESC LIMIT 1",
+		)
+		.bind(address)
+		.first<ContactRow>();
+}
+
+export async function totals(db: D1Database): Promise<{ aliases: number; active: number; deleted: number; pinned: number; forwarded: number; replied: number; blocked: number }> {
+	const row = await db
+		.prepare(
+			`SELECT
+				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL) AS aliases,
+				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL AND forward_mode != 'none') AS active,
+				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NOT NULL) AS deleted,
+				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL AND pinned = 1) AS pinned,
+				(SELECT COALESCE(SUM(forward_count), 0) FROM contacts) AS forwarded,
+				(SELECT COALESCE(SUM(reply_count), 0) FROM contacts) AS replied,
+				(SELECT COUNT(*) FROM forwards WHERE status = 'skipped') AS blocked`,
+		)
+		.first<Record<string, number>>();
+	return {
+		aliases: Number(row?.aliases ?? 0),
+		active: Number(row?.active ?? 0),
+		deleted: Number(row?.deleted ?? 0),
+		pinned: Number(row?.pinned ?? 0),
+		forwarded: Number(row?.forwarded ?? 0),
+		replied: Number(row?.replied ?? 0),
+		blocked: Number(row?.blocked ?? 0),
+	};
+}
+
+// ── Destinations: SimpleLogin "mailboxes", addy.io "recipients" ──────────────────────────────
+
+export type Destination = { email: string; numId: number; uid: string; isDefault: boolean; aliasCount: number };
+
+async function digest(text: string): Promise<Uint8Array> {
+	return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+}
+
+/** Stable ids derived from the address: a positive 31-bit integer and a UUID-shaped string. */
+export async function destinationIds(email: string): Promise<{ numId: number; uid: string }> {
+	const bytes = await digest(`destination:${email}`);
+	const numId = (((bytes[0]! & 0x7f) << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) || 1;
+	const hex = [...bytes.slice(0, 16)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+	const uid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${((parseInt(hex[16]!, 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+	return { numId, uid };
+}
+
+export async function listDestinations(db: D1Database, settings: Settings): Promise<Destination[]> {
+	const { results } = await db
+		.prepare("SELECT destination, COUNT(*) AS n FROM aliases WHERE deleted_at IS NULL GROUP BY destination")
+		.all<{ destination: string | null; n: number }>();
+	const counts = new Map<string, number>();
+	for (const row of results) {
+		const email = row.destination || settings.defaultDestination;
+		if (email) counts.set(email, (counts.get(email) ?? 0) + Number(row.n));
+	}
+	if (settings.defaultDestination && !counts.has(settings.defaultDestination)) counts.set(settings.defaultDestination, 0);
+	const out: Destination[] = [];
+	for (const [email, aliasCount] of counts) {
+		out.push({ email, aliasCount, isDefault: email === settings.defaultDestination, ...(await destinationIds(email)) });
+	}
+	return out.sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.email.localeCompare(b.email));
+}
+
+/** Resolves client-supplied destination ids to an address for aliases.destination (null = default). */
+export async function resolveDestination(db: D1Database, settings: Settings, id: number | string | undefined): Promise<string | null | undefined> {
+	if (id === undefined) return undefined;
+	const match = (await listDestinations(db, settings)).find((d) => d.numId === Number(id) || d.uid === String(id));
+	if (!match) throw new ClientError(400, "Unknown mailbox");
+	return match.isDefault ? null : match.email;
+}
+
+export function destinationOf(alias: AliasRow, settings: Settings): string | null {
+	return alias.destination || settings.defaultDestination || null;
+}
+
+// ── Creating aliases ──────────────────────────────────────────────────────────────────────────
+
+const WORDS = (
+	"amber anchor apple arrow aspen autumn badge bamboo basil beacon birch blossom breeze brook canyon cedar cherry cinder " +
+	"clover cobalt comet coral cotton crane crystal dawn delta desert dune ember falcon fern field flint forest frost garden " +
+	"ginger glacier granite harbor hazel heron hollow honey indigo island ivory jasper juniper kettle lagoon lantern lemon " +
+	"linen lotus maple marble meadow mint moss nectar north oasis olive onyx orchid otter pebble pepper pine planet plum " +
+	"prairie quartz quill rain raven reef ridge river robin saffron sage sand shadow silver sky slate spruce star stone " +
+	"summit sun swift thistle thunder tide timber topaz tulip valley velvet violet walnut willow winter wren zephyr"
+).split(" ");
+
+function randomInt(max: number): number {
+	const limit = Math.floor(0x100000000 / max) * max;
+	for (;;) {
+		const value = crypto.getRandomValues(new Uint32Array(1))[0]!;
+		if (value < limit) return value % max;
+	}
+}
+
+function randomChars(length: number): string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+	return Array.from({ length }, () => alphabet[randomInt(alphabet.length)]).join("");
+}
+
+export function randomLocalPart(format: RandomAliasFormat | "word" | "random_string" | string): string {
+	if (format === "uuid") return crypto.randomUUID();
+	if (format === "random_characters" || format === "random_string") return randomChars(10);
+	return `${WORDS[randomInt(WORDS.length)]}.${WORDS[randomInt(WORDS.length)]}${randomInt(1000)}`;
+}
+
+/** A short random tail clients can offer after a custom prefix, like SimpleLogin's suffixes. */
+export function randomSuffixWord(): string {
+	return `.${WORDS[randomInt(WORDS.length)]}${randomInt(100)}`;
+}
+
+const LOCAL_PART = /^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/;
+
+export function cleanPrefix(prefix: string): string {
+	return prefix
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9._+-]+/g, "")
+		.replace(/^[._+-]+|[._+-]+$/g, "")
+		.slice(0, 50);
+}
+
+export type CreateAliasInput = { localPart: string; domain: string; note?: string | null; name?: string | null; destination?: string | null };
+
+/** Creates an alias, or restores a deleted one with the same address. */
+export async function createAlias(db: D1Database, settings: Settings, reverseDomain: string, input: CreateAliasInput): Promise<AliasView> {
+	const domain = input.domain.trim().toLowerCase();
+	const localPart = input.localPart.trim().toLowerCase();
+	if (!settings.aliasDomains.includes(domain) || domain === reverseDomain) {
+		throw new ClientError(400, "This domain cannot be used for new aliases. Add it under Alias domains in the mailflare-alias settings.");
+	}
+	if (!LOCAL_PART.test(localPart) || localPart.includes("..")) throw new ClientError(400, "The alias contains characters that are not allowed.");
+	const address = normalizeEmail(`${localPart}@${domain}`);
+	const existing = await db.prepare("SELECT * FROM aliases WHERE address = ?").bind(address).first<AliasRow>();
+	const timestamp = now();
+	if (existing && !existing.deleted_at) throw new ClientError(409, "This alias already exists.");
+	if (existing) {
+		await db
+			.prepare("UPDATE aliases SET deleted_at = NULL, forward_mode = 'all', forward_enabled = 1, note = ?, name = ?, destination = ?, updated_at = ? WHERE address = ?")
+			.bind(input.note ?? null, input.name ?? null, input.destination ?? null, timestamp, address)
+			.run();
+	} else {
+		// Replies need a Mailflare mailbox; until the alias first receives mail, borrow the one of
+		// another alias on the same domain. The webhook corrects it on the first message.
+		const sibling = await db
+			.prepare("SELECT mailbox_id FROM aliases WHERE address LIKE ? AND mailbox_id != '' ORDER BY updated_at DESC LIMIT 1")
+			.bind(`%@${domain}`)
+			.first<{ mailbox_id: string }>();
+		await db
+			.prepare(
+				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, num_id, uid, created_at, updated_at)
+				 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?)`,
+			)
+			.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, input.note ?? null, input.name ?? null, crypto.randomUUID(), timestamp, timestamp)
+			.run();
+	}
+	const view = await getAliasView(db, { address });
+	if (!view) throw new ClientError(500, "The alias could not be created.");
+	return view;
+}
+
+export async function createRandomAlias(
+	db: D1Database,
+	settings: Settings,
+	reverseDomain: string,
+	input: { domain?: string; format?: string; note?: string | null; destination?: string | null },
+): Promise<AliasView> {
+	const domain = input.domain || settings.aliasDomains[0];
+	if (!domain) throw new ClientError(400, "No alias domain is set up. Add one under Alias domains in the mailflare-alias settings.");
+	for (let attempt = 0; attempt < 5; attempt += 1) {
+		try {
+			return await createAlias(db, settings, reverseDomain, { localPart: randomLocalPart(input.format || settings.randomAliasFormat), domain, note: input.note, destination: input.destination });
+		} catch (error) {
+			if (!(error instanceof ClientError && error.status === 409)) throw error;
+		}
+	}
+	throw new ClientError(500, "Could not find a free alias. Try again.");
+}
+
+// ── Changing aliases ──────────────────────────────────────────────────────────────────────────
+
+export async function updateAlias(
+	db: D1Database,
+	address: string,
+	fields: { note?: string | null; name?: string | null; pinned?: boolean; enabled?: boolean; destination?: string | null },
+): Promise<void> {
+	const sets: string[] = [];
+	const params: unknown[] = [];
+	if (fields.note !== undefined) sets.push("note = ?"), params.push(fields.note?.slice(0, 500) || null);
+	if (fields.name !== undefined) sets.push("name = ?"), params.push(fields.name?.replace(/[\r\n"<>\\]/g, "").trim().slice(0, 100) || null);
+	if (fields.pinned !== undefined) sets.push("pinned = ?"), params.push(fields.pinned ? 1 : 0);
+	if (fields.enabled !== undefined) {
+		// Re-enabling keeps "Block promotions" if that was chosen before; disabling is "Forward nothing".
+		sets.push(fields.enabled ? "forward_mode = CASE WHEN forward_mode = 'none' THEN 'all' ELSE forward_mode END" : "forward_mode = 'none'");
+		sets.push("forward_enabled = ?"), params.push(fields.enabled ? 1 : 0);
+	}
+	if (fields.destination !== undefined) sets.push("destination = ?"), params.push(fields.destination);
+	if (!sets.length) return;
+	sets.push("updated_at = ?"), params.push(now());
+	await db.prepare(`UPDATE aliases SET ${sets.join(", ")} WHERE address = ?`).bind(...params, address).run();
+}
+
+export async function deleteAlias(db: D1Database, address: string): Promise<void> {
+	await db.prepare("UPDATE aliases SET deleted_at = ?, forward_mode = 'none', forward_enabled = 0, pinned = 0, updated_at = ? WHERE address = ?").bind(now(), now(), address).run();
+}
+
+export async function restoreAlias(db: D1Database, address: string): Promise<void> {
+	await db.prepare("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ?").bind(now(), address).run();
+}
+
+/** Removes the alias and its contacts for good; mail that still arrives makes it appear again. */
+export async function forgetAlias(db: D1Database, address: string): Promise<void> {
+	await db.batch([db.prepare("DELETE FROM contacts WHERE alias_address = ?").bind(address), db.prepare("DELETE FROM aliases WHERE address = ?").bind(address)]);
+}

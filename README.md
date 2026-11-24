@@ -34,10 +34,16 @@ Mailflare keeps your mail. mailflare-alias forwards a copy to the inbox you alre
 - **Blocklist.** Block an address, or a domain with its subdomains, across all aliases.
 - **Notes** on each alias.
 
+**Apps and browser extensions**
+- **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. From there you can list, search, create, pin, enable, disable and delete aliases, change their notes and destinations, and manage reverse aliases (SimpleLogin contacts).
+- **New aliases from the apps** go on your *alias domains*. Formats are words (`maple.otter42`), random characters or a UUID, or a custom prefix.
+
 **Dashboard**
 - **Passkey sign-in**, with no password. Register several devices.
+- **Cloudflare set up from the dashboard.** With an API token, one button enables Email Routing and Email Sending on the reverse-alias domain and creates its routing rule.
 - **Connection settings in the dashboard.** The Mailflare URL, API key, webhook secret and reverse-alias domain are entered after you register your passkey. A deploy needs no secrets.
-- **Languages:** English, 繁體中文, 简体中文 and 日本語. The language follows your browser and can be switched in the footer.
+- **35 languages**: the same as Mailflare, plus Traditional Chinese. Arabic, Persian and Urdu are laid out right to left. The language follows your browser and can be changed from the menu.
+- **Looks like Mailflare**, in light and dark mode.
 - **Works on phones, tablets and desktops.** On small screens, tables become cards.
 
 ## How it works
@@ -67,7 +73,7 @@ mailflare-alias does not change Mailflare, so Mailflare's built-in updater keeps
 - A working Mailflare install that can send mail.
 - A **subdomain that Mailflare does not route**, for example `r.example.com`. Reverse aliases live there.
 - **Cloudflare Email Sending** on that subdomain, which needs Workers Paid.
-- **Cloudflare Email Routing** on that subdomain, with its catch-all sent to this Worker.
+- **Cloudflare Email Routing** on that subdomain, with subaddressing on and a rule that sends `reply@` that subdomain to this Worker. The dashboard can set both up for you.
 
 ## Setup
 
@@ -125,14 +131,36 @@ Then on **Settings**, set your default forwarding address, which is your Gmail.
 
 ### 4. Cloudflare: the reverse-alias domain
 
-1. **Email Routing** on `r.example.com`: set the **catch-all** to *Send to a Worker* → `mailflare-alias`.
-2. **Email Sending**: onboard `r.example.com` and publish its DNS records.
+Reverse aliases look like `reply+ra_x7k2…@r.example.com`. Cloudflare only allows catch-all rules on apex domains, and a subdomain allows at most 200 rules, so instead **one rule** for `reply@r.example.com` with **subaddressing** turned on covers every reverse alias.
+
+**Automatically.** On **Connection → Cloudflare**, paste an API token and click **Set up automatically**. Create the token under *My Profile → API Tokens* with these permissions for the zone:
+- Zone → Zone → Read
+- Zone → Zone Settings → Edit
+- Zone → Email Routing Rules → Edit
+- Zone → Email Sending → Edit
+
+The page shows what each step did. Running it again is safe.
+
+**By hand.** In the Cloudflare dashboard:
+1. **Email Routing** for `r.example.com`: enable it, turn on **subaddressing** in Email Routing settings, and add the custom address `reply@r.example.com` with *Send to a Worker* → `mailflare-alias`.
+2. **Email Sending**: onboard `r.example.com`.
+
+### 5. Optional: SimpleLogin and addy.io apps
+
+1. In **Settings → Apps and browser extensions**, turn on *Support SimpleLogin clients*, *Support addy.io clients*, or both.
+2. Add your **alias domains**: the domains new aliases can be created on. In Mailflare, give each of them a **catch-all**, so Mailflare accepts mail to addresses that did not exist before.
+3. On **API keys**, create one key per app or browser extension.
+4. In the app or extension, choose the self-hosted option and enter the server URL shown on the API keys page (your Worker's URL) and the key:
+   - **SimpleLogin**: *API URL*.
+   - **addy.io**: *Instance URL*.
+
+Keys can manage aliases but cannot change settings. Only a hash of each key is stored.
 
 ### Environment overrides
 
 Every connection setting can also come from a variable or secret, which then wins over the dashboard:
 
-`MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `REVERSE_ALIAS_DOMAIN`, `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`.
+`MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `REVERSE_ALIAS_DOMAIN`, `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`.
 
 ## Security model
 
@@ -144,13 +172,15 @@ Every connection setting can also come from a variable or secret, which then win
 
   Reverse aliases contain at least 8 random characters, so they cannot be guessed.
 - **Links in forwarded mail** (unsubscribe, block, disable) are HMAC-signed and expire. `GET` only shows a confirmation, so link scanners change nothing.
-- **Stored secrets.** The Mailflare API key and webhook secret are stored in D1. Use the environment overrides if you prefer Worker secrets.
+- **App API keys** are random 238-bit values; only their SHA-256 hash is stored. Both client APIs are off by default. Failed key attempts are rate limited, and the APIs never accept the dashboard cookie, so allowing cross-origin requests does not expose the dashboard.
+- **Stored secrets.** The Mailflare API key, webhook secret and Cloudflare API token are stored in D1. Use the environment overrides if you prefer Worker secrets.
 - **Lost all your passkeys?** Run `npx wrangler d1 execute mailflare-alias --remote --command "DELETE FROM passkeys"` and register again with a new setup code.
 
 ## Limitations
 
 - Replies go through Mailflare's send API, which accepts up to 10 attachments, and inline images arrive as attachments. A reply with more attachments bounces back to you with an explanation.
-- An alias appears after it first receives mail.
+- An alias appears after it first receives mail, unless an app creates it first.
+- Through the apps, PGP, labels, usernames, custom domains and account settings are not available. Deleting an alias stops forwarding; Mailflare still receives its mail.
 - Forwarded copies need Cloudflare Email Sending. Resend and SES are not supported yet.
 
 ## Roadmap
