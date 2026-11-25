@@ -546,6 +546,7 @@ ${checkbox("reverseAliasReplacement", settings.reverseAliasReplacement, t("setti
 ${checkbox("includeSenderInReverseAlias", settings.includeSenderInReverseAlias, t("settings.includeSender"), t("settings.includeSenderHelp"))}
 ${checkbox("removeTrackers", settings.removeTrackers, t("settings.trackers"), t("settings.trackersHelp"))}
 ${checkbox("showBanner", settings.showBanner, t("settings.banner"), t("settings.bannerHelp"))}
+${checkbox("createAliasesFromMail", settings.createAliasesFromMail, t("settings.createFromMail"), t("settings.createFromMailHelp"))}
 ${checkbox("autoForwardNewAliases", settings.autoForwardNewAliases, t("settings.autoForward"), t("settings.autoForwardHelp"))}
 
 <label for="unsubscribeBehavior">${t("settings.unsubscribe")}</label>

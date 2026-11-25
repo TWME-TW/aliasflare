@@ -87,7 +87,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Ɗan toshe a saman kowane saƙo: wane laƙabi aka aika wa, wa ya aika, masu bin diddigi nawa aka cire, da hanyoyin haɗi don toshe mai aikawa ko kashe laƙabin. Yana yin gargaɗi idan mai aikawa bai ci DMARC ba.",
 	"settings.autoForward": "Tura sabbin laƙabi kai tsaye",
-	"settings.autoForwardHelp": "Idan an kashe, sabon laƙabin da aka gani yana farawa da tura saƙo a kashe.",
+	"settings.autoForwardHelp": "Yana aiki ga laƙabin da aka ƙirƙira daga imel mai shigowa: idan an kashe, suna farawa da tura saƙo a kashe.",
 	"settings.mailLanguage": "Harshen banner da shafuka a saƙonnin da aka tura",
 	"settings.unsubscribe": "Fita daga rajista da danna ɗaya",
 	"settings.unsubscribeHelp": "Abin da maɓallin Fita daga rajista na manhajar imel ɗinka yake yi a saƙon da aka tura.",
@@ -381,6 +381,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Layuka a kowane shafi",
 	"dash.colLastUsed": "An yi amfani da shi ta ƙarshe",
 	"dash.neverUsed": "Ba a taɓa ba",
+	"settings.createFromMail": "Ƙirƙiri laƙabi daga imel mai shigowa",
+	"settings.createFromMailHelp": "Idan an kunna, imel da aka aika zuwa kowane adireshi a cikin domain ɗin laƙabi yana ƙirƙirar wannan laƙabin. Idan an kashe, ana ƙin imel zuwa adireshin da ba laƙabi ba tukuna, don haka adireshin bogi ba zai cika jerin laƙabi ba.",
 };
 
 export default dictionary;

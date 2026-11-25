@@ -75,7 +75,7 @@ const dictionary: Dictionary = {
 	"settings.banner": "転送メールにバナーを表示",
 	"settings.bannerHelp": "各メールの上に、宛先エイリアス、差出人、削除したトラッカー数、差出人のブロックやエイリアス無効化のリンクを表示します。差出人が DMARC に不合格の場合は警告します。",
 	"settings.autoForward": "新しいエイリアスを自動で転送",
-	"settings.autoForwardHelp": "オフにすると、新しいエイリアスは転送オフで開始します。",
+	"settings.autoForwardHelp": "受信メールから作成されたエイリアスに適用されます。オフにすると、これらのエイリアスは転送オフの状態で開始されます。",
 	"settings.mailLanguage": "転送メールのバナーと関連ページの言語",
 	"settings.unsubscribe": "ワンクリック配信停止",
 	"settings.unsubscribeHelp": "転送メールでメールアプリの「配信停止」ボタンを押したときの動作。",
@@ -360,6 +360,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "1ページの行数",
 	"dash.colLastUsed": "最終使用",
 	"dash.neverUsed": "未使用",
+	"settings.createFromMail": "受信メールからエイリアスを作成",
+	"settings.createFromMailHelp": "オンにすると、エイリアス用ドメイン内の任意のアドレス宛てのメールでそのエイリアスが作成されます。オフにすると、まだエイリアスではないアドレス宛てのメールは拒否されるため、架空のアドレスでエイリアス一覧がいっぱいになることはありません。",
 };
 
 export default dictionary;

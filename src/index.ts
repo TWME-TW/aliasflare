@@ -465,6 +465,7 @@ app.post("/settings", async (c) => {
 		reverseAliasReplacement: form.reverseAliasReplacement === "1",
 		includeSenderInReverseAlias: form.includeSenderInReverseAlias === "1",
 		autoForwardNewAliases: form.autoForwardNewAliases === "1",
+		createAliasesFromMail: form.createAliasesFromMail === "1",
 		removeTrackers: form.removeTrackers === "1",
 		showBanner: form.showBanner === "1",
 		unsubscribeBehavior: form.unsubscribeBehavior,
@@ -881,6 +882,10 @@ export default {
 			return;
 		}
 		const outcome = await handleDirectInbound(message, env, config);
+		if (outcome.status === 404) {
+			message.setReject("This address does not exist");
+			return;
+		}
 		// A failure the next attempt may fix: throwing makes the sending server try again later.
 		if (outcome.status >= 500) throw new Error(`Forwarding failed: ${outcome.result}`);
 	},

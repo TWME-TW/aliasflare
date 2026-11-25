@@ -23,6 +23,11 @@ export type Settings = {
 	unsubscribeBehavior: UnsubscribeBehavior;
 	defaultDestination: string;
 	autoForwardNewAliases: boolean;
+	/**
+	 * Mail to any address on an alias domain creates that alias (the default). When off, mail to an
+	 * address that is not an alias yet is refused, so made-up addresses do not fill the list.
+	 */
+	createAliasesFromMail: boolean;
 	removeTrackers: boolean;
 	showBanner: boolean;
 	/** Language of the banner and link pages in forwarded mail. */
@@ -48,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	unsubscribeBehavior: "disable_alias",
 	defaultDestination: "",
 	autoForwardNewAliases: true,
+	createAliasesFromMail: true,
 	removeTrackers: true,
 	showBanner: false,
 	language: "en",
@@ -76,6 +82,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		defaultDestination: typeof raw.defaultDestination === "string" ? raw.defaultDestination.trim().toLowerCase() : "",
 		autoForwardNewAliases:
 			typeof raw.autoForwardNewAliases === "boolean" ? raw.autoForwardNewAliases : DEFAULT_SETTINGS.autoForwardNewAliases,
+		createAliasesFromMail: typeof raw.createAliasesFromMail === "boolean" ? raw.createAliasesFromMail : DEFAULT_SETTINGS.createAliasesFromMail,
 		removeTrackers: typeof raw.removeTrackers === "boolean" ? raw.removeTrackers : DEFAULT_SETTINGS.removeTrackers,
 		showBanner: typeof raw.showBanner === "boolean" ? raw.showBanner : DEFAULT_SETTINGS.showBanner,
 		language: isLocale(raw.language) ? raw.language : DEFAULT_SETTINGS.language,

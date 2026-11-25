@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Krótki blok nad każdą wiadomością: do którego aliasu została wysłana, przez kogo, ile trackerów usunięto oraz linki do zablokowania nadawcy lub wyłączenia aliasu. Ostrzega, gdy nadawca nie przeszedł DMARC.",
 	"settings.autoForward": "Automatycznie przekazuj nowe aliasy",
-	"settings.autoForwardHelp": "Gdy wyłączone, nowo zauważony alias zaczyna z wyłączonym przekazywaniem.",
+	"settings.autoForwardHelp": "Dotyczy aliasów utworzonych z przychodzącej poczty: gdy wyłączone, zaczynają z wyłączonym przekazywaniem.",
 	"settings.mailLanguage": "Język banera i stron w przekazanej poczcie",
 	"settings.unsubscribe": "Rezygnacja jednym kliknięciem",
 	"settings.unsubscribeHelp": "Co robi przycisk rezygnacji z subskrypcji w Twoim kliencie poczty przy przekazanej wiadomości.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Wierszy na stronę",
 	"dash.colLastUsed": "Ostatnio używany",
 	"dash.neverUsed": "Nigdy",
+	"settings.createFromMail": "Twórz aliasy z przychodzącej poczty",
+	"settings.createFromMailHelp": "Gdy włączone, poczta wysłana na dowolny adres w domenie aliasów tworzy ten alias. Gdy wyłączone, poczta na adres, który nie jest jeszcze aliasem, zostaje odrzucona, dzięki czemu zmyślone adresy nie zapełnią listy aliasów.",
 };
 
 export default dictionary;

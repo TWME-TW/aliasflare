@@ -89,7 +89,7 @@ export const en = {
 	"settings.bannerHelp":
 		"A short block above each message: which alias it was sent to, by whom, how many trackers were removed, and links to block the sender or disable the alias. Warns when the sender failed DMARC.",
 	"settings.autoForward": "Forward new aliases automatically",
-	"settings.autoForwardHelp": "When off, a newly seen alias starts with forwarding off.",
+	"settings.autoForwardHelp": "Applies to aliases created from incoming mail: when off, they start with forwarding off.",
 	"settings.mailLanguage": "Language of the banner and pages in forwarded mail",
 	"settings.unsubscribe": "One-click unsubscribe",
 	"settings.unsubscribeHelp": "What your mail client's Unsubscribe button does on a forwarded message.",
@@ -383,6 +383,8 @@ export const en = {
 	"dash.perPageLabel": "Rows per page",
 	"dash.colLastUsed": "Last used",
 	"dash.neverUsed": "Never",
+	"settings.createFromMail": "Create aliases from incoming mail",
+	"settings.createFromMailHelp": "When on, mail to any address on an alias domain creates that alias. When off, mail to an address that is not an alias yet is refused, so made-up addresses cannot fill the alias list.",
 };
 
 export type MessageKey = keyof typeof en;

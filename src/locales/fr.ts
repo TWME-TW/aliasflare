@@ -87,7 +87,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Un court bloc au-dessus de chaque message : l'alias destinataire, l'expéditeur, le nombre de traqueurs supprimés, et des liens pour bloquer l'expéditeur ou désactiver l'alias. Avertit lorsque l'expéditeur a échoué à DMARC.",
 	"settings.autoForward": "Transférer automatiquement les nouveaux alias",
-	"settings.autoForwardHelp": "Si désactivé, un alias nouvellement détecté démarre avec le transfert désactivé.",
+	"settings.autoForwardHelp": "S'applique aux alias créés à partir du courrier entrant : si désactivé, ils démarrent avec le transfert désactivé.",
 	"settings.mailLanguage": "Langue de la bannière et des pages dans les e-mails transférés",
 	"settings.unsubscribe": "Désabonnement en un clic",
 	"settings.unsubscribeHelp": "Ce que fait le bouton Se désabonner de votre client de messagerie sur un message transféré.",
@@ -381,6 +381,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Lignes par page",
 	"dash.colLastUsed": "Dernière utilisation",
 	"dash.neverUsed": "Jamais",
+	"settings.createFromMail": "Créer des alias à partir du courrier entrant",
+	"settings.createFromMailHelp": "Si activé, le courrier envoyé à n'importe quelle adresse d'un domaine d'alias crée cet alias. Si désactivé, le courrier adressé à une adresse qui n'est pas encore un alias est refusé, afin que des adresses inventées ne remplissent pas la liste des alias.",
 };
 
 export default dictionary;

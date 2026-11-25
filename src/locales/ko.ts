@@ -87,7 +87,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"각 메시지 위에 짧은 안내 블록을 표시합니다. 어떤 별칭으로 누가 보냈는지, 제거된 추적기 수, 발신자 차단 또는 별칭 비활성화 링크가 들어 있습니다. 발신자가 DMARC에 실패하면 경고합니다.",
 	"settings.autoForward": "새 별칭 자동 전달",
-	"settings.autoForwardHelp": "끄면 새로 확인된 별칭은 전달이 꺼진 상태로 시작합니다.",
+	"settings.autoForwardHelp": "받은 메일에서 만들어진 별칭에 적용됩니다. 끄면 이런 별칭은 전달이 꺼진 상태로 시작합니다.",
 	"settings.mailLanguage": "전달된 메일의 배너 및 페이지 언어",
 	"settings.unsubscribe": "원클릭 수신 거부",
 	"settings.unsubscribeHelp": "전달된 메시지에서 메일 앱의 수신 거부 버튼이 하는 동작입니다.",
@@ -381,6 +381,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "페이지당 행 수",
 	"dash.colLastUsed": "마지막 사용",
 	"dash.neverUsed": "사용 안 함",
+	"settings.createFromMail": "받은 메일로 별칭 만들기",
+	"settings.createFromMailHelp": "켜면 별칭 도메인의 모든 주소로 온 메일이 해당 별칭을 만듭니다. 끄면 아직 별칭이 아닌 주소로 온 메일은 거부되므로, 임의의 주소로 별칭 목록이 채워지는 일을 막을 수 있습니다.",
 };
 
 export default dictionary;

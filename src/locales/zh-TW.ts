@@ -75,7 +75,7 @@ const dictionary: Dictionary = {
 	"settings.banner": "在轉寄信上顯示資訊橫幅",
 	"settings.bannerHelp": "在每封信上方顯示一小段資訊：寄到哪個別名、寄件者是誰、移除了幾個追蹤器，並附上封鎖寄件者或停用別名的連結。寄件者未通過 DMARC 時會顯示警告。",
 	"settings.autoForward": "自動轉寄新別名",
-	"settings.autoForwardHelp": "關閉時，新出現的別名預設不轉寄。",
+	"settings.autoForwardHelp": "適用於收到信時自動建立的別名：關閉時，這些別名預設不轉寄。",
 	"settings.mailLanguage": "轉寄信橫幅與相關頁面的語言",
 	"settings.unsubscribe": "一鍵退訂（One-click unsubscribe）",
 	"settings.unsubscribeHelp": "在信箱中對轉寄信按下「取消訂閱」時要做什麼。",
@@ -360,6 +360,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "每頁列數",
 	"dash.colLastUsed": "上次使用",
 	"dash.neverUsed": "從未使用",
+	"settings.createFromMail": "收到信時自動建立別名",
+	"settings.createFromMailHelp": "開啟時，寄到別名網域上任何地址的信都會建立該別名。關閉時，寄到尚未建立之地址的信會被退回，隨意編造的地址不會塞滿別名列表。",
 };
 
 export default dictionary;

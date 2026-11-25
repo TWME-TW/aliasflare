@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Un breve blocco sopra ogni messaggio: a quale alias è stato inviato, da chi, quanti tracker sono stati rimossi e i link per bloccare il mittente o disattivare l'alias. Avvisa quando il mittente non ha superato DMARC.",
 	"settings.autoForward": "Inoltra automaticamente i nuovi alias",
-	"settings.autoForwardHelp": "Se disattivato, un alias appena rilevato parte con l'inoltro disattivato.",
+	"settings.autoForwardHelp": "Si applica agli alias creati dalla posta in arrivo: se disattivato, iniziano con l'inoltro disattivato.",
 	"settings.mailLanguage": "Lingua del banner e delle pagine nella posta inoltrata",
 	"settings.unsubscribe": "Annullamento iscrizione con un clic",
 	"settings.unsubscribeHelp": "Cosa fa il pulsante Annulla iscrizione del tuo client di posta su un messaggio inoltrato.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Righe per pagina",
 	"dash.colLastUsed": "Ultimo utilizzo",
 	"dash.neverUsed": "Mai",
+	"settings.createFromMail": "Crea alias dalla posta in arrivo",
+	"settings.createFromMailHelp": "Se attivo, la posta inviata a qualsiasi indirizzo di un dominio di alias crea quell'alias. Se disattivo, la posta indirizzata a un indirizzo che non è ancora un alias viene rifiutata, così gli indirizzi inventati non possono riempire l'elenco degli alias.",
 };
 
 export default dictionary;

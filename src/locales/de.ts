@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Ein kurzer Block über jeder Nachricht: an welchen Alias sie gesendet wurde, von wem, wie viele Tracker entfernt wurden, sowie Links zum Blockieren des Absenders oder Deaktivieren des Alias. Warnt, wenn der Absender DMARC nicht bestanden hat.",
 	"settings.autoForward": "Neue Aliasse automatisch weiterleiten",
-	"settings.autoForwardHelp": "Wenn aus, startet ein neu erkannter Alias mit ausgeschalteter Weiterleitung.",
+	"settings.autoForwardHelp": "Gilt für Aliasse, die aus eingehenden E-Mails erstellt werden: Bei deaktivierter Option starten sie mit ausgeschalteter Weiterleitung.",
 	"settings.mailLanguage": "Sprache des Banners und der Seiten in weitergeleiteten E-Mails",
 	"settings.unsubscribe": "Abbestellen mit einem Klick",
 	"settings.unsubscribeHelp": "Was die Schaltfläche „Abbestellen“ deines E-Mail-Programms bei einer weitergeleiteten Nachricht tut.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Zeilen pro Seite",
 	"dash.colLastUsed": "Zuletzt verwendet",
 	"dash.neverUsed": "Nie",
+	"settings.createFromMail": "Aliasse aus eingehenden E-Mails erstellen",
+	"settings.createFromMailHelp": "Wenn aktiviert, erstellt eine E-Mail an eine beliebige Adresse einer Alias-Domain den jeweiligen Alias. Wenn deaktiviert, werden E-Mails an eine Adresse, die noch kein Alias ist, abgelehnt, sodass erfundene Adressen die Aliasliste nicht füllen können.",
 };
 
 export default dictionary;

@@ -180,6 +180,32 @@ describe("8. banner placeholders", () => {
 	});
 });
 
+describe("aliases from incoming mail", () => {
+	it("are created by default", async () => {
+		const { msg, rejected } = inbound("made-up@a.test", "bob@store.test", `From: bob@store.test\r\n${id()}`);
+		await deliver(msg);
+		expect(rejected()).toBeNull();
+		expect(sent).toHaveLength(1);
+		expect(await db.prepare("SELECT 1 FROM aliases WHERE address = 'made-up@a.test'").first()).not.toBeNull();
+	});
+
+	it("are refused when turned off, with nothing written, while existing aliases still work", async () => {
+		await saveSettings(db, { ...(await loadSettings(db)), createAliasesFromMail: false });
+		const unknown = inbound("made-up@a.test", "bob@store.test", `From: bob@store.test\r\n${id()}`);
+		await deliver(unknown.msg);
+		expect(unknown.rejected()).toMatch(/does not exist/);
+		expect(sent).toHaveLength(0);
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM forwards").first("n")).toBe(0);
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM aliases").first("n")).toBe(0);
+
+		await db.prepare("INSERT INTO aliases (address, num_id, uid, created_at, updated_at) VALUES ('shop@a.test', 1, 'u1', 1, 1)").run();
+		const existing = inbound("shop@a.test", "bob@store.test", `From: bob@store.test\r\n${id()}`);
+		await deliver(existing.msg);
+		expect(existing.rejected()).toBeNull();
+		expect(sent).toHaveLength(1);
+	});
+});
+
 describe("10. other checks", () => {
 	it("reads only Cloudflare's own DMARC verdict", () => {
 		expect(dmarcFailedAtCloudflare("mx.cloudflare.net.evil.test; dmarc=fail")).toBe(false);

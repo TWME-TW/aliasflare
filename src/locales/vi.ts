@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Một khối ngắn phía trên mỗi thư: thư gửi đến bí danh nào, do ai gửi, đã xóa bao nhiêu trình theo dõi, cùng liên kết để chặn người gửi hoặc vô hiệu hóa bí danh. Cảnh báo khi người gửi không đạt DMARC.",
 	"settings.autoForward": "Tự động chuyển tiếp bí danh mới",
-	"settings.autoForwardHelp": "Khi tắt, bí danh mới xuất hiện sẽ bắt đầu ở trạng thái tắt chuyển tiếp.",
+	"settings.autoForwardHelp": "Áp dụng cho bí danh được tạo từ thư đến: khi tắt, các bí danh này bắt đầu với chuyển tiếp đã tắt.",
 	"settings.mailLanguage": "Ngôn ngữ của biểu ngữ và trang trong thư được chuyển tiếp",
 	"settings.unsubscribe": "Hủy đăng ký chỉ một lần nhấp",
 	"settings.unsubscribeHelp": "Việc nút Hủy đăng ký của ứng dụng thư sẽ làm trên một thư được chuyển tiếp.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Số dòng mỗi trang",
 	"dash.colLastUsed": "Lần dùng cuối",
 	"dash.neverUsed": "Chưa dùng",
+	"settings.createFromMail": "Tạo bí danh từ thư đến",
+	"settings.createFromMailHelp": "Khi bật, thư gửi đến bất kỳ địa chỉ nào trên miền bí danh sẽ tạo bí danh đó. Khi tắt, thư gửi đến địa chỉ chưa phải là bí danh sẽ bị từ chối, nên các địa chỉ bịa đặt không thể lấp đầy danh sách bí danh.",
 };
 
 export default dictionary;

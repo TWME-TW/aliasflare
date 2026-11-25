@@ -116,13 +116,15 @@ function rawHeaderSection(raw: ArrayBuffer): string | null {
 export async function handleInbound(env: Env, config: AppConfig, event: InboundEvent, origin: string): Promise<ForwardOutcome> {
 	const aliasAddress = event.to ? extractEmail(event.to) : null;
 	if (!event.messageId || !aliasAddress) return { status: 400, result: "missing messageId or recipient" };
-	return forwardMessage(env, config, {
+	const outcome = await forwardMessage(env, config, {
 		key: event.messageId,
 		aliasAddress,
 		envelopeFrom: event.from,
 		origin,
 		load: () => getStoredMessage(mailflareConfig(config), event.messageId),
 	});
+	// Mailflare has already accepted the message; there is nothing to refuse, and nothing to retry.
+	return outcome.status === 404 ? { status: 200, result: "skipped: no such alias" } : outcome;
 }
 
 /** Reads a message stream up to MAX_MESSAGE_BYTES. */
@@ -177,6 +179,13 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	const aliasDomain = domainOf(aliasAddress);
 	const reverseDomain = reverseDomainFor(aliasDomain);
 
+	// Mail to an address that is not an alias yet creates one only when that is turned on.
+	// Otherwise it is refused before anything is written, so mail to made-up addresses
+	// leaves no rows behind.
+	const settings = await loadSettings(db);
+	const known = await getAlias(db, aliasAddress);
+	if (!known && !settings.createAliasesFromMail) return { status: 404, result: "no such alias" };
+
 	const claimed = await claim(db, input.key, aliasAddress);
 	if (!("id" in claimed)) return claimed;
 	const forwardId = claimed.id;
@@ -186,10 +195,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	};
 
 	try {
-		const settings = await loadSettings(db);
 		if (isReverseDomainOf(aliasDomain, settings.aliasDomains)) return await skip("the recipient is a reverse alias");
 		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
-		const known = await getAlias(db, aliasAddress);
 		if (known?.deleted_at) return await skip("the alias was deleted");
 		if (known?.forward_mode === "none") return await skip("forwarding is off for this alias");
 		const stored = await input.load();

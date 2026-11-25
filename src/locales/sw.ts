@@ -87,7 +87,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Kizuizi kifupi juu ya kila ujumbe: ulitumwa kwa lakabu gani, na nani, vifuatiliaji vingapi viliondolewa, na viungo vya kuzuia mtumaji au kuzima lakabu. Hutoa onyo mtumaji akishindwa DMARC.",
 	"settings.autoForward": "Tuma lakabu mpya kiotomatiki",
-	"settings.autoForwardHelp": "Ikizimwa, lakabu mpya inayoonekana huanza ikiwa na utumaji umezimwa.",
+	"settings.autoForwardHelp": "Inatumika kwa lakabu zilizoundwa kutoka kwa barua pepe zinazoingia: zikizimwa, zinaanza na usambazaji umezimwa.",
 	"settings.mailLanguage": "Lugha ya bango na kurasa katika barua zilizotumwa",
 	"settings.unsubscribe": "Kujiondoa kwa kubofya mara moja",
 	"settings.unsubscribeHelp": "Kinachofanywa na kitufe cha Jiondoe cha programu yako ya barua kwenye ujumbe uliotumwa.",
@@ -381,6 +381,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Safu kwa ukurasa",
 	"dash.colLastUsed": "Imetumika mara ya mwisho",
 	"dash.neverUsed": "Haijawahi",
+	"settings.createFromMail": "Unda lakabu kutoka kwa barua pepe zinazoingia",
+	"settings.createFromMailHelp": "Ikiwashwa, barua pepe inayotumwa kwa anwani yoyote kwenye kikoa cha lakabu huunda lakabu hiyo. Ikizimwa, barua pepe kwa anwani ambayo bado si lakabu hukataliwa, ili anwani zilizobuniwa zisijaze orodha ya lakabu.",
 };
 
 export default dictionary;

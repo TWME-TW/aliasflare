@@ -87,7 +87,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Um bloco curto acima de cada mensagem: para qual alias foi enviada, por quem, quantos rastreadores foram removidos e links para bloquear o remetente ou desativar o alias. Avisa quando o remetente falhou no DMARC.",
 	"settings.autoForward": "Encaminhar novos aliases automaticamente",
-	"settings.autoForwardHelp": "Desativado, um alias recém-detectado começa com o encaminhamento desativado.",
+	"settings.autoForwardHelp": "Vale para os aliases criados a partir de e-mails recebidos: quando desativado, eles começam com o encaminhamento desativado.",
 	"settings.mailLanguage": "Idioma do banner e das páginas nos e-mails encaminhados",
 	"settings.unsubscribe": "Cancelamento de inscrição com um clique",
 	"settings.unsubscribeHelp": "O que o botão Cancelar inscrição do seu cliente de e-mail faz em uma mensagem encaminhada.",
@@ -381,6 +381,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Linhas por página",
 	"dash.colLastUsed": "Último uso",
 	"dash.neverUsed": "Nunca",
+	"settings.createFromMail": "Criar aliases a partir de e-mails recebidos",
+	"settings.createFromMailHelp": "Quando ativado, e-mails enviados a qualquer endereço de um domínio de alias criam esse alias. Quando desativado, e-mails para um endereço que ainda não é alias são recusados, para que endereços inventados não encham a lista de aliases.",
 };
 
 export default dictionary;

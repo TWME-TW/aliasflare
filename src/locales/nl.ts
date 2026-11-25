@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Een kort blok boven elk bericht: naar welk alias het is gestuurd, door wie, hoeveel trackers zijn verwijderd, en links om de afzender te blokkeren of het alias uit te schakelen. Waarschuwt als de afzender DMARC niet heeft doorstaan.",
 	"settings.autoForward": "Nieuwe aliassen automatisch doorsturen",
-	"settings.autoForwardHelp": "Als dit uit staat, begint een nieuw gezien alias met doorsturen uitgeschakeld.",
+	"settings.autoForwardHelp": "Geldt voor aliassen die uit inkomende e-mail zijn gemaakt: als dit uit staat, starten ze met doorsturen uitgeschakeld.",
 	"settings.mailLanguage": "Taal van de banner en pagina's in doorgestuurde e-mail",
 	"settings.unsubscribe": "Afmelden met één klik",
 	"settings.unsubscribeHelp": "Wat de knop Afmelden van je e-mailprogramma doet bij een doorgestuurd bericht.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Rijen per pagina",
 	"dash.colLastUsed": "Laatst gebruikt",
 	"dash.neverUsed": "Nooit",
+	"settings.createFromMail": "Aliassen maken van inkomende e-mail",
+	"settings.createFromMailHelp": "Als dit aan staat, maakt e-mail naar elk adres op een aliasdomein die alias aan. Als dit uit staat, wordt e-mail naar een adres dat nog geen alias is, geweigerd, zodat verzonnen adressen de aliaslijst niet kunnen vullen.",
 };
 
 export default dictionary;

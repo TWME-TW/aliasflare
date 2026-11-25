@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Blok ringkas di atas setiap mesej: dihantar ke alias yang mana, oleh siapa, berapa banyak penjejak dibuang, dan pautan untuk menyekat penghantar atau melumpuhkan alias. Memberi amaran jika penghantar gagal DMARC.",
 	"settings.autoForward": "Majukan alias baharu secara automatik",
-	"settings.autoForwardHelp": "Apabila dimatikan, alias yang baru dilihat bermula dengan pemajuan dimatikan.",
+	"settings.autoForwardHelp": "Terpakai untuk alias yang dicipta daripada e-mel masuk: apabila dimatikan, alias itu bermula dengan pemajuan dimatikan.",
 	"settings.mailLanguage": "Bahasa sepanduk dan halaman dalam mel yang dimajukan",
 	"settings.unsubscribe": "Berhenti melanggan satu klik",
 	"settings.unsubscribeHelp": "Apa yang dilakukan oleh butang Berhenti melanggan klien mel anda pada mesej yang dimajukan.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Baris setiap halaman",
 	"dash.colLastUsed": "Terakhir digunakan",
 	"dash.neverUsed": "Tidak pernah",
+	"settings.createFromMail": "Cipta alias daripada e-mel masuk",
+	"settings.createFromMailHelp": "Apabila dihidupkan, e-mel yang dihantar ke mana-mana alamat dalam domain alias akan mencipta alias tersebut. Apabila dimatikan, e-mel ke alamat yang belum menjadi alias akan ditolak, supaya alamat rekaan tidak memenuhi senarai alias.",
 };
 
 export default dictionary;

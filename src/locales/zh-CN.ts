@@ -75,7 +75,7 @@ const dictionary: Dictionary = {
 	"settings.banner": "在转发邮件上显示信息横幅",
 	"settings.bannerHelp": "在每封邮件上方显示一小段信息：发到哪个别名、发件人是谁、移除了几个追踪器，并附上屏蔽发件人或停用别名的链接。发件人未通过 DMARC 时会显示警告。",
 	"settings.autoForward": "自动转发新别名",
-	"settings.autoForwardHelp": "关闭时，新出现的别名默认不转发。",
+	"settings.autoForwardHelp": "适用于从收到的邮件中创建的别名：关闭时，这些别名默认关闭转发。",
 	"settings.mailLanguage": "转发邮件横幅与相关页面的语言",
 	"settings.unsubscribe": "一键退订（One-click unsubscribe）",
 	"settings.unsubscribeHelp": "在邮箱中对转发邮件点击「退订」时要做什么。",
@@ -360,6 +360,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "每页行数",
 	"dash.colLastUsed": "最后使用",
 	"dash.neverUsed": "从未",
+	"settings.createFromMail": "收到邮件时自动创建别名",
+	"settings.createFromMailHelp": "开启后，发送到别名域名下任意地址的邮件都会创建对应别名。关闭后，发送到尚不存在的别名地址的邮件会被拒收，因此虚构的地址无法填满别名列表。",
 };
 
 export default dictionary;

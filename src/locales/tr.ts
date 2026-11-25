@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Her iletinin üstünde kısa bir blok: hangi takma ada, kim tarafından gönderildiği, kaç izleyicinin kaldırıldığı ve göndereni engelleme veya takma adı devre dışı bırakma bağlantıları. Gönderen DMARC'ı geçemediyse uyarır.",
 	"settings.autoForward": "Yeni takma adları otomatik yönlendir",
-	"settings.autoForwardHelp": "Kapalıyken, yeni görülen bir takma ad yönlendirme kapalı olarak başlar.",
+	"settings.autoForwardHelp": "Gelen postalardan oluşturulan takma adlar için geçerlidir: kapalıyken bu takma adlarda yönlendirme kapalı başlar.",
 	"settings.mailLanguage": "Yönlendirilen e-postalardaki banner ve sayfaların dili",
 	"settings.unsubscribe": "Tek tıkla abonelikten çıkma",
 	"settings.unsubscribeHelp": "E-posta istemcinizin Abonelikten çık düğmesinin yönlendirilen bir iletide ne yaptığı.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Sayfa başına satır",
 	"dash.colLastUsed": "Son kullanım",
 	"dash.neverUsed": "Hiç",
+	"settings.createFromMail": "Gelen postalardan takma ad oluştur",
+	"settings.createFromMailHelp": "Açıkken, bir takma ad alan adındaki herhangi bir adrese gelen posta o takma adı oluşturur. Kapalıyken, henüz takma ad olmayan bir adrese gelen posta reddedilir; böylece uydurma adresler takma ad listesini dolduramaz.",
 };
 
 export default dictionary;

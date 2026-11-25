@@ -80,7 +80,7 @@ const dictionary: Dictionary = {
 	"settings.bannerHelp":
 		"Blok singkat di atas setiap pesan: dikirim ke alias mana, oleh siapa, berapa banyak pelacak yang dihapus, serta tautan untuk memblokir pengirim atau menonaktifkan alias. Memberi peringatan jika pengirim gagal DMARC.",
 	"settings.autoForward": "Teruskan alias baru secara otomatis",
-	"settings.autoForwardHelp": "Jika nonaktif, alias yang baru terlihat dimulai dengan penerusan nonaktif.",
+	"settings.autoForwardHelp": "Berlaku untuk alias yang dibuat dari email masuk: jika nonaktif, alias tersebut dimulai dengan penerusan nonaktif.",
 	"settings.mailLanguage": "Bahasa banner dan halaman pada email yang diteruskan",
 	"settings.unsubscribe": "Berhenti berlangganan satu klik",
 	"settings.unsubscribeHelp": "Apa yang dilakukan tombol Berhenti berlangganan di klien email Anda pada pesan yang diteruskan.",
@@ -366,6 +366,8 @@ const dictionary: Dictionary = {
 	"dash.perPageLabel": "Baris per halaman",
 	"dash.colLastUsed": "Terakhir digunakan",
 	"dash.neverUsed": "Tidak pernah",
+	"settings.createFromMail": "Buat alias dari email masuk",
+	"settings.createFromMailHelp": "Jika aktif, email yang dikirim ke alamat apa pun di domain alias akan membuat alias tersebut. Jika nonaktif, email ke alamat yang belum menjadi alias akan ditolak, sehingga alamat rekaan tidak bisa memenuhi daftar alias.",
 };
 
 export default dictionary;
