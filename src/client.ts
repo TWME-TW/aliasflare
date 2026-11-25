@@ -171,7 +171,11 @@ export const APP_SCRIPT = `(() => {
       document.head.appendChild(meta);
     }
     const select = document.getElementById("uiTheme");
-    if (select && select.value !== theme) select.value = theme;
+    if (select && select.value !== theme) {
+      select.value = theme;
+      const settingsForm = select.closest("form[data-autosave]");
+      if (settingsForm && settingsForm._syncLastSent) settingsForm._syncLastSent();
+    }
     const next = THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length];
     for (const form of document.querySelectorAll("form[data-theme-toggle]")) {
       const input = form.querySelector('input[name="theme"]');
@@ -279,7 +283,8 @@ export const APP_SCRIPT = `(() => {
     let latest = 0;
     // Saves run one after another, so an older change can never land after a newer one.
     let queue = Promise.resolve();
-    let lastSent = null;
+    let lastSent = new URLSearchParams(new FormData(form)).toString();
+    form._syncLastSent = () => { lastSent = new URLSearchParams(new FormData(form)).toString(); };
     const save = () => {
       const body = new URLSearchParams(new FormData(form)).toString();
       // Enter in a field fires both submit and change: the same values are sent once.
@@ -316,7 +321,7 @@ export const APP_SCRIPT = `(() => {
     // One pagehide listener flushes any note currently being typed before the page is left.
     window.addEventListener("pagehide", () => {
       for (const { form, getLastSent } of autosaveForms) {
-        if (!form.querySelector("input[type=text]:focus")) continue;
+        if (!form.querySelector("input[type=text]:focus, input[type=email]:focus")) continue;
         const body = new URLSearchParams(new FormData(form)).toString();
         if (body !== getLastSent()) navigator.sendBeacon?.(form.action, new URLSearchParams(body));
       }

@@ -2,7 +2,7 @@ import { mailflareReady, type AppConfig } from "./config";
 import { sendOutbound } from "./outbound";
 import { verifyToken } from "./crypto";
 import { getAlias, now, recordEvent, setForwardMode, type ForwardRow } from "./db";
-import { domainOf, extractEmail, safeHttpsUrl } from "./format";
+import { domainOf, extractEmail, hostnameOf, safeHttpsUrl } from "./format";
 export { safeHttpsUrl };
 import type { Translate } from "./i18n";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
@@ -75,7 +75,7 @@ export async function resolveLink(
 	const plan =
 		action === "preserve_original"
 			? unsubscribePlan(loaded.forward, loaded.contactEmail, {
-					blockedHosts: [...blockedHosts, ...[config.mailflareUrl, config.publicUrl, config.siteOrigin].filter(Boolean).map((url) => new URL(url).hostname)],
+					blockedHosts: [...blockedHosts, ...[config.mailflareUrl, config.publicUrl, config.siteOrigin].map(hostnameOf).filter((host): host is string => !!host)],
 					// An alias domain also covers its reverse-alias domain r.<domain>.
 					ownDomains: [...settings.aliasDomains, loaded.forward.alias_address.split("@").pop() ?? ""].filter(Boolean),
 				})
@@ -240,6 +240,11 @@ async function blockContact(env: Env, forward: ForwardRow): Promise<string> {
 async function tokenHash(token: string): Promise<string> {
 	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
 	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** True when a one-time link has already been consumed. */
+export async function isLinkUsed(db: D1Database, token: string): Promise<boolean> {
+	return (await db.prepare("SELECT 1 FROM used_links WHERE token_hash = ?").bind(await tokenHash(token)).first()) !== null;
 }
 
 /**

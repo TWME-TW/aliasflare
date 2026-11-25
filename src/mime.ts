@@ -39,7 +39,7 @@ function foldAscii(value: string, max = 900): string {
 /** The value as is when it is plain ASCII (folded if long), otherwise RFC 2047 words of at most 45 bytes each. */
 export function encodeWords(value: string): string {
 	const clean = oneLine(value);
-	if (/^[\x20-\x7e]*$/.test(clean)) return foldAscii(clean);
+	if (/^[\x20-\x7e]*$/.test(clean) && clean.split(" ").every((token) => token.length <= 900)) return foldAscii(clean);
 	const words: string[] = [];
 	let chunk = "";
 	for (const char of clean) {
@@ -50,12 +50,15 @@ export function encodeWords(value: string): string {
 	return words.map((word) => `=?UTF-8?B?${bytesToBase64(encoder.encode(word))}?=`).join(`${CRLF} `);
 }
 
+const bareAddress = (value: string) => oneLine(value).replace(/[<>\s]+/g, "");
+
 /** "Name" <address>, the name encoded when it needs to be. */
 export function formatAddress(from: OutboundMessage["from"]): string {
-	if (typeof from === "string") return `<${oneLine(from)}>`;
+	if (typeof from === "string") return `<${bareAddress(from)}>`;
 	const name = oneLine(from.name).replace(/["\\]/g, "");
-	if (!name) return `<${oneLine(from.email)}>`;
-	return /^[\x20-\x7e]*$/.test(name) ? `"${name}" <${oneLine(from.email)}>` : `${encodeWords(name)} <${oneLine(from.email)}>`;
+	const email = bareAddress(from.email);
+	if (!name) return `<${email}>`;
+	return /^[\x20-\x7e]*$/.test(name) && name.split(" ").every((token) => token.length <= 900) ? `"${name}" <${email}>` : `${encodeWords(name)} <${email}>`;
 }
 
 /** RFC 2231 attr-char percent-encoding from UTF-8 bytes (never throws URIError on lone surrogates). */
@@ -69,11 +72,26 @@ function rfc2231Encode(value: string): string {
 	return out;
 }
 
-/** A parameter value: quoted ASCII, or RFC 2231 UTF-8 for anything else. */
+/** A parameter value: quoted ASCII, or RFC 2231 UTF-8 (split into continuations so no line exceeds 998 bytes). */
 function parameter(name: string, value: string): string {
 	const clean = oneLine(value).replace(/["\\]/g, "_");
-	if (/^[\x20-\x7e]*$/.test(clean)) return `${name}="${clean}"`;
-	return `${name}*=UTF-8''${rfc2231Encode(clean)}`;
+	if (/^[\x20-\x7e]*$/.test(clean) && name.length + clean.length + 3 <= 800) return `${name}="${clean}"`;
+	const encoded = rfc2231Encode(clean);
+	if (name.length + encoded.length + 10 <= 800) return `${name}*=UTF-8''${encoded}`;
+	const parts: string[] = [];
+	for (let pos = 0, section = 0; pos < encoded.length; section += 1) {
+		const budget = section === 0 ? 60 : 70;
+		let end = Math.min(encoded.length, pos + budget);
+		// Never split in the middle of a %XX escape sequence.
+		if (end < encoded.length) {
+			if (encoded[end - 1] === "%") end -= 1;
+			else if (end >= 2 && encoded[end - 2] === "%") end -= 2;
+		}
+		const chunk = encoded.slice(pos, end);
+		parts.push(section === 0 ? `${name}*0*=UTF-8''${chunk}` : `${name}*${section}*=${chunk}`);
+		pos = end;
+	}
+	return parts.join(`;${CRLF} `);
 }
 
 const boundary = () => `=_af_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -116,11 +134,11 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
 
 	const headers = [
 		`From: ${formatAddress(message.from)}`,
-		`To: <${oneLine(message.to)}>`,
-		...(message.replyTo ? [`Reply-To: <${oneLine(message.replyTo)}>`] : []),
+		`To: <${bareAddress(message.to)}>`,
+		...(message.replyTo ? [`Reply-To: <${bareAddress(message.replyTo)}>`] : []),
 		`Subject: ${encodeWords(message.subject)}`,
 		`Date: ${date.toUTCString().replace("GMT", "+0000")}`,
-		`Message-ID: ${messageId}`,
+		`Message-ID: ${oneLine(messageId)}`,
 		"MIME-Version: 1.0",
 		...Object.entries(message.headers ?? {})
 			.filter(([name]) => /^[A-Za-z0-9-]{1,76}$/.test(name) && !RESERVED.test(name))

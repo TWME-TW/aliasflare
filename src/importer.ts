@@ -162,7 +162,8 @@ async function getJson(url: string, headers: Record<string, string>, budget: Fet
 		if (response.status >= 300 && response.status < 400) throw new ImportError("fetch", `HTTP ${response.status} redirect, not followed`);
 		if (response.status === 429 && attempt < 4) {
 			// Rate limited: wait as asked (capped at 10 s), then try again.
-			const wait = Math.min(Number(response.headers.get("Retry-After")) || 2 ** attempt, 10);
+			const retryAfter = Number(response.headers.get("Retry-After"));
+			const wait = Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 10) : Math.min(2 ** attempt, 10);
 			await new Promise((resolve) => setTimeout(resolve, wait * 1000));
 			continue;
 		}
@@ -378,7 +379,8 @@ export function parseAliasCsv(input: string): ImportedAlias[] {
 	if (index.email < 0) throw new ImportError("format");
 	const cell = (row: string[], key: keyof typeof COLUMNS) => (index[key] >= 0 ? row[index[key]] : undefined);
 	const out: ImportedAlias[] = [];
-	for (const row of rows.slice(0, MAX_ALIASES)) {
+	for (const row of rows) {
+		if (out.length >= MAX_ALIASES) break;
 		const email = extractEmail(cell(row, "email"));
 		if (!email || (cell(row, "deletedAt") ?? "").trim() !== "") continue;
 		const destinations = (cell(row, "destination") ?? "")
@@ -416,14 +418,15 @@ export async function defaultImportDomains(db: D1Database, settings: Settings): 
 export type Selection = { chosen: ImportedAlias[]; skippedDomains: ImportResult["skippedDomains"] };
 
 /** Splits aliases into those on the chosen domains (deduplicated) and counts of the rest by domain. */
-export function selectByDomain(aliases: ImportedAlias[], domains: string[]): Selection {
+export function selectByDomain(aliases: ImportedAlias[], domains: string[], existingAliasDomains: string[] = []): Selection {
 	const wanted = new Set(domains.map((domain) => domain.toLowerCase()));
+	const known = new Set([...wanted, ...existingAliasDomains.map((domain) => domain.toLowerCase())]);
 	const skipped = new Map<string, number>();
 	const unique = new Map<string, ImportedAlias>();
 	for (const alias of aliases) {
 		const email = normalizeEmail(alias.email);
 		const domain = domainOf(email);
-		if (!wanted.has(domain) || wanted.has(aliasDomainOfReverse(domain) ?? "")) skipped.set(domain, (skipped.get(domain) ?? 0) + 1);
+		if (!wanted.has(domain) || known.has(aliasDomainOfReverse(domain) ?? "")) skipped.set(domain, (skipped.get(domain) ?? 0) + 1);
 		else unique.set(email, { ...alias, email });
 	}
 	return {
@@ -544,8 +547,11 @@ export async function importAliases(
 
 	let contacts = 0;
 	for (const alias of list) {
+		const seenContacts = new Set<string>();
 		for (const contact of alias.contacts ?? []) {
-			if (isOwnAddress(contact.email, allOwnDomains)) continue;
+			const email = normalizeEmail(contact.email);
+			if (isOwnAddress(email, allOwnDomains) || seenContacts.has(email)) continue;
+			seenContacts.add(email);
 			contacts += 1;
 			statements.push(
 				db
@@ -561,9 +567,9 @@ export async function importAliases(
 					.bind(
 						newId("ct"),
 						alias.email,
-						normalizeEmail(contact.email),
+						email,
 						cleanDisplayName(contact.name),
-						makeReverseLocal(contact.email, settings.includeSenderInReverseAlias),
+						makeReverseLocal(email, settings.includeSenderInReverseAlias),
 						contact.blocked ? 1 : 0,
 						contact.lastSentAt,
 						contact.createdAt ?? timestamp,

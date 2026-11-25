@@ -291,7 +291,13 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			return { status: 200, result: "passed through" };
 		}
 
-		const email = await PostalMime.parse(stored!.raw, { attachmentEncoding: "arraybuffer" });
+		let email: Email;
+		try {
+			email = await PostalMime.parse(stored!.raw, { attachmentEncoding: "arraybuffer" });
+		} catch (error) {
+			const detail = error instanceof Error ? error.message : String(error);
+			return await skip(`unreadable message: ${detail.slice(0, 200)}`);
+		}
 		if (headerValue(email, LOOP_HEADER)) return await skip("already forwarded by this Worker");
 
 		// The parsed From address must itself be one plain address. One that is not (a quoted
@@ -380,7 +386,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			text: body.text ?? (body.html ? undefined : ""),
 			attachments: email.attachments.map((attachment, index) => {
 				const { filename, type, contentId } = cleanAttachment(attachment, index);
-				return attachment.disposition === "inline" && contentId
+				return (attachment.disposition === "inline" || attachment.related) && contentId
 					? { disposition: "inline" as const, contentId, filename, type, content: attachment.content as ArrayBuffer }
 					: { disposition: "attachment" as const, filename, type, content: attachment.content as ArrayBuffer };
 			}),

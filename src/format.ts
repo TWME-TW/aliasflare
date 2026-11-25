@@ -113,7 +113,17 @@ export function normalizeEmail(value: string): string {
  */
 export const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
 
-const PRIVATE_SUFFIXES = /(^|\.)(localhost|local|internal|intranet|lan|home|corp|arpa|test|invalid|example)$/;
+const PRIVATE_SUFFIXES = /(^|\.)(localhost|localdomain|local|internal|intranet|lan|home|corp|arpa|test|invalid|example)$/;
+
+/** Hostname of a URL string, or null when the value is empty or malformed. */
+export function hostnameOf(value: string | null | undefined): string | null {
+	if (!value) return null;
+	try {
+		return new URL(value).hostname;
+	} catch {
+		return null;
+	}
+}
 
 /** True when a hostname is a public domain (no IP literals, no single-label or private names, none of `blockedHosts`). */
 export function isPublicHost(hostname: string, blockedHosts: string[] = []): boolean {
@@ -206,9 +216,12 @@ export function replaceAddresses(body: string, replacements: Replacement[], opti
 	for (const { from, to } of replacements) {
 		if (!from) continue;
 		const escaped = options.encodedPlus
-			? escapeRegExp(from).replaceAll("\\+", "(?:\\+|%2b|&#0*43;|&#x0*2b;|&plus;)")
+			? escapeRegExp(from)
+					.replaceAll("\\+", "(?:\\+|%2b|&#0*43;|&#x0*2b;|&plus;)")
+					.replaceAll("@", "(?:@|%40|&#0*64;|&#x0*40;|&commat;)")
 			: escapeRegExp(from);
-		const pattern = new RegExp(`(?<![A-Za-z0-9._%+-])${escaped}(?![A-Za-z0-9.-]*[A-Za-z0-9])`, "gi");
+		const prefix = options.encodedPlus ? "(?:(?<![A-Za-z0-9._%+-])|(?<=mailto%3a))" : "(?<![A-Za-z0-9._%+-])";
+		const pattern = new RegExp(`${prefix}${escaped}(?![A-Za-z0-9.-]*[A-Za-z0-9])`, "gi");
 		// A function, so "$&" or "$`" in an address is inserted as text, not as a pattern.
 		out = out.replace(pattern, () => to);
 	}
@@ -257,8 +270,9 @@ export function cleanAttachment(attachment: { filename?: string | null; mimeType
 }
 
 export function ensureAngle(id: string | null | undefined): string | null {
-	if (!id) return null;
+	if (!id || /[\u0000-\u001f\u007f]/.test(id)) return null;
 	const trimmed = id.trim();
 	if (!trimmed) return null;
-	return trimmed.startsWith("<") ? trimmed : `<${trimmed}>`;
+	const wrapped = trimmed.startsWith("<") ? trimmed : `<${trimmed}>`;
+	return /^<[\x21-\x3b\x3d\x3f-\x7e]{1,250}>$/.test(wrapped) ? wrapped : null;
 }

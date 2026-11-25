@@ -23,7 +23,7 @@ import { customValues, fillTemplate, isOutboundProvider, normalizeOutboundOption
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
-import { domainOf, extractEmail, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
+import { domainOf, extractEmail, hostnameOf, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
 import { handleDirectInbound, handleInbound, type InboundEvent } from "./forward";
 import {
 	addSimpleLoginContacts,
@@ -75,7 +75,7 @@ import {
 import { readLimited, readTextLimited } from "./streams";
 import { clientKey } from "./ratelimit";
 import { cleanUp } from "./cleanup";
-import { claimLink, describeAction, performAction, releaseLink, resolveLink, safeHttpsUrl } from "./unsubscribe";
+import { claimLink, describeAction, isLinkUsed, performAction, releaseLink, resolveLink, safeHttpsUrl } from "./unsubscribe";
 
 const MAX_WEBHOOK_BYTES = 64 * 1024;
 const MAX_JSON_BYTES = 32 * 1024;
@@ -106,20 +106,11 @@ const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/a
 /** A year, for a versioned asset URL; an unversioned one is kept briefly so a deploy shows soon. */
 const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
 
+/** Public endpoints that read D1 before auth: throttle before touching D1. */
+const PUBLIC_THROTTLED = /^\/(?:health|webhook|setup|login|unsubscribe|action)(?:\/|$)/;
+
 app.use("*", async (c, next) => {
 	if ((c.req.method === "GET" || c.req.method === "HEAD") && STATIC_PATHS.has(c.req.path)) return next();
-	// The client APIs are open to anyone with the URL: their limits come before any D1 read.
-	if (c.req.path.startsWith("/api/") || c.req.path === "/mcp") {
-		const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
-		if (throttled) return throttled;
-	}
-	try {
-		c.set("config", await loadConfig(c.env));
-	} catch (error) {
-		if (!(error instanceof ConfigError)) throw error;
-		console.error("Configuration error:", error.message);
-		return c.text(`aliasflare cannot start: ${error.message}. Fix the Worker's variables or secrets and deploy again.`, 500);
-	}
 	const chosen = getCookie(c, LANG_COOKIE);
 	const chosenTheme = getCookie(c, THEME_COOKIE);
 	c.set(
@@ -129,6 +120,23 @@ app.use("*", async (c, next) => {
 			isTheme(chosenTheme) ? chosenTheme : "system",
 		),
 	);
+	// The client APIs and public endpoints are open to anyone with the URL: their limits come before any D1 read.
+	if (c.req.path.startsWith("/api/") || c.req.path === "/mcp") {
+		const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
+		if (throttled) return throttled;
+	} else if (PUBLIC_THROTTLED.test(c.req.path) && c.env.API_RATE_LIMIT) {
+		const client = clientKey(c.req.header("CF-Connecting-IP"));
+		if (!(await c.env.API_RATE_LIMIT.limit({ key: `pub:${client}` })).success) {
+			return c.text(c.get("t")("err.rateLimited"), 429);
+		}
+	}
+	try {
+		c.set("config", await loadConfig(c.env));
+	} catch (error) {
+		if (!(error instanceof ConfigError)) throw error;
+		console.error("Configuration error:", error.message);
+		return c.text(`aliasflare cannot start: ${error.message}. Fix the Worker's variables or secrets and deploy again.`, 500);
+	}
 	await next();
 });
 
@@ -179,8 +187,8 @@ async function readJson<T>(c: C): Promise<T | null> {
 	}
 }
 
-async function rateLimited(c: C): Promise<boolean> {
-	const key = clientKey(c.req.header("CF-Connecting-IP"));
+async function rateLimited(c: C, bucket: "auth" | "ui" | "link" = "auth"): Promise<boolean> {
+	const key = `${bucket}:${clientKey(c.req.header("CF-Connecting-IP"))}`;
 	return !!c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key })).success;
 }
 
@@ -208,7 +216,6 @@ app.get("/assets/app.js", (c) => {
 	return c.body(APP_SCRIPT, 200, { "Content-Type": "text/javascript; charset=utf-8" });
 });
 
-// The language menu submits here (GET /lang?locale=…&next=…); /lang/:locale is the no-form link form.
 /**
  * A path on this site to redirect to, or "/". Control characters and backslashes are
  * refused outright, since browsers drop or rewrite them and "/\t/evil.example" would
@@ -227,7 +234,7 @@ export function safeLocalPath(value: string | undefined | null): string {
 // A POST from this site only: another site cannot switch the dashboard's language.
 app.post("/lang", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
-	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
+	if (await rateLimited(c, "ui")) return c.text(c.get("t")("err.rateLimited"), 429);
 	const raw = await readTextLimited(c.req.raw, 4096);
 	if (raw === null) return c.text("Payload too large", 413);
 	const params = new URLSearchParams(raw);
@@ -241,7 +248,7 @@ app.post("/lang", async (c) => {
 // Light / dark / system theme preference stored in a browser cookie (same-origin POST only).
 app.post("/theme", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
-	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
+	if (await rateLimited(c, "ui")) return c.text(c.get("t")("err.rateLimited"), 429);
 	const raw = await readTextLimited(c.req.raw, 4096);
 	if (raw === null) return c.text("Payload too large", 413);
 	const params = new URLSearchParams(raw);
@@ -293,6 +300,9 @@ for (const kind of ["unsubscribe", "action"] as const) {
 		const t = c.get("t");
 		const target = await resolve(c);
 		if (!target) return invalid(c);
+		if (await isLinkUsed(c.env.DB, target.token)) {
+			return c.html(messagePage(t, t("link.done"), html`<p>${t("link.used")}</p>`));
+		}
 		const title = kind === "unsubscribe" ? t("link.unsubscribe") : target.action === "disable_alias" ? t("link.disable") : t("link.block");
 		return c.html(
 			messagePage(t, title, html`<p>${describeAction(target, t)}</p><form method="post"><button class="primary">${title}</button></form>`),
@@ -303,7 +313,7 @@ for (const kind of ["unsubscribe", "action"] as const) {
 		// The one-click unsubscribe POST comes from mail providers' servers, without an Origin;
 		// the banner buttons are only ever pressed on this site's own confirmation page.
 		if (kind === "action" && !sameOrigin(c)) return c.text(t("err.crossSite"), 403);
-		if (await rateLimited(c)) return c.text(t("err.rateLimited"), 429);
+		if (await rateLimited(c, "link")) return c.text(t("err.rateLimited"), 429);
 		const target = await resolve(c);
 		if (!target) return invalid(c);
 		if (!(await claimLink(c.env.DB, target.token))) {
@@ -335,7 +345,8 @@ app.post("/setup/code", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
 	if (await hasPasskeys(c.env.DB)) return c.redirect("/login");
 	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
-	if (!c.env.SETUP_CODE?.trim() && !(await issueSetupCode(c.env.DB, true)).created) return redirectWithNotice(c, "/setup", "notice.setupCodeWait");
+	if (c.env.SETUP_CODE?.trim()) return c.redirect("/setup");
+	if (!(await issueSetupCode(c.env.DB, true)).created) return redirectWithNotice(c, "/setup", "notice.setupCodeWait");
 	return redirectWithNotice(c, "/setup", "notice.setupCodeIssued");
 });
 
@@ -696,7 +707,14 @@ app.post("/connection", async (c) => {
 	const text = (key: string) => (typeof form[key] === "string" ? (form[key] as string).trim() : "");
 	const values: Record<string, string> = {};
 
-	if (!fixed.has("mailflareUrl")) {
+	const config = c.get("config");
+	const reqHost = hostnameOf(c.req.url);
+	if (!fixed.has("publicUrl") && typeof form.publicUrl === "string") {
+		const origin = text("publicUrl") ? validOrigin(text("publicUrl")) : "";
+		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badPublicUrl");
+		values.publicUrl = origin;
+	}
+	if (!fixed.has("mailflareUrl") && typeof form.mailflareUrl === "string") {
 		const origin = text("mailflareUrl") ? validOrigin(text("mailflareUrl")) : "";
 		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badMailflareUrl");
 		// The API key goes to this URL: not to an IP address, an internal name or this Worker
@@ -704,20 +722,18 @@ app.post("/connection", async (c) => {
 		if (origin && !c.env.MAILFLARE_SERVICE) {
 			const host = new URL(origin);
 			host.port = "";
-			if (!safeHttpsUrl(host.href, [new URL(c.req.url).hostname])) return redirectWithNotice(c, "/connection", "notice.badMailflareUrl");
+			const selfHosts = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin].map(hostnameOf)].filter((h): h is string => !!h);
+			if (!safeHttpsUrl(host.href, selfHosts)) return redirectWithNotice(c, "/connection", "notice.badMailflareUrl");
 		}
 		values.mailflareUrl = origin;
-	}
-	if (!fixed.has("publicUrl")) {
-		const origin = text("publicUrl") ? validOrigin(text("publicUrl")) : "";
-		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badPublicUrl");
-		values.publicUrl = origin;
 	}
 	if (!fixed.has("outboundProvider") && text("outboundProvider")) {
 		if (!isOutboundProvider(text("outboundProvider"))) return redirectWithNotice(c, "/connection", "notice.badProvider");
 		values.outboundProvider = text("outboundProvider");
 	}
-	if (!fixed.has("outboundOptions") && typeof form.smtpPort === "string") {
+	const optionKeys = ["smtpHost", "smtpPort", "smtpSecurity", "smtpUsername", "mailgunRegion", "sesRegion", "sesAccessKeyId", "customUrl", "customHeaders", "customBody", "customIdPath"] as const;
+	const hasOutboundOptions = optionKeys.some((key) => typeof form[key] === "string");
+	if (!fixed.has("outboundOptions") && hasOutboundOptions) {
 		const raw = (name: string) => (typeof form[name] === "string" ? (form[name] as string) : "");
 		const options: OutboundOptions = normalizeOutboundOptions({
 			smtpHost: raw("smtpHost"),
@@ -737,10 +753,7 @@ app.post("/connection", async (c) => {
 		if (raw("sesRegion").trim() && !SES_REGION.test(raw("sesRegion").trim().toLowerCase())) return redirectWithNotice(c, "/connection", "notice.badSes");
 		if (options.customUrl) {
 			// The key and messages go to this URL: a public https host, not this Worker or Mailflare.
-			const blocked = [
-				new URL(c.req.url).hostname,
-				...[c.get("config").publicUrl, c.get("config").siteOrigin, c.get("config").mailflareUrl].filter(Boolean).map((url) => new URL(url).hostname),
-			];
+			const blocked = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin, config.mailflareUrl, values.mailflareUrl].map(hostnameOf)].filter((h): h is string => !!h);
 			if (!safeHttpsUrl(options.customUrl, blocked)) {
 				return redirectWithNotice(c, "/connection", "notice.badCustom");
 			}
@@ -851,13 +864,13 @@ app.post("/import/:source", async (c) => {
 			// port is allowed, for self-hosted servers.
 			const host = new URL(url.href);
 			host.port = "";
-			const ownHosts = [new URL(c.req.url).hostname, ...[c.get("config").publicUrl, c.get("config").siteOrigin, c.get("config").mailflareUrl].filter(Boolean).map((value) => new URL(value).hostname)];
+			const ownHosts = [c.req.url, c.get("config").publicUrl, c.get("config").siteOrigin, c.get("config").mailflareUrl].map(hostnameOf).filter((h): h is string => !!h);
 			if (!safeHttpsUrl(host.href, ownHosts)) return render({ error: t("imp.err.badServer") });
 			server = url.origin;
 			// One budget for the whole import, so aliases and contacts together stay inside Workers' subrequest limit.
 			const budget = newFetchBudget(c.get("config").workersPlan);
 			aliases = await source.fetch(server, apiKey, budget);
-			selection = selectByDomain(aliases, domains);
+			selection = selectByDomain(aliases, domains, settings.aliasDomains);
 			// Contacts are fetched only for the aliases being imported, one list per alias.
 			if (sourceName === "simplelogin" && form.contacts === "1") await addSimpleLoginContacts(server, apiKey, selection.chosen, budget);
 		} else {
@@ -865,7 +878,7 @@ app.post("/import/:source", async (c) => {
 			if (!(file instanceof File) || file.size === 0) return render({ error: t("imp.err.empty") });
 			if (file.size > 5_000_000) return render({ error: t("imp.err.format") });
 			aliases = parseAliasCsv(await file.text());
-			selection = selectByDomain(aliases, domains);
+			selection = selectByDomain(aliases, domains, settings.aliasDomains);
 		}
 	} catch (error) {
 		if (!(error instanceof ImportError)) throw error;
@@ -971,9 +984,9 @@ app.post("/aliases/bulk", async (c) => {
 			: action === "pin" || action === "unpin"
 				? statement("UPDATE aliases SET pinned = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL", action === "pin" ? 1 : 0, timestamp)
 				: action === "note"
-					? statement("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?", value.slice(0, MAX_NOTE_LENGTH) || null, timestamp)
+					? statement("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL", value.slice(0, MAX_NOTE_LENGTH) || null, timestamp)
 					: action === "destination"
-						? statement("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?", destination, timestamp)
+						? statement("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL", destination, timestamp)
 						: action === "delete"
 							? statement(
 									"UPDATE aliases SET deleted_at = ?, forward_mode = 'none', forward_enabled = 0, pinned = 0, updated_at = ? WHERE address = ? AND deleted_at IS NULL",
@@ -1020,9 +1033,10 @@ app.post("/aliases/new", async (c) => {
 		return redirectWithNotice(c, "/", "notice.loop");
 	}
 	const note = field("note", 500) || null;
-	// A random kind (words, characters or UUID) ignores any name; "custom" uses the name.
+	// A random kind (words, characters or UUID) ignores any name; "custom" requires a name.
 	const kind = isRandomAliasFormat(form.kind) ? form.kind : null;
 	const prefix = kind ? "" : field("prefix", 64);
+	if (form.kind === "custom" && !prefix) return redirectWithNotice(c, "/", "notice.newBadPrefix");
 	try {
 		let alias;
 		if (!prefix) {
@@ -1051,7 +1065,7 @@ app.post("/aliases/:address/destination", async (c) => {
 	if (destination && (isOwnAddress(destination, [...(await loadSettings(c.env.DB)).aliasDomains, domainOf(address)]) || destination === address)) {
 		return redirectWithNotice(c, back, "notice.loop");
 	}
-	const saved = await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?").bind(destination, now(), address).run();
+	const saved = await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL").bind(destination, now(), address).run();
 	if (!saved.meta.changes) return redirectWithNotice(c, back, "notice.aliasMissing");
 	return redirectWithNotice(c, back, "notice.aliasDestinationSaved", { alias: address });
 });
@@ -1060,13 +1074,13 @@ app.post("/aliases/:address/note", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
 	const form = await c.req.parseBody();
 	const note = (typeof form.note === "string" ? form.note : "").trim().slice(0, MAX_NOTE_LENGTH) || null;
-	const result = await c.env.DB.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(note, now(), address).run();
+	const result = await c.env.DB.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL").bind(note, now(), address).run();
 	if (c.req.header("X-Autosave") === "1") {
 		// Saved in place from the alias list or alias page.
 		return result.meta.changes > 0 ? c.json({ ok: true, message: c.get("t")("notice.noteSaved") }) : c.json({ ok: false, message: c.get("t")("link.error") }, 404);
 	}
 	const back = form.back === "list" ? "/" : `/aliases/${encodeURIComponent(address)}`;
-	return redirectWithNotice(c, back, "notice.noteSaved");
+	return redirectWithNotice(c, back, result.meta.changes > 0 ? "notice.noteSaved" : "notice.aliasMissing");
 });
 
 app.get("/aliases/:address", async (c) => {
@@ -1083,7 +1097,7 @@ app.get("/aliases/:address", async (c) => {
 
 app.post("/aliases/:address/contacts", async (c) => {
 	const alias = await getAlias(c.env.DB, normalizeEmail(c.req.param("address")));
-	if (!alias) return c.notFound();
+	if (!alias || alias.deleted_at) return c.notFound();
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	const form = await c.req.parseBody();
 	const settings = await loadSettings(c.env.DB);

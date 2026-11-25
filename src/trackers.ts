@@ -95,8 +95,10 @@ export function isTrackerImage(attributes: { src: string | null; width: string |
 export function cleanText(text: string): { text: string; removed: number } {
 	let removed = 0;
 	const out = text.replace(/https?:\/\/[^\s<>"')\]]+/gi, (match) => {
-		const trail = match.match(/[.,;:!?]+$/)?.[0] ?? "";
-		const link = trail ? match.slice(0, -trail.length) : match;
+		let end = match.length;
+		while (end > 0 && ".,;:!?".includes(match[end - 1]!)) end -= 1;
+		const trail = match.slice(end);
+		const link = end < match.length ? match.slice(0, end) : match;
 		const cleaned = cleanLink(link);
 		if (cleaned.changed) removed += 1;
 		return cleaned.href + trail;

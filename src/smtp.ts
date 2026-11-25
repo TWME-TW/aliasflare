@@ -104,7 +104,7 @@ class Conversation {
 
 /** The message's lines with leading dots doubled, ending in the lone dot. */
 export function dotStuff(data: string): string {
-	const normalized = data.replace(/\r?\n/g, "\r\n");
+	const normalized = data.replace(/\r\n|\r|\n/g, "\r\n");
 	return `${normalized.replace(/^\./gm, "..")}${normalized.endsWith("\r\n") ? "" : "\r\n"}.\r\n`;
 }
 
@@ -112,7 +112,7 @@ const b64 = (text: string) => bytesToBase64(encoder.encode(text));
 
 export async function sendSmtp(options: SmtpOptions, envelope: { from: string; to: string }, data: string, open: SmtpConnect = connect as unknown as SmtpConnect): Promise<void> {
 	if (options.port === 25) throw new OutboundError("Workers cannot connect to port 25: use 465 or 587");
-	if (/[\r\n\0<>]/.test(envelope.from) || /[\r\n\0<>]/.test(envelope.to)) throw new OutboundError("Invalid SMTP envelope address");
+	if (/[\u0000-\u001f\u007f\s<>]/.test(envelope.from) || /[\u0000-\u001f\u007f\s<>]/.test(envelope.to)) throw new OutboundError("Invalid SMTP envelope address");
 	const socket = open({ hostname: options.host, port: options.port }, { secureTransport: options.security === "tls" ? "on" : "starttls", allowHalfOpen: false });
 	const smtp = new Conversation(socket);
 	const timer = setTimeout(() => void smtp.close(), TIMEOUT_MS);

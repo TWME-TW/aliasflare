@@ -132,7 +132,11 @@ async function readBody(c: C, lenient: boolean): Promise<Record<string, unknown>
 		if (lenient) return {};
 		throw new ClientError(400, "The request body is not valid JSON.");
 	}
-	return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+		if (lenient) return {};
+		throw new ClientError(400, "The request body must be a JSON object.");
+	}
+	return parsed as Record<string, unknown>;
 }
 
 const body = (c: C) => readBody(c, false);
@@ -308,10 +312,20 @@ api.post("/alias/random/new", async (c) => {
 	return c.json(await slAlias(c, alias), 201);
 });
 
+const queryFlag = (value: string | undefined): boolean | undefined => {
+	if (value === undefined) return undefined;
+	const lower = value.trim().toLowerCase();
+	if (lower === "false" || lower === "0") return false;
+	return true;
+};
+
 async function slListAliases(c: C) {
 	const input = c.req.method === "POST" ? await body(c) : {};
-	const query = str(input.query) ?? c.req.query("query");
-	const filter = c.req.query("pinned") !== undefined ? { pinned: true } : c.req.query("disabled") !== undefined ? { enabled: false } : c.req.query("enabled") !== undefined ? { enabled: true } : {};
+	const query = str(input.query, 200) ?? c.req.query("query")?.slice(0, 200);
+	const pinned = queryFlag(c.req.query("pinned"));
+	const disabled = queryFlag(c.req.query("disabled"));
+	const enabled = queryFlag(c.req.query("enabled"));
+	const filter = pinned === true ? { pinned: true } : disabled === true ? { enabled: false } : enabled === true ? { enabled: true } : {};
 	const { aliases } = await listAliasViews(c.env.DB, { ...filter, search: query, limit: SL_PAGE_SIZE, offset: pageId(c) * SL_PAGE_SIZE });
 	const latest = await latestContacts(c.env.DB, aliases.map((alias) => alias.address));
 	return c.json({ aliases: await Promise.all(aliases.map((alias) => slAlias(c, alias, latest.get(alias.address) ?? null))) });
@@ -447,6 +461,7 @@ api.get("/setting", (c) => c.json(slSetting(c.get("settings"))));
 
 // SimpleLogin apps change one or more of these at a time.
 api.patch("/setting", async (c) => {
+	requireAppSettings(c);
 	const body = await jsonBody(c);
 	const settings = c.get("settings");
 	const update: Partial<Settings> = {};
@@ -476,14 +491,19 @@ api.patch("/setting", async (c) => {
 
 // Making a mailbox the default one sets the default forwarding address.
 api.put("/mailboxes/:id", async (c) => {
+	requireAppSettings(c);
 	const body = await jsonBody(c);
 	if (body.email !== undefined || body.cancel_email_change !== undefined) {
 		throw new ClientError(400, "Change forwarding addresses in the aliasflare dashboard.");
 	}
 	const id = c.req.param("id");
-	const match = (await listDestinations(c.env.DB, c.get("settings"))).find((d) => d.numId === Number(id) || d.uid === id);
+	const settings = c.get("settings");
+	const match = (await listDestinations(c.env.DB, settings)).find((d) => d.numId === Number(id) || d.uid === id);
 	if (!match) throw new ClientError(404, "Unknown mailbox");
-	if (body.default === true && !match.isDefault) await changeSettings(c, { defaultDestination: match.email });
+	if (body.default === true && !match.isDefault) {
+		if (isOwnAddress(match.email, settings.aliasDomains)) throw new ClientError(400, "This forwarding address would loop.");
+		await changeSettings(c, { defaultDestination: match.email });
+	}
 	return c.json({ updated: true });
 });
 
@@ -759,7 +779,7 @@ api.get("/v1/aliases", async (c) => {
 		deleted: deleted === "with" || deleted === "only" ? deleted : "without",
 		enabled: active === "true" ? true : active === "false" ? false : undefined,
 		pinned: pinned === "true" ? true : pinned === "false" ? false : undefined,
-		search: c.req.query("filter[search]"),
+		search: c.req.query("filter[search]")?.slice(0, 200),
 		limit: size,
 		offset: (page - 1) * size,
 	});
