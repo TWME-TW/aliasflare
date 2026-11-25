@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Sözcükler",
 	"new.random.random_characters": "Rastgele karakterler",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} silinsin mi? Ters takma adı çalışmayı durdurur. Tekrar yazarlarsa yeni bir tane alırlar.",
+	"notice.contactDeleted": "Kişi silindi.",
+	"notice.contactMissing": "Bu kişi artık mevcut değil.",
 };
 
 export default dictionary;

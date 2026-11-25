@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Wörter",
 	"new.random.random_characters": "Zufällige Zeichen",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} löschen? Der Reverse-Alias funktioniert danach nicht mehr. Schreibt die Person erneut, erhält sie einen neuen.",
+	"notice.contactDeleted": "Kontakt gelöscht.",
+	"notice.contactMissing": "Dieser Kontakt existiert nicht mehr.",
 };
 
 export default dictionary;

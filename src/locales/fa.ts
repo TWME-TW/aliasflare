@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "کلمات",
 	"new.random.random_characters": "نویسه‌های تصادفی",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} حذف شود؟ نام مستعار معکوس آن از کار می‌افتد. اگر دوباره نامه بفرستد، یک نام مستعار معکوس جدید دریافت می‌کند.",
+	"notice.contactDeleted": "مخاطب حذف شد.",
+	"notice.contactMissing": "این مخاطب دیگر وجود ندارد.",
 };
 
 export default dictionary;

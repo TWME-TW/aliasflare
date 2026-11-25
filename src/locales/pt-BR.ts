@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Palavras",
 	"new.random.random_characters": "Caracteres aleatórios",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "Excluir {email}? O alias reverso dele deixará de funcionar. Se a pessoa escrever de novo, receberá um novo.",
+	"notice.contactDeleted": "Contato excluído.",
+	"notice.contactMissing": "Esse contato não existe mais.",
 };
 
 export default dictionary;

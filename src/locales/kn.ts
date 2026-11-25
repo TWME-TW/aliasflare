@@ -400,6 +400,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "ಪದಗಳು",
 	"new.random.random_characters": "ಯಾದೃಚ್ಛಿಕ ಅಕ್ಷರಗಳು",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} ಅಳಿಸಬೇಕೇ? ಅದರ ರಿವರ್ಸ್ ಅಲಿಯಾಸ್ ಕೆಲಸ ಮಾಡುವುದಿಲ್ಲ. ಅವರು ಮತ್ತೆ ಬರೆದರೆ, ಹೊಸದೊಂದು ಸಿಗುತ್ತದೆ.",
+	"notice.contactDeleted": "ಸಂಪರ್ಕ ಅಳಿಸಲಾಗಿದೆ.",
+	"notice.contactMissing": "ಆ ಸಂಪರ್ಕ ಇನ್ನು ಅಸ್ತಿತ್ವದಲ್ಲಿಲ್ಲ.",
 };
 
 export default dictionary;

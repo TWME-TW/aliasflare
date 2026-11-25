@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "الفاظ",
 	"new.random.random_characters": "بے ترتیب حروف",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} حذف کریں؟ اس کا ریورس عرف کام کرنا بند کر دے گا۔ اگر وہ دوبارہ لکھیں تو انہیں نیا ملے گا۔",
+	"notice.contactDeleted": "رابطہ حذف کر دیا گیا۔",
+	"notice.contactMissing": "وہ رابطہ اب موجود نہیں ہے۔",
 };
 
 export default dictionary;

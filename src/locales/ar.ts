@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "كلمات",
 	"new.random.random_characters": "أحرف عشوائية",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "هل تريد حذف {email}؟ سيتوقف الاسم المستعار العكسي الخاص به عن العمل. إذا راسل مرة أخرى، فسيحصل على اسم مستعار عكسي جديد.",
+	"notice.contactDeleted": "تم حذف جهة الاتصال.",
+	"notice.contactMissing": "جهة الاتصال هذه لم تعد موجودة.",
 };
 
 export default dictionary;

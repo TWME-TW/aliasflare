@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Maneno",
 	"new.random.random_characters": "Herufi nasibu",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "Ifute {email}? Lakabu yake ya kinyume itaacha kufanya kazi. Wakiandika tena, watapata mpya.",
+	"notice.contactDeleted": "Anwani imefutwa.",
+	"notice.contactMissing": "Anwani hiyo haipo tena.",
 };
 
 export default dictionary;

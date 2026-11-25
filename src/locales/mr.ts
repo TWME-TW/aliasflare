@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "शब्द",
 	"new.random.random_characters": "रँडम अक्षरे",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} हटवायचा? त्याचे रिव्हर्स उपनाव काम करणे थांबवेल. त्यांनी पुन्हा लिहिल्यास त्यांना नवीन मिळेल.",
+	"notice.contactDeleted": "संपर्क हटवला.",
+	"notice.contactMissing": "तो संपर्क आता अस्तित्वात नाही.",
 };
 
 export default dictionary;

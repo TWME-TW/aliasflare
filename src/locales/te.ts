@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "పదాలు",
 	"new.random.random_characters": "యాదృచ్ఛిక అక్షరాలు",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email}ను తొలగించాలా? దాని రివర్స్ మారుపేరు పనిచేయడం ఆగిపోతుంది. వాళ్లు మళ్లీ రాస్తే, కొత్తది పొందుతారు.",
+	"notice.contactDeleted": "కాంటాక్ట్ తొలగించబడింది.",
+	"notice.contactMissing": "ఆ కాంటాక్ట్ ఇప్పుడు లేదు.",
 };
 
 export default dictionary;

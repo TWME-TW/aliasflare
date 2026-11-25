@@ -385,6 +385,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "單字",
 	"new.random.random_characters": "隨機字元",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "要刪除 {email} 嗎？它的反向別名將會失效。對方再次來信時會產生新的反向別名。",
+	"notice.contactDeleted": "已刪除聯絡人。",
+	"notice.contactMissing": "這個聯絡人已不存在。",
 };
 
 export default dictionary;

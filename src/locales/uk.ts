@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Слова",
 	"new.random.random_characters": "Випадкові символи",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "Видалити {email}? Його зворотний псевдонім перестане працювати. Якщо ця адреса напише знову, вона отримає новий.",
+	"notice.contactDeleted": "Контакт видалено.",
+	"notice.contactMissing": "Цього контакту більше не існує.",
 };
 
 export default dictionary;

@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "শব্দ",
 	"new.random.random_characters": "র‍্যান্ডম অক্ষর",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} মুছবেন? এর রিভার্স অ্যালিয়াস আর কাজ করবে না। তারা আবার লিখলে একটি নতুন পাবে।",
+	"notice.contactDeleted": "যোগাযোগ মুছে ফেলা হয়েছে।",
+	"notice.contactMissing": "সেই যোগাযোগটি আর নেই।",
 };
 
 export default dictionary;

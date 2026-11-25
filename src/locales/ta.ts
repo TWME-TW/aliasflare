@@ -400,6 +400,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "சொற்கள்",
 	"new.random.random_characters": "சீரற்ற எழுத்துகள்",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} ஐ நீக்கவா? இதன் தலைகீழ் மாற்றுப்பெயர் வேலை செய்வதை நிறுத்தும். அவர்கள் மீண்டும் எழுதினால், புதிய ஒன்று கிடைக்கும்.",
+	"notice.contactDeleted": "தொடர்பு நீக்கப்பட்டது.",
+	"notice.contactMissing": "அந்தத் தொடர்பு இனி இல்லை.",
 };
 
 export default dictionary;

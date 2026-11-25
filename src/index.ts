@@ -903,6 +903,17 @@ app.post("/aliases/:address/contacts/:id/block", async (c) => {
 	return c.redirect(`/aliases/${encodeURIComponent(address)}`);
 });
 
+/**
+ * Removes a contact and its history with the alias. Its reverse alias stops working; if the
+ * sender writes again, they become a new contact with a new reverse alias. The activity log
+ * keeps its entries.
+ */
+app.post("/aliases/:address/contacts/:id/delete", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	const result = await c.env.DB.prepare("DELETE FROM contacts WHERE id = ? AND alias_address = ?").bind(c.req.param("id"), address).run();
+	return redirectWithNotice(c, `/aliases/${encodeURIComponent(address)}`, result.meta.changes > 0 ? "notice.contactDeleted" : "notice.contactMissing");
+});
+
 export { app };
 
 export default {

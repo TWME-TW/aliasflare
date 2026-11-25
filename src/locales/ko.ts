@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "단어",
 	"new.random.random_characters": "무작위 문자",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email}을(를) 삭제할까요? 해당 역방향 별칭은 작동하지 않게 됩니다. 상대방이 다시 메일을 보내면 새 역방향 별칭을 받게 됩니다.",
+	"notice.contactDeleted": "연락처를 삭제했습니다.",
+	"notice.contactMissing": "해당 연락처는 더 이상 존재하지 않습니다.",
 };
 
 export default dictionary;

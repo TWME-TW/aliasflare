@@ -408,6 +408,9 @@ export const en = {
 	"new.random.random_words": "Words",
 	"new.random.random_characters": "Random characters",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "Delete {email}? Its reverse alias stops working. If they write again, they get a new one.",
+	"notice.contactDeleted": "Contact deleted.",
+	"notice.contactMissing": "That contact no longer exists.",
 };
 
 export type MessageKey = keyof typeof en;

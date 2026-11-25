@@ -385,6 +385,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "単語",
 	"new.random.random_characters": "ランダムな文字",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} を削除しますか？そのリバースエイリアスは使えなくなります。相手が再度メールを送ると、新しいリバースエイリアスが発行されます。",
+	"notice.contactDeleted": "連絡先を削除しました。",
+	"notice.contactMissing": "その連絡先はもう存在しません。",
 };
 
 export default dictionary;

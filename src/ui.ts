@@ -839,8 +839,10 @@ ${contacts.map(
 <td data-label="${t("alias.colReverse")}"><code>${contactReverseAddress(contact)}</code></td>
 <td data-label="${t("alias.colForwarded")}"><span class="stack">${contact.forward_count}<br /><span class="muted">${when(contact.last_forward_at, t.locale)}</span></span></td>
 <td data-label="${t("alias.colReplied")}"><span class="stack">${contact.reply_count}<br /><span class="muted">${when(contact.last_reply_at, t.locale)}</span></span></td>
-<td data-label=""><form class="inline" method="post" action="${base}/contacts/${contact.id}/block">
-<button class="${contact.blocked ? "" : "danger"}">${contact.blocked ? t("alias.unblock") : t("alias.block")}</button></form></td>
+<td data-label=""><span class="row"><form class="inline" method="post" action="${base}/contacts/${contact.id}/block">
+<button class="${contact.blocked ? "" : "danger"}">${contact.blocked ? t("alias.unblock") : t("alias.block")}</button></form>
+<form class="inline" method="post" action="${base}/contacts/${contact.id}/delete" data-confirm="${t("alias.confirmDeleteContact", { email: contact.email })}">
+<button class="danger">${t("bulk.delete")}</button></form></span></td>
 </tr>`,
 )}
 </tbody></table>`}

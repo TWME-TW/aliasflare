@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "คำ",
 	"new.random.random_characters": "อักขระสุ่ม",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "ลบ {email} ใช่ไหม นามแฝงย้อนกลับของรายการนี้จะหยุดทำงาน หากผู้ติดต่อส่งอีเมลมาอีกครั้ง จะได้รับนามแฝงย้อนกลับใหม่",
+	"notice.contactDeleted": "ลบผู้ติดต่อแล้ว",
+	"notice.contactMissing": "ไม่พบผู้ติดต่อนี้แล้ว",
 };
 
 export default dictionary;

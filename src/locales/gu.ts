@@ -400,6 +400,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "શબ્દો",
 	"new.random.random_characters": "રેન્ડમ અક્ષરો",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} કાઢી નાખીએ? તેનું રિવર્સ ઉપનામ કામ કરવાનું બંધ કરી દેશે. તેઓ ફરી લખશે તો તેમને નવું મળશે.",
+	"notice.contactDeleted": "સંપર્ક કાઢી નાખ્યો.",
+	"notice.contactMissing": "તે સંપર્ક હવે અસ્તિત્વમાં નથી.",
 };
 
 export default dictionary;

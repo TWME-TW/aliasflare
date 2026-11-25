@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Perkataan",
 	"new.random.random_characters": "Aksara rawak",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "Padam {email}? Alias terbaliknya akan berhenti berfungsi. Jika mereka menulis semula, mereka akan mendapat yang baharu.",
+	"notice.contactDeleted": "Kenalan dipadam.",
+	"notice.contactMissing": "Kenalan itu sudah tidak wujud.",
 };
 
 export default dictionary;

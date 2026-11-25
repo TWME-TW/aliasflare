@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "වචන",
 	"new.random.random_characters": "අහඹු අක්ෂර",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "{email} මකන්නද? එහි ප්‍රතිලෝම අන්වර්ථය ක්‍රියාත්මක වීම නවතිනු ඇත. ඔවුන් නැවත ලිව්වොත්, අලුත් එකක් ලැබේ.",
+	"notice.contactDeleted": "සම්බන්ධතාව මකා දමන ලදී.",
+	"notice.contactMissing": "එම සම්බන්ධතාව තවදුරටත් නොපවතී.",
 };
 
 export default dictionary;

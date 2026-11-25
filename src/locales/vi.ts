@@ -391,6 +391,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Từ ngữ",
 	"new.random.random_characters": "Ký tự ngẫu nhiên",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "Xóa {email}? Bí danh ngược của liên hệ này sẽ ngừng hoạt động. Nếu họ gửi thư lại, họ sẽ nhận được một bí danh ngược mới.",
+	"notice.contactDeleted": "Đã xóa liên hệ.",
+	"notice.contactMissing": "Liên hệ này không còn tồn tại.",
 };
 
 export default dictionary;

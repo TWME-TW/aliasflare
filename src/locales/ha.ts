@@ -406,6 +406,9 @@ const dictionary: Dictionary = {
 	"new.random.random_words": "Kalmomi",
 	"new.random.random_characters": "Haruffa na bazuwar",
 	"new.random.uuid": "UUID",
+	"alias.confirmDeleteContact": "Share {email}? Laƙabin juyawarsu zai daina aiki. Idan sun sake rubutawa, za su sami sabon laƙabi.",
+	"notice.contactDeleted": "An goge abokin hulɗa.",
+	"notice.contactMissing": "Wannan abokin hulɗa ba ya nan yanzu.",
 };
 
 export default dictionary;

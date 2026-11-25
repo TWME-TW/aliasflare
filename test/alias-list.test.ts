@@ -105,3 +105,24 @@ describe("creation time", () => {
 		expect(page).toContain(`Created <time datetime="${iso}">`);
 	});
 });
+
+describe("deleting a contact", () => {
+	it("removes only that alias's contact, after asking", async () => {
+		const db = testDb();
+		await db.prepare("INSERT INTO aliases (address, num_id, uid, created_at, updated_at) VALUES ('shop@me.test', 1, 'u1', 1, 1), ('other@me.test', 2, 'u2', 1, 1)").run();
+		await db
+			.prepare("INSERT INTO contacts (id, num_id, alias_address, email, reverse_local, created_at) VALUES ('c1', 1, 'shop@me.test', 'bob@store.test', 'r1', 1), ('c2', 2, 'other@me.test', 'eve@store.test', 'r2', 1)")
+			.run();
+		const env = { DB: db, SIGNING_SECRET: TEST_SECRET } as unknown as Env;
+		const cookie = await signIn(db);
+		const page = await (await app.fetch(new Request("https://alias.test/aliases/shop%40me.test", { headers: { cookie } }), env)).text();
+		expect(page).toContain('action="/aliases/shop%40me.test/contacts/c1/delete" data-confirm=');
+		const post = (path: string) => app.fetch(new Request(`https://alias.test${path}`, { method: "POST", headers: { cookie, origin: "https://alias.test" } }), env);
+		// Another alias's contact cannot be deleted through this alias.
+		await post("/aliases/shop%40me.test/contacts/c2/delete");
+		const deleted = await post("/aliases/shop%40me.test/contacts/c1/delete");
+		expect(deleted.headers.get("location")).toContain("notice.contactDeleted");
+		const { results } = await db.prepare("SELECT id FROM contacts").all<{ id: string }>();
+		expect(results.map((row) => row.id)).toEqual(["c2"]);
+	});
+});
