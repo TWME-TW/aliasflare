@@ -117,6 +117,56 @@ npx wrangler deploy
 - API 匯入最多 25 個請求，大型帳號請改用 CSV 匯出檔；
 - Cloudflare 自動設定每次最多處理 3 個網域。
 
+### 9. 選用：Cloudflare WAF
+
+Worker 本身已對登入與 App API 做速率限制、檢查來源並簽署連結，所以 WAF 是額外的保護，不是必要條件。它的好處是在 Cloudflare 邊緣先擋下不必要的流量，不會消耗 Worker 請求次數（免費方案每天 100,000 次）。信件不受影響：Email Routing 會直接把信交給 Worker，不經過 WAF。
+
+**WAF 規則只對你自己區域（zone）中的自訂網域生效，不適用於 `*.workers.dev`。** 請用自訂網域（例如 `alias.example.com`）提供 aliasflare，把它設為公開網址，再於 Wrangler 設定中關閉其他網址，避免有人繞過規則：
+
+```jsonc
+"workers_dev": false,
+"preview_urls": false,
+```
+
+哪些路徑能加上驗證，取決於誰會呼叫它：
+
+| 路徑 | 呼叫者 | 可以加驗證嗎？ |
+| --- | --- | --- |
+| `/`、`/settings`、`/login`、`/setup` 等 | 你，透過瀏覽器 | 可以 |
+| `/unsubscribe/…` | 信箱服務的伺服器（一鍵退訂 POST）與一般人 | **不行** |
+| `/action/…` | 在轉寄信提示列上點擊的人 | 不建議 |
+| `/api/…` | SimpleLogin 與 addy.io 的 App 和擴充功能 | **不行** |
+| `/webhook` | Mailflare | **不行** |
+| `/assets/…`、`/favicon.svg` | 上面所有頁面 | 不建議 |
+
+建議的規則（都符合免費方案：5 條自訂規則、1 條速率限制規則）：
+
+1. **自訂規則，Managed Challenge：登入頁面。** 一般瀏覽器會無感通過，大量嘗試登入的腳本則會被擋下。
+   ```
+   http.request.method eq "GET" and http.request.uri.path in {"/login" "/setup"}
+   ```
+2. **速率限制規則：登入。** 免費方案的計算期間與封鎖時間都是 10 秒，依 IP 計算，條件只能使用路徑。例如每 10 秒 20 次，超過就封鎖：
+   ```
+   starts_with(http.request.uri.path, "/login") or starts_with(http.request.uri.path, "/setup")
+   ```
+3. **自訂規則，Block：App API（若你不使用 App）。** 不會有人該呼叫的網址，就不必消耗 Worker 請求。
+   ```
+   starts_with(http.request.uri.path, "/api/")
+   ```
+4. **選用自訂規則，Block：限制只能從你的國家使用管理介面。** 把 `TW` 換成你的國家；出國或使用其他地區的 VPN 時你也會被擋。公開路徑在任何地方都維持開放：
+   ```
+   not ip.src.country in {"TW"}
+   and not starts_with(http.request.uri.path, "/unsubscribe/")
+   and not starts_with(http.request.uri.path, "/action/")
+   and not starts_with(http.request.uri.path, "/api/")
+   and not starts_with(http.request.uri.path, "/assets/")
+   and not http.request.uri.path in {"/webhook" "/favicon.svg"}
+   ```
+
+保留 Cloudflare 免費受控規則集（預設開啟）、開啟 **Always Use HTTPS**，最低 TLS 版本設為 1.2。
+
+**請不要為這個區域開啟 Bot Fight Mode 或「I'm Under Attack」模式。** Bot Fight Mode 無法用任何規則略過，而且可能對非瀏覽器流量發出驗證，在這裡就是 App、信箱服務的一鍵退訂和 Mailflare webhook。同樣地，也絕對不要對 `/unsubscribe/`、`/api/` 或 `/webhook` 加上驗證：這些呼叫者無法完成驗證。
+
 ### 環境變數覆寫
 
 以下變數或 secret 會優先於管理介面中的值：`PUBLIC_URL`、`SIGNING_SECRET`、`SETUP_CODE`、`CLOUDFLARE_API_TOKEN`、`WORKER_NAME`、`MAILFLARE_URL`、`MAILFLARE_API_KEY`、`WEBHOOK_SECRET`、`OUTBOUND_PROVIDER`（`cloudflare`、`resend`、`smtp2go` 或 `brevo`）、`OUTBOUND_API_KEY`、`WORKERS_PLAN`（`free` 或 `paid`）。

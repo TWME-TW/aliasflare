@@ -126,6 +126,56 @@ On **Connection → Sending mail**, choose your Workers plan (Free is assumed) a
 - an API import may make at most 25 requests, so import a large account from a CSV export;
 - Cloudflare setup handles at most 3 domains per run.
 
+### 9. Optional: Cloudflare WAF
+
+The Worker already rate limits sign-in and the app APIs, checks origins and signs its links, so a WAF is extra protection, not a requirement. What it adds is stopping unwanted traffic at Cloudflare's edge, before it costs Worker requests (100,000 a day on the Free plan). Mail is not affected either way: Email Routing hands messages to the Worker directly, without passing through the WAF.
+
+**WAF rules only apply to a Custom Domain in your own zone, not to `*.workers.dev`.** Serve aliasflare on a Custom Domain (for example `alias.example.com`), set it as the public URL, then turn the other URLs off in your Wrangler configuration so nobody can go around the rules:
+
+```jsonc
+"workers_dev": false,
+"preview_urls": false,
+```
+
+Who calls which paths decides what may be challenged:
+
+| Path | Called by | Challenge it? |
+| --- | --- | --- |
+| `/`, `/settings`, `/login`, `/setup`, … | you, in a browser | yes |
+| `/unsubscribe/…` | mail providers' servers (one-click unsubscribe POST) and people | **no** |
+| `/action/…` | people clicking the banner in a forwarded message | no |
+| `/api/…` | the SimpleLogin and addy.io apps and extensions | **no** |
+| `/webhook` | Mailflare | **no** |
+| `/assets/…`, `/favicon.svg` | every page above | no |
+
+Suggested rules (all fit the Free plan: 5 custom rules, 1 rate limiting rule):
+
+1. **Custom rule, Managed Challenge: the sign-in pages.** A browser passes unnoticed; scripts hammering sign-in do not.
+   ```
+   http.request.method eq "GET" and http.request.uri.path in {"/login" "/setup"}
+   ```
+2. **Rate limiting rule: sign-in.** On the Free plan the period and the block are 10 seconds, counted per IP, and the expression may only use the path. For example 20 requests per 10 seconds, then block:
+   ```
+   starts_with(http.request.uri.path, "/login") or starts_with(http.request.uri.path, "/setup")
+   ```
+3. **Custom rule, Block: the app APIs, if you do not use the apps.** Saves Worker requests on a URL nobody should call.
+   ```
+   starts_with(http.request.uri.path, "/api/")
+   ```
+4. **Optional custom rule, Block: the dashboard outside your country.** Replace `TW` with your countries; this also blocks you while travelling or on a VPN elsewhere. The public paths stay open everywhere:
+   ```
+   not ip.src.country in {"TW"}
+   and not starts_with(http.request.uri.path, "/unsubscribe/")
+   and not starts_with(http.request.uri.path, "/action/")
+   and not starts_with(http.request.uri.path, "/api/")
+   and not starts_with(http.request.uri.path, "/assets/")
+   and not http.request.uri.path in {"/webhook" "/favicon.svg"}
+   ```
+
+Keep the Cloudflare Free Managed Ruleset (on by default), **Always Use HTTPS** and a minimum TLS version of 1.2.
+
+**Do not turn on Bot Fight Mode or "I'm Under Attack" mode** for this zone. Bot Fight Mode cannot be skipped by any rule and may challenge non-browser traffic, which here means the apps, mail providers' one-click unsubscribe and the Mailflare webhook. Likewise, never put a challenge on `/unsubscribe/`, `/api/` or `/webhook`: those callers cannot solve one.
+
 ### Environment overrides
 
 These variables or secrets win over the dashboard: `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`, `MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `OUTBOUND_PROVIDER` (`cloudflare`, `resend`, `smtp2go` or `brevo`), `OUTBOUND_API_KEY`, `WORKERS_PLAN` (`free` or `paid`).
