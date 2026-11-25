@@ -537,6 +537,14 @@ export async function importAliases(
 		}
 	}
 	for (let i = 0; i < statements.length; i += 100) await db.batch(statements.slice(i, i + 100));
+	// Contacts brought in with their history count toward when each alias was last used.
+	await db
+		.prepare(
+			`UPDATE aliases SET last_used_at = NULLIF(MAX(COALESCE(last_used_at, 0), COALESCE((SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address), 0)), 0)
+			 WHERE imported_at = ?`,
+		)
+		.bind(timestamp)
+		.run();
 
 	return {
 		found,

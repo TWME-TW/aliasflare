@@ -31,6 +31,8 @@ export type AliasRow = {
 	deleted_at: number | null;
 	created_at: number;
 	updated_at: number;
+	/** When mail last went through the alias, either way. */
+	last_used_at?: number | null;
 	/** History from SimpleLogin or addy.io when the alias was imported (migration 0005). */
 	imported_from: string | null;
 	imported_at: number | null;

@@ -23,6 +23,7 @@ beforeEach(async () => {
 	await db
 		.prepare("INSERT INTO contacts (id, num_id, alias_address, email, reverse_local, last_forward_at, created_at) VALUES ('c1', 1, 'old-busy@me.test', 'x@y.test', 'r1', 2000, 200)")
 		.run();
+	await db.prepare("UPDATE aliases SET last_used_at = 2000 WHERE address = 'old-busy@me.test'").run();
 });
 
 async function dashboard(): Promise<string> {

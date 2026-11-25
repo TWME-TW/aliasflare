@@ -310,6 +310,10 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 
-	await db.prepare("UPDATE contacts SET reply_count = reply_count + 1, last_reply_at = ? WHERE id = ?").bind(now(), contact.id).run();
+	const repliedAt = now();
+	await db.batch([
+		db.prepare("UPDATE contacts SET reply_count = reply_count + 1, last_reply_at = ? WHERE id = ?").bind(repliedAt, contact.id),
+		db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(repliedAt, contact.alias_address),
+	]);
 	await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "sent" });
 }

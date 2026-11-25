@@ -306,6 +306,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 					.prepare("UPDATE forwards SET status = 'sent', forwarded_message_id = ?, trackers_removed = ?, updated_at = ? WHERE id = ?")
 					.bind(ensureAngle(result.messageId) ?? null, body.trackersRemoved, sentAt, forwardId),
 				db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(sentAt, contact.id),
+				db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(sentAt, aliasAddress),
 			]);
 		} catch (error) {
 			console.error("Forwarded, but recording it failed", event.messageId, error instanceof Error ? error.message : error);

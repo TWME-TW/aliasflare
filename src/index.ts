@@ -87,7 +87,13 @@ app.use("*", async (c, next) => {
 	);
 });
 
+/** Static files: they need neither the configuration (a D1 read) nor a language. */
+const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/app.css", "/favicon.svg"]);
+/** A year, for a versioned asset URL; an unversioned one is kept briefly so a deploy shows soon. */
+const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
+
 app.use("*", async (c, next) => {
+	if (STATIC_PATHS.has(c.req.path)) return next();
 	try {
 		c.set("config", await loadConfig(c.env));
 	} catch (error) {
@@ -149,7 +155,7 @@ const jsonError = (c: C, key: MessageKey, status: 400 | 401 | 403 | 409 | 429) =
 app.get("/health", async (c) => c.json({ ok: missingConnection(await loadSettings(c.env.DB)).length === 0 }));
 
 app.get("/assets/passkey.js", (c) => {
-	c.header("Cache-Control", "public, max-age=300");
+	c.header("Cache-Control", assetCache(c));
 	return c.body(PASSKEY_SCRIPT, 200, { "Content-Type": "text/javascript; charset=utf-8" });
 });
 
@@ -159,12 +165,12 @@ app.get("/favicon.svg", (c) => {
 });
 
 app.get("/assets/app.css", (c) => {
-	c.header("Cache-Control", "public, max-age=86400");
+	c.header("Cache-Control", assetCache(c));
 	return c.body(String(STYLE), 200, { "Content-Type": "text/css; charset=utf-8" });
 });
 
 app.get("/assets/app.js", (c) => {
-	c.header("Cache-Control", "public, max-age=300");
+	c.header("Cache-Control", assetCache(c));
 	return c.body(APP_SCRIPT, 200, { "Content-Type": "text/javascript; charset=utf-8" });
 });
 
@@ -356,10 +362,11 @@ app.use("*", async (c, next) => {
 
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
 export type AliasFilter = (typeof ALIAS_FILTERS)[number];
-/** When mail last went through an alias, either way; 0 or NULL if never. */
-const USED_AT = `(SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address)`;
-/** When an alias was created or last used, for "newest or most recently used first". */
-const LAST_USED = `MAX(aliases.created_at, COALESCE(${USED_AT}, 0))`;
+/**
+ * When an alias was created or last used, for "newest or most recently used first". The same
+ * expression as aliases_list_order_idx, so the sort reads that index.
+ */
+const LAST_USED = `MAX(created_at, COALESCE(last_used_at, 0))`;
 
 app.get("/", async (c) => {
 	const db = c.env.DB;
@@ -385,7 +392,7 @@ app.get("/", async (c) => {
 	const [{ results: aliases }, counted] = await Promise.all([
 		db
 			.prepare(
-				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts, ${USED_AT} AS used_at FROM aliases ${clause}
+				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts, last_used_at AS used_at FROM aliases ${clause}
 				 ORDER BY pinned DESC, ${LAST_USED} DESC, num_id DESC LIMIT ? OFFSET ?`,
 			)
 			.bind(...params, perPage, (pageNumber - 1) * perPage)

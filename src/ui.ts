@@ -10,6 +10,7 @@ import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
 import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
+import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -166,12 +167,20 @@ form.note input { width:100%; min-width:12ch; }
 .m0 { margin:0; }
 .mono { font-family:ui-monospace,monospace; }
 `);
-/** Changes whenever the stylesheet does, so browsers fetch the new one after a deploy. */
-export const STYLE_VERSION = (() => {
+/** A short hash of a file's content: its URL changes whenever the file does. */
+function contentVersion(text: string): string {
 	let hash = 0;
-	for (const char of String(STYLE)) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+	for (const char of text) hash = (hash * 31 + char.charCodeAt(0)) | 0;
 	return (hash >>> 0).toString(36);
-})();
+}
+
+/**
+ * Versions in the asset URLs. A versioned URL never changes content, so browsers may keep it
+ * for a year and fetch nothing on later page loads; a deploy that changes a file changes its URL.
+ */
+export const STYLE_VERSION = contentVersion(String(STYLE));
+export const APP_SCRIPT_VERSION = contentVersion(APP_SCRIPT);
+export const PASSKEY_SCRIPT_VERSION = contentVersion(PASSKEY_SCRIPT);
 
 
 /** Lucide icons (ISC license), inlined so the page needs no extra requests. */
@@ -244,8 +253,8 @@ ${link("/", "nav.aliases", "aliases")}${link("/import", "nav.import", "import")}
 <div class="toast" role="status" aria-live="polite" data-toast hidden></div>
 </div>`
 	: html`<header class="topbar">${brand}</header>${body}<footer class="page">${languageMenu(t, options.path)}</footer>`}
-<script src="/assets/app.js"></script>
-${options.script ? html`<script src="/assets/passkey.js"></script>` : ""}
+<script src="/assets/app.js?v=${APP_SCRIPT_VERSION}"></script>
+${options.script ? html`<script src="/assets/passkey.js?v=${PASSKEY_SCRIPT_VERSION}"></script>` : ""}
 </body>
 </html>`;
 }
