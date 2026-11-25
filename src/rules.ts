@@ -259,21 +259,36 @@ function test(match: Match, subject: string, value: string): boolean {
 
 export type RuleMessage = { sender: string; senders?: string[]; envelopeSender?: string | null; spoofed?: boolean; subject: string; alias: string };
 
+const MAX_RULE_SUBJECT_LENGTH = 8192;
+
+type NormalizedMessage = { sender: string; alias: string; subject: string };
+
+function normalizeSubject(subject: string): string {
+	return subject.slice(0, MAX_RULE_SUBJECT_LENGTH).replace(/[\u0000-\u001f\u007f]+/g, " ").trim().toLowerCase();
+}
+
+function normalizeMessage(message: RuleMessage): NormalizedMessage {
+	return {
+		sender: normalizeEmail(message.sender),
+		alias: normalizeEmail(message.alias),
+		subject: normalizeSubject(message.subject),
+	};
+}
+
 /** Whether the message meets the condition: any of its values for a positive match, all of them for a negative one ("is not a or b"). */
-function meets(condition: Condition, message: RuleMessage): boolean {
-	const field =
-		condition.type === "sender"
-			? normalizeEmail(message.sender)
-			: condition.type === "alias"
-				? normalizeEmail(message.alias)
-				: message.subject.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().toLowerCase();
+function meets(condition: Condition, message: NormalizedMessage): boolean {
+	const field = condition.type === "sender" ? message.sender : condition.type === "alias" ? message.alias : message.subject;
 	const negative = condition.match.startsWith("is not") || condition.match.startsWith("does not");
 	return negative ? condition.values.every((value) => test(condition.match, field, value)) : condition.values.some((value) => test(condition.match, field, value));
 }
 
-export function ruleMatches(rule: Rule, message: RuleMessage): boolean {
+function ruleMatchesNormalized(rule: Rule, message: NormalizedMessage): boolean {
 	if (!rule.conditions.length) return false;
 	return rule.operator === "OR" ? rule.conditions.some((c) => meets(c, message)) : rule.conditions.every((c) => meets(c, message));
+}
+
+export function ruleMatches(rule: Rule, message: RuleMessage): boolean {
+	return ruleMatchesNormalized(rule, normalizeMessage(message));
 }
 
 /** The addresses active rules forward to: the owner's mailboxes, so replies from them are the owner's too. */
@@ -298,7 +313,7 @@ export type RuleOutcome = {
  * for every non-spoofed candidate; when the From header is spoofed, it is excluded so a forged
  * From cannot exempt a message from a negative-sender block rule.
  */
-function blockRuleMatches(rule: Rule, message: RuleMessage, candidates: string[], negativeCandidates: string[]): boolean {
+function blockRuleMatches(rule: Rule, message: NormalizedMessage, candidates: string[], negativeCandidates: string[]): boolean {
 	if (!rule.conditions.length) return false;
 	const check = (condition: Condition) => {
 		if (condition.type !== "sender") return meets(condition, message);
@@ -317,18 +332,19 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 		.prepare(`SELECT * FROM rules WHERE active = 1 AND ${kind === "forwards" ? "forwards = 1" : "(replies = 1 OR sends = 1)"} ORDER BY position, created_at`)
 		.all<RuleRow>();
 	const outcome: RuleOutcome = { applied: [] };
-	const candidates = [...new Set([message.sender, ...(message.senders ?? [])].filter(Boolean))];
+	const normalized = normalizeMessage(message);
+	const candidates = [...new Set([message.sender, ...(message.senders ?? [])].filter(Boolean).map(normalizeEmail))];
 	// When From is spoofed (DMARC fail / missing / multiple From), only the envelope sender (if any)
 	// may participate in negative-sender checks so a forged From cannot bypass "does not end with ...".
-	const negativeCandidates = message.spoofed ? (message.envelopeSender ? [message.envelopeSender] : []) : candidates;
+	const negativeCandidates = message.spoofed ? (message.envelopeSender ? [normalizeEmail(message.envelopeSender)] : []) : candidates;
 	for (const rule of results.map(parse)) {
 		const actions = kind === "replies" ? rule.actions.filter((action) => REPLY_ACTIONS.includes(action.type)) : rule.actions;
 		if (!actions.length) continue;
 		const hasBlock = actions.some((action) => action.type === "block");
-		const blockMatched = hasBlock && blockRuleMatches(rule, message, candidates, negativeCandidates);
+		const blockMatched = hasBlock && blockRuleMatches(rule, normalized, candidates, negativeCandidates);
 		// A spoofed From address must not trigger positive sender rules (forwardTo, displayFrom, subject, banner).
 		const hasSenderCondition = rule.conditions.some((condition) => condition.type === "sender");
-		const normalMatched = !(message.spoofed && hasSenderCondition) && ruleMatches(rule, message);
+		const normalMatched = !(message.spoofed && hasSenderCondition) && ruleMatchesNormalized(rule, normalized);
 		if (!blockMatched && !normalMatched) continue;
 		let applied = false;
 		for (const action of actions) {

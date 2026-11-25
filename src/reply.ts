@@ -23,7 +23,7 @@ import { loadSettings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES, LOOP_HEADER } from "./forward";
 import { readLimited } from "./streams";
-import { attachmentSearchText, carriesAddresses, rewriteAttachment, scrubAttachedMessage } from "./attachments";
+import { attachmentSearchText, carriesAddresses, MAX_NESTED_EML_PARSES, rewriteAttachment, scrubAttachedMessage } from "./attachments";
 import { listDestinations } from "./compat/aliases";
 import { ruleForwardAddresses, runRules } from "./rules";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
@@ -138,13 +138,16 @@ const URL_CHAR = /[^\s"'<>]/;
 function stripSignedUrls(body: string): string {
 	let out = "";
 	let done = 0;
+	let scanned = 0;
 	for (const match of body.matchAll(SIGNED_PATH)) {
+		const floor = Math.max(done, scanned);
 		let start = match.index;
-		while (start > done && URL_CHAR.test(body[start - 1]!)) start -= 1;
+		while (start > floor && URL_CHAR.test(body[start - 1]!)) start -= 1;
+		scanned = match.index + match[0].length;
 		const scheme = body.slice(start, match.index).search(/https?:\/\/[^\s"'<>]/i);
 		if (scheme < 0) continue;
 		out += `${body.slice(done, start + scheme)}[link removed]`;
-		done = match.index + match[0].length;
+		done = scanned;
 	}
 	return out + body.slice(done);
 }
@@ -342,6 +345,15 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		raw = null;
 	}
 	if (rules.removeAttachments) email.attachments = [];
+	// An alias Mailflare receives also sends through Mailflare, so the reply is kept in its
+	// mailbox there. Every other alias sends with the provider chosen on the Connection page.
+	const viaMailflare = !!alias.mailbox_id && mailflareReady(config);
+	const limit = viaMailflare ? MAX_ATTACHMENTS : Math.min(MAX_SENDING_ATTACHMENTS, OUTBOUND_ATTACHMENT_LIMITS[config.outboundProvider]);
+	if (email.attachments.length > limit) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `${email.attachments.length} attachments; at most ${limit}` });
+		message.setReject(`Too many attachments: at most ${limit} per message`);
+		return;
+	}
 	// A quoted forward carries the banner with its block / turn-off links; they are the
 	// owner's, so neither the banner nor any signed link may reach the correspondent.
 	let html = email.html ? await removeBanner(stripSignedLinks(email.html)) : undefined;
@@ -353,9 +365,11 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return carriesAddresses(type, filename);
 	});
 	if (settings.reverseAliasReplacement) {
-		const partTexts = await Promise.all(
-			email.attachments.map((attachment, index) => (addressParts[index] ? attachmentSearchText(attachment.content as ArrayBuffer, addressParts[index]!) : "")),
-		);
+		const searchBudget = { remaining: MAX_NESTED_EML_PARSES };
+		const partTexts: string[] = [];
+		for (const [index, attachment] of email.attachments.entries()) {
+			partTexts.push(addressParts[index] ? await attachmentSearchText(attachment.content as ArrayBuffer, addressParts[index]!, 0, searchBudget) : "");
+		}
 		const body = [html ?? "", text ?? "", ...partTexts].join("\n");
 		// mailto: links and HTML bodies may encode "+" as %2B and "@" as %40 / &#64;.
 		const normalizedBody = body.replace(ENCODED_PLUS_PATTERN, "+").replace(ENCODED_AT_PATTERN, "@");
@@ -386,28 +400,21 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	const inReplyTo = threadIds(rawInReplyTo, toOriginal, owners)[0];
 	const references = threadIds(rawReferences, toOriginal, owners).slice(-MAX_REFERENCES);
 
-	// An alias Mailflare receives also sends through Mailflare, so the reply is kept in its
-	// mailbox there. Every other alias sends with the provider chosen on the Connection page.
-	const viaMailflare = !!alias.mailbox_id && mailflareReady(config);
-	const limit = viaMailflare ? MAX_ATTACHMENTS : Math.min(MAX_SENDING_ATTACHMENTS, OUTBOUND_ATTACHMENT_LIMITS[config.outboundProvider]);
-	if (email.attachments.length > limit) {
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `${email.attachments.length} attachments; at most ${limit}` });
-		message.setReject(`Too many attachments: at most ${limit} per message`);
-		return;
-	}
 	const ownSites = new Set(owners.map((owner) => siteOf(domainOf(owner))).filter(Boolean));
-	const files = await Promise.all(
-		email.attachments.map(async (attachment, index) => ({
+	const scrubBudget = { remaining: MAX_NESTED_EML_PARSES };
+	const files = [];
+	for (const [index, attachment] of email.attachments.entries()) {
+		files.push({
 			...cleanAttachment(attachment, index),
 			inline: attachment.disposition === "inline" || !!attachment.related,
 			content:
 				addressParts[index] === "message"
-					? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripSignedLinks, { ownSites, removeBanner })
+					? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripSignedLinks, { ownSites, removeBanner, budget: scrubBudget })
 					: addressParts[index] === "calendar"
 						? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", replacements, { stripLinks: stripSignedLinks })
 						: (attachment.content as ArrayBuffer),
-		})),
-	);
+		});
+	}
 	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, files.map((file) => file.filename));
 	if (refused) {
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: refused });

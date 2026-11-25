@@ -835,7 +835,9 @@ app.post("/connection", async (c) => {
 		if (rawPort && (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535 || parsedPort === 25)) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		if (raw("sesRegion").trim() && !SES_REGION.test(raw("sesRegion").trim().toLowerCase())) return redirectWithNotice(c, "/connection", "notice.badSes");
 		if (raw("mailbabyOrderId").trim() && !options.mailbabyOrderId) return redirectWithNotice(c, "/connection", "notice.badProvider");
-		if (typeof form.customUrl === "string" && options.customUrl) {
+		const effectiveProvider = values.outboundProvider ?? config.outboundProvider;
+		const customSubmitted = (["customUrl", "customHeaders", "customBody", "customIdPath"] as const).some((key) => typeof form[key] === "string");
+		if ((customSubmitted || effectiveProvider === "custom") && options.customUrl) {
 			// The key and messages go to this URL: a public https host, not this Worker or Mailflare.
 			const blocked = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin, config.mailflareUrl, values.mailflareUrl].map(hostnameOf)].filter((h): h is string => !!h);
 			if (!safeHttpsUrl(options.customUrl, blocked)) {
