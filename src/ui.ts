@@ -148,11 +148,21 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 .label-menu-list label:hover { background:var(--hover); }
 @media (max-width: 720px) { .label-menu { flex:1 1 100%; } .label-menu-list { position:static; width:auto; max-width:none; margin-top:6px; box-shadow:none; } }
 .label-picks label { display:inline-flex; align-items:center; gap:6px; font-weight:400; }
-.rule-rows { display:grid; gap:8px; margin:8px 0; }
-.rule-rows .row > * { flex:1; min-width:0; }
-.rule-rows .row > select { flex:0 1 auto; }
-.rule-rows .row { align-items:flex-start; }
-.rule-rows textarea { min-height:38px; resize:vertical; }
+.rule-rows { display:grid; gap:10px; margin:10px 0; counter-reset:rule-row; }
+/* Each condition or action is one card: what to look at and how, side by side, then the values. */
+.rule-row { display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr); gap:8px; align-items:start; padding:10px 12px; border:1px solid var(--line); border-radius:16px; background:var(--bg); transition:opacity .15s; }
+.rule-row.act { grid-template-columns:auto minmax(0,1fr) minmax(0,1.6fr); }
+.rule-row::before { counter-increment:rule-row; content:counter(rule-row); display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; margin-top:9px; border-radius:50%; background:var(--soft); color:var(--muted); font-size:12px; font-weight:600; }
+.rule-row select, .rule-row input, .rule-row textarea { max-width:none; width:100%; }
+.rule-row textarea { min-height:44px; resize:vertical; }
+.rule-row:has(textarea:placeholder-shown), .rule-row.act:has(select[data-act-type] option[value=""]:checked) { opacity:.6; }
+.rule-row:focus-within { opacity:1; border-color:var(--primary); }
+@media (max-width: 720px) {
+	.rule-row { grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); }
+	.rule-row > textarea { grid-column:2 / -1; }
+	.rule-row.act { grid-template-columns:auto minmax(0,1fr); }
+	.rule-row.act > input { grid-column:2; }
+}
 .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
 .alias-cell { display:inline-flex; align-items:center; gap:2px; flex-wrap:wrap; }
 button.copy { min-height:28px; min-width:28px; padding:0 6px; }
@@ -240,6 +250,10 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 .bulk[data-empty] button.primary { opacity:.6; }
 .create { margin:12px 0; padding:14px 16px; border-radius:16px; background:var(--bg); }
 .create h2 { margin:0; }
+/* An address breaks before its @ when it must, not in the middle of a word. */
+code.addr { word-break:normal; overflow-wrap:anywhere; }
+.alias-cell.keep { flex-wrap:nowrap; align-items:flex-start; } .alias-cell.keep code { min-width:0; }
+.stack time { white-space:nowrap; font-size:12px; }
 .create-random { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .create-extra { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); align-items:end; }
 .create-extra label { display:flex; flex-direction:column; gap:6px; margin:0; }
@@ -334,6 +348,12 @@ function icon(name: keyof typeof ICONS): Html {
 const LOGO = raw(`<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa5ff"/><stop offset="1" stop-color="#1a63e0"/></linearGradient></defs><rect x="3" y="7" width="26" height="19" rx="4" fill="url(#lg)"/><path d="M4.5 9.5 16 18l11.5-8.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/><circle cx="25" cy="23" r="6" fill="#fff"/><path d="M27.5 23h-5m2-2.2L22.3 23l2.2 2.2" fill="none" stroke="#1a63e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`);
 
 const COPY_ICON = raw('<svg class="copy-i" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><svg class="check-i" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>');
+
+/** An address in code type that may break before its @ but not inside a word. */
+function addressCode(address: string): Html {
+	const at = address.lastIndexOf("@");
+	return at > 0 ? html`<code class="addr">${address.slice(0, at)}<wbr />${address.slice(at)}</code>` : html`<code class="addr">${address}</code>`;
+}
 
 /** Copies the value to the clipboard. Hidden until the page script shows it, since it needs script. */
 function copyButton(t: Translate, value: string): Html {
@@ -676,7 +696,7 @@ ${aliases.map((alias) => {
 		? html`<span class="muted">${alias.destination || settings.defaultDestination || t("dash.default")}</span>`
 		: html`<form class="inline-save" method="post" action="${base}/destination" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
-<input type="email" name="destination" value="${alias.destination ?? ""}" maxlength="254" placeholder="${settings.defaultDestination || t("dash.default")}" aria-label="${t("dash.colForwardTo")}: ${alias.address}" />
+<input type="email" name="destination" value="${alias.destination ?? ""}" maxlength="254" placeholder="${t("dash.default")}"${settings.defaultDestination ? html` title="${settings.defaultDestination}"` : ""} aria-label="${t("dash.colForwardTo")}: ${alias.address}" />
 <noscript><button>${t("common.save")}</button></noscript></form>`}</td>
 <td class="c-mode" data-label="${t("dash.colMode")}">${isDeleted
 		? html`<span class="muted">${t(`mode.${alias.forward_mode}`)}</span>`
@@ -1167,11 +1187,11 @@ ${contacts.length === 0
 ${contacts.map((contact) => {
 	const reverse = contactReverseAddress(contact);
 	return html`<tr>
-<td data-label="${t("alias.colContact")}"><div class="stack">${contact.name ? html`${contact.name}<br />` : ""}<code>${contact.email}</code>
+<td data-label="${t("alias.colContact")}"><div class="stack">${contact.name ? html`${contact.name}<br />` : ""}${addressCode(contact.email)}
 ${isDeleted
 		? ""
-		: html`<form class="inline row" method="post" action="${base}/contacts/${contact.id}/destination"><input name="destination" type="email" value="${contact.destination ?? ""}" placeholder="${t("alias.contactDestinationDefault")}" aria-label="${t("alias.contactDestination", { email: contact.email })}" autocapitalize="none" spellcheck="false" /><button>${t("common.set")}</button></form>`}</div></td>
-<td data-label="${t("alias.colReverse")}"><span class="alias-cell"><code>${reverse}</code>${copyButton(t, reverse)}</span></td>
+		: html`<form class="inline row" method="post" action="${base}/contacts/${contact.id}/destination"><input name="destination" type="email" value="${contact.destination ?? ""}" placeholder="${alias.destination || defaultDestination || t("alias.contactDestinationDefault")}" aria-label="${t("alias.contactDestination", { email: contact.email })}" autocapitalize="none" spellcheck="false" /><button>${t("common.set")}</button></form>`}</div></td>
+<td data-label="${t("alias.colReverse")}"><span class="alias-cell keep">${addressCode(reverse)}${copyButton(t, reverse)}</span></td>
 <td data-label="${t("alias.colForwarded")}"><div class="stack">${contact.forward_count}<br /><span class="muted">${timeTag(contact.last_forward_at, t.locale)}</span></div></td>
 <td data-label="${t("alias.colReplied")}"><div class="stack">${contact.reply_count}<br /><span class="muted">${timeTag(contact.last_reply_at, t.locale)}</span></div></td>
 ${isDeleted
@@ -1484,7 +1504,7 @@ ${noticeBox(notice)}
 <label for="rule-operator">${t("rules.operator")}</label>
 <select id="rule-operator" name="operator">${(["AND", "OR"] as const).map((op) => html`<option value="${op}" ${(rule?.operator ?? "AND") === op ? "selected" : ""}>${t(`rules.operator.${op}`)}</option>`)}</select>
 <div class="rule-rows">${conditions.map(
-	(condition, i) => html`<div class="row">
+	(condition, i) => html`<div class="rule-row">
 <select name="cond_type_${i}" aria-label="${t("rules.conditions")} ${i + 1}">${CONDITION_TYPES.map((type) => html`<option value="${type}" ${condition?.type === type ? "selected" : ""}>${t(`rules.type.${type}`)}</option>`)}</select>
 <select name="cond_match_${i}" aria-label="${t("rules.matchLabel")} ${i + 1}">${MATCHES.map((match) => html`<option value="${match}" ${(condition?.match ?? "contains") === match ? "selected" : ""}>${t(`rules.match.${match}`)}</option>`)}</select>
 <textarea name="cond_values_${i}" rows="${Math.min(5, Math.max(1, condition?.values.length ?? 1))}" placeholder="${t("rules.valuesPlaceholder")}" aria-label="${t("rules.values")} ${i + 1}">${condition?.values.join("\n") ?? ""}</textarea>
@@ -1494,7 +1514,7 @@ ${noticeBox(notice)}
 <p class="help">${t("rules.actionsHelp")}</p>
 <div class="rule-rows">${actions.map((act, i) => {
 	const needsValue = !!act && act.type !== "block" && act.type !== "removeAttachments" && act.type !== "banner";
-	return html`<div class="row">
+	return html`<div class="rule-row act">
 <select name="act_type_${i}" data-act-type aria-label="${t("rules.actions")} ${i + 1}"><option value="">—</option>${ACTION_TYPES.map((type) => html`<option value="${type}" ${act?.type === type ? "selected" : ""}>${t(`rules.action.${type}`)}</option>`)}</select>
 <input type="text" name="act_value_${i}" data-act-value value="${needsValue ? act.value : ""}" aria-label="${t("rules.value")} ${i + 1}"${act?.type === "forwardTo" ? html` list="rule-destinations"` : ""}${needsValue ? "" : html` hidden disabled`} />
 </div>`;

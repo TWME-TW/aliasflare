@@ -152,7 +152,7 @@ export const APP_SCRIPT = `(() => {
   // forwarding-address suggestions for "forwardTo".
   const NO_VALUE_ACTIONS = new Set(["", "block", "removeAttachments", "banner"]);
   for (const select of document.querySelectorAll("select[data-act-type]")) {
-    const row = select.closest(".row");
+    const row = select.closest(".rule-row");
     const input = row && row.querySelector("[data-act-value]");
     if (!input) continue;
     const syncAction = () => {

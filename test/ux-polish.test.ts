@@ -195,3 +195,39 @@ describe("UX, tactile feel, and visual polish", () => {
 		expect(html).not.toContain('<form method="post"><button class="primary">');
 	});
 });
+
+describe("review follow-ups", () => {
+	const post = (path: string, form: Record<string, string>) =>
+		app.fetch(
+			new Request(`${ORIGIN}${path}`, { method: "POST", headers: { cookie, origin: ORIGIN, "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(form) }),
+			env,
+		);
+	const savedOptions = async () => JSON.parse(((await db.prepare("SELECT value FROM config WHERE key = 'outboundOptions'").first<{ value: string }>())?.value) ?? "{}");
+
+	it("keeps another provider's saved fields when only the chosen provider's fields are sent", async () => {
+		await post("/connection", { outboundProvider: "smtp", smtpHost: "smtp.example.com", smtpPort: "587", smtpSecurity: "starttls", smtpUsername: "me" });
+		expect(await savedOptions()).toMatchObject({ smtpHost: "smtp.example.com", smtpUsername: "me" });
+		// The SMTP fields are disabled once Mailgun is chosen, so only Mailgun's region arrives.
+		await post("/connection", { outboundProvider: "mailgun", mailgunRegion: "eu" });
+		expect(await savedOptions()).toMatchObject({ smtpHost: "smtp.example.com", smtpUsername: "me", mailgunRegion: "eu" });
+	});
+
+	it("groups each rule condition and action in its own card", async () => {
+		const { html } = await getHtml("/rules/new");
+		expect([...html.matchAll(/<div class="rule-row">/g)].length).toBeGreaterThanOrEqual(3);
+		expect([...html.matchAll(/<div class="rule-row act">/g)].length).toBeGreaterThanOrEqual(1);
+		expect(html).not.toContain('<div class="row">\n<select name="cond_type_0"');
+	});
+
+	it("lets addresses break only before the @, and shows where a contact's mail goes", async () => {
+		await db.prepare("INSERT INTO aliases (address, num_id, uid, destination, created_at, updated_at) VALUES ('shop@a.test', 1, 'u1', 'inbox@home.test', 1, 1)").run();
+		await db.prepare("INSERT INTO contacts (id, alias_address, email, reverse_local, created_at) VALUES ('c1', 'shop@a.test', 'bob@store.test', 'r0', 1)").run();
+		const { html } = await getHtml("/aliases/shop%40a.test");
+		expect(html).toContain('<code class="addr">bob<wbr />@store.test</code>');
+		// The reverse alias (reply+r0@r.a.test) breaks the same way.
+		expect(html).toMatch(/<code class="addr">[^<]*r0<wbr \/>@r\.a\.test<\/code>/);
+		expect(html).toContain('placeholder="inbox@home.test"');
+		const list = (await getHtml("/")).html;
+		expect(list).toContain('placeholder="default" title="me@home.test"');
+	});
+});

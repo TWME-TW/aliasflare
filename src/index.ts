@@ -807,27 +807,17 @@ app.post("/connection", async (c) => {
 	const hasOutboundOptions = optionKeys.some((key) => typeof form[key] === "string");
 	if (!fixed.has("outboundOptions") && hasOutboundOptions) {
 		const raw = (name: string) => (typeof form[name] === "string" ? (form[name] as string) : "");
-		const options: OutboundOptions = normalizeOutboundOptions({
-			smtpHost: raw("smtpHost"),
-			smtpPort: raw("smtpPort"),
-			smtpSecurity: raw("smtpSecurity"),
-			smtpUsername: raw("smtpUsername"),
-			mailgunRegion: raw("mailgunRegion"),
-			sesRegion: raw("sesRegion"),
-			sesAccessKeyId: raw("sesAccessKeyId"),
-			mailbabyOrderId: raw("mailbabyOrderId"),
-			customUrl: raw("customUrl"),
-			customHeaders: raw("customHeaders"),
-			customBody: raw("customBody"),
-			customIdPath: raw("customIdPath"),
-		});
+		// Only the chosen provider's fields are sent (the others are disabled): the saved values of the
+		// other providers stay, so switching back later finds them as they were.
+		const submitted = Object.fromEntries(optionKeys.filter((key) => typeof form[key] === "string").map((key) => [key, raw(key)]));
+		const options: OutboundOptions = normalizeOutboundOptions({ ...config.outboundOptions, ...submitted });
 		if (raw("smtpHost").trim() && !options.smtpHost) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		const rawPort = raw("smtpPort").trim();
 		const parsedPort = Number(rawPort);
 		if (rawPort && (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535 || parsedPort === 25)) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		if (raw("sesRegion").trim() && !SES_REGION.test(raw("sesRegion").trim().toLowerCase())) return redirectWithNotice(c, "/connection", "notice.badSes");
 		if (raw("mailbabyOrderId").trim() && !options.mailbabyOrderId) return redirectWithNotice(c, "/connection", "notice.badProvider");
-		if (options.customUrl) {
+		if (typeof form.customUrl === "string" && options.customUrl) {
 			// The key and messages go to this URL: a public https host, not this Worker or Mailflare.
 			const blocked = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin, config.mailflareUrl, values.mailflareUrl].map(hostnameOf)].filter((h): h is string => !!h);
 			if (!safeHttpsUrl(options.customUrl, blocked)) {
