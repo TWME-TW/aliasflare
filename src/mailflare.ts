@@ -5,7 +5,7 @@
  */
 
 import type { AppConfig } from "./config";
-import { hostnameOf } from "./format";
+import { DOMAIN_PATTERN, hostnameOf } from "./format";
 import { redact } from "./outbound";
 import { discard, readLimited, readTextLimited } from "./streams";
 
@@ -77,6 +77,7 @@ export function mailflareConfig(config: AppConfig): MailflareConfig {
 			!host ||
 			host.startsWith("[") ||
 			/^[\d.]+$/.test(host) ||
+			!DOMAIN_PATTERN.test(host) ||
 			INTERNAL_HOST.test(host) ||
 			selfHosts.some((self) => host === self || host.endsWith(`.${self}`))
 		) {

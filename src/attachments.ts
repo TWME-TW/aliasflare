@@ -63,22 +63,32 @@ export function rewriteAttachment(
 	let text = bytesToBinary(new Uint8Array(content));
 	if (kind === "calendar") text = unfoldCalendar(text);
 	else text = unfoldHeaders(text);
-	let out = replacements.length ? replaceAddresses(text, replacements, { encodedPlus: kind === "message" }) : text;
+	let out = replacements.length ? replaceAddresses(text, replacements, { encodedPlus: true }) : text;
 	if (options.stripLinks) out = options.stripLinks(out);
 	return out === text && kind === "message" ? content : binaryToBytes(out);
 }
 
 const MAX_EML_DEPTH = 5;
+export const MAX_NESTED_EML_PARSES = 16;
+export const MAX_NESTED_ATTACHMENTS = 32;
+
+export type EmlParseBudget = { remaining: number };
 
 /**
  * Extracts searchable plain text from a calendar or message attachment so reverse aliases inside
  * folded `.ics` lines, RFC 2047 headers, filenames, or nested `.eml` parts are discovered before rewriting.
  */
-export async function attachmentSearchText(content: ArrayBuffer, kind: "calendar" | "message", depth = 0): Promise<string> {
+export async function attachmentSearchText(
+	content: ArrayBuffer,
+	kind: "calendar" | "message",
+	depth = 0,
+	budget: EmlParseBudget = { remaining: MAX_NESTED_EML_PARSES },
+): Promise<string> {
 	const raw = new TextDecoder("latin1").decode(content);
 	if (kind === "calendar") return unfoldCalendar(raw);
 	const unfolded = unfoldHeaders(raw);
-	if (depth >= MAX_EML_DEPTH) return unfolded;
+	if (depth >= MAX_EML_DEPTH || budget.remaining <= 0) return unfolded;
+	budget.remaining -= 1;
 	try {
 		const parsed = await PostalMime.parse(content, { attachmentEncoding: "arraybuffer" });
 		const headerParts = [
@@ -92,14 +102,13 @@ export async function attachmentSearchText(content: ArrayBuffer, kind: "calendar
 			parsed.inReplyTo ?? "",
 			parsed.references ?? "",
 		];
-		const nested = await Promise.all(
-			parsed.attachments.map(async (attachment, index) => {
-				const { filename, type, contentId } = cleanAttachment(attachment, index);
-				const nestedKind = carriesAddresses(type, filename);
-				const body = nestedKind ? await attachmentSearchText(attachment.content as ArrayBuffer, nestedKind, depth + 1) : "";
-				return [filename, contentId ?? "", body].join("\n");
-			}),
-		);
+		const nested: string[] = [];
+		for (const [index, attachment] of parsed.attachments.slice(0, MAX_NESTED_ATTACHMENTS).entries()) {
+			const { filename, type, contentId } = cleanAttachment(attachment, index);
+			const nestedKind = carriesAddresses(type, filename);
+			const body = nestedKind ? await attachmentSearchText(attachment.content as ArrayBuffer, nestedKind, depth + 1, budget) : "";
+			nested.push([filename, contentId ?? "", body].join("\n"));
+		}
 		return [unfolded, ...headerParts, parsed.html ?? "", parsed.text ?? "", ...nested].join("\n");
 	} catch {
 		return unfolded;
@@ -137,6 +146,7 @@ export type ScrubMessageOptions = {
 	ownSites?: Set<string>;
 	removeBanner?: (html: string) => Promise<string>;
 	depth?: number;
+	budget?: EmlParseBudget;
 };
 
 /**
@@ -152,12 +162,17 @@ export async function scrubAttachedMessage(
 	options: ScrubMessageOptions = {},
 ): Promise<ArrayBuffer> {
 	const depth = options.depth ?? 0;
-	if (depth >= MAX_EML_DEPTH) {
+	const budget = options.budget ?? { remaining: MAX_NESTED_EML_PARSES };
+	if (depth >= MAX_EML_DEPTH || budget.remaining <= 0) {
 		return stubMessage("Nested attached message removed for privacy.");
 	}
+	budget.remaining -= 1;
 	const ownSites = options.ownSites ?? new Set<string>();
 	try {
 		const parsed = await PostalMime.parse(content, { attachmentEncoding: "arraybuffer" });
+		if (parsed.attachments.length > MAX_NESTED_ATTACHMENTS) {
+			return stubMessage("Attached message has too many attachments and was removed for privacy.");
+		}
 		const scrub = (value: string) => {
 			let out = stripLinks(value);
 			if (replacements.length) out = replaceAddresses(out, replacements, { encodedPlus: true });
@@ -181,33 +196,32 @@ export async function scrubAttachedMessage(
 		let html = parsed.html ? scrub(parsed.html) : undefined;
 		if (html && options.removeBanner) html = await options.removeBanner(html);
 		const text = parsed.text ? scrub(parsed.text) : undefined;
-		const attachments = await Promise.all(
-			parsed.attachments.map(async (attachment, index) => {
-				const cleaned = cleanAttachment(attachment, index);
-				const nestedKind = carriesAddresses(cleaned.type, cleaned.filename);
-				const scrubbedFilename = cleanAttachment({ filename: scrub(cleaned.filename), mimeType: cleaned.type }, index).filename;
-				let scrubbedCid = cleaned.contentId ? scrub(cleaned.contentId) : undefined;
-				if (scrubbedCid) {
-					const cidDomain = scrubbedCid.split("@").pop() ?? "";
-					if (cidDomain.includes(".") && ownSites.has(siteOf(cidDomain))) {
-						scrubbedCid = `${crypto.randomUUID()}@invalid`;
-					}
+		const attachments = [];
+		for (const [index, attachment] of parsed.attachments.entries()) {
+			const cleaned = cleanAttachment(attachment, index);
+			const nestedKind = carriesAddresses(cleaned.type, cleaned.filename);
+			const scrubbedFilename = cleanAttachment({ filename: scrub(cleaned.filename), mimeType: cleaned.type }, index).filename;
+			let scrubbedCid = cleaned.contentId ? scrub(cleaned.contentId) : undefined;
+			if (scrubbedCid) {
+				const cidDomain = scrubbedCid.split("@").pop() ?? "";
+				if (cidDomain.includes(".") && ownSites.has(siteOf(cidDomain))) {
+					scrubbedCid = `${crypto.randomUUID()}@invalid`;
 				}
-				const data =
-					nestedKind === "message"
-						? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripLinks, { ...options, depth: depth + 1 })
-						: nestedKind === "calendar"
-							? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", replacements, { stripLinks })
-							: (attachment.content as ArrayBuffer);
-				return {
-					disposition: (attachment.disposition === "inline" || !!attachment.related) && scrubbedCid ? ("inline" as const) : ("attachment" as const),
-					...(scrubbedCid ? { contentId: scrubbedCid } : {}),
-					filename: scrubbedFilename,
-					type: cleaned.type,
-					content: data,
-				};
-			}),
-		);
+			}
+			const data =
+				nestedKind === "message"
+					? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripLinks, { ...options, depth: depth + 1, budget })
+					: nestedKind === "calendar"
+						? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", replacements, { stripLinks })
+						: (attachment.content as ArrayBuffer);
+			attachments.push({
+				disposition: (attachment.disposition === "inline" || !!attachment.related) && scrubbedCid ? ("inline" as const) : ("attachment" as const),
+				...(scrubbedCid ? { contentId: scrubbedCid } : {}),
+				filename: scrubbedFilename,
+				type: cleaned.type,
+				content: data,
+			});
+		}
 		const rebuilt = buildMime(
 			{
 				from: fromName ? { name: fromName, email: fromEmail } : fromEmail,
