@@ -491,7 +491,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "ルールはまだありません。",
 	"rules.name": "名前",
 	"rules.conditions": "条件",
-	"rules.conditionsHelp": "値が空の行は無視されます。複数の値はカンマで区切ってください。どれか 1 つに一致すればよく（「is not」「does not」の場合は、どれにも一致しないこと）。",
+	"rules.conditionsHelp": "値が空の行は無視されます。複数の値は別々の行に書いてください。どれか 1 つに一致すればよく（「と一致しない」「を含まない」の場合は、どれにも一致しないこと）。",
 	"rules.operator": "メールは",
 	"rules.operator.AND": "すべての条件に一致する必要があります",
 	"rules.operator.OR": "いずれかの条件に一致する必要があります",
@@ -500,7 +500,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "一致",
 	"rules.values": "値",
 	"rules.value": "値",
-	"rules.valuesPlaceholder": "値, 別の値",
+	"rules.valuesPlaceholder": "1 行に 1 つの値",
 	"rules.type.sender": "差出人",
 	"rules.type.subject": "件名",
 	"rules.type.alias": "エイリアス",
@@ -522,7 +522,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "バナーを非表示",
 	"rules.applyTo": "適用先",
 	"rules.forwards": "転送されるメール",
-	"rules.forwardsHelp": "エイリアスに届いたメール。無料プランでそのまま転送されるメッセージは、ブロックするか、別の宛先へ転送することしかできません。",
+	"rules.forwardsHelp": "エイリアスに届いたメール。変更なしで転送されるメール（受信のみの転送、または無料プランで書き換えるには大きすぎるメッセージ）は、ブロックするか別の宛先へ転送することしかできません。送信者の DMARC が不合格の場合はバナーが残ります。",
 	"rules.replies": "返信と新規メッセージ",
 	"rules.repliesHelp": "リバースエイリアス経由で送信するメール。ここでは差出人は送信先の相手を指し、ブロック、件名の置き換え、添付ファイルの削除のみが適用されます。",
 	"rules.active": "オン",
@@ -539,7 +539,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "ルールには、名前、値のある条件が 1 つ以上、アクションが 1 つ以上必要です。",
 	"notice.ruleLimit": "ルールはすでに {max} 個あります。",
 	"notice.ruleMissing": "そのルールはもうありません。",
-	"notice.ruleForwardTo": "転送先アドレスが無効か、エイリアス用ドメイン上にあります。",
+	"notice.ruleForwardTo": "次に転送のアドレスは、転送先アドレス（エイリアスのものまたは既定のもの）のいずれかである必要があります。",
+	"notice.ruleUnsupported": "条件またはアクションがサポートされていないか、数が多すぎます。条件は最大 {conditions} 個、1 つの条件内の値は最大 {values} 個、値は最大 {length} 文字です。",
 };
 
 export default dictionary;

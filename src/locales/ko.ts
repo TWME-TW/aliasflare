@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "아직 규칙이 없습니다.",
 	"rules.name": "이름",
 	"rules.conditions": "조건",
-	"rules.conditionsHelp": "값이 없는 행은 제외됩니다. 여러 값은 쉼표로 구분하세요. 값 중 하나만 일치해도 됩니다. “is not”과 “does not”의 경우에는 어떤 값도 일치하지 않아야 합니다.",
+	"rules.conditionsHelp": "값이 없는 행은 제외됩니다. 여러 값은 각각 다른 줄에 입력하세요. 값 중 하나만 일치해도 됩니다. “불일치”와 “미포함”의 경우에는 어떤 값도 일치하지 않아야 합니다.",
 	"rules.operator": "메일이 다음과 일치해야 함",
 	"rules.operator.AND": "모든 조건",
 	"rules.operator.OR": "어느 한 조건",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "일치",
 	"rules.values": "값",
 	"rules.value": "값",
-	"rules.valuesPlaceholder": "값, 다른 값",
+	"rules.valuesPlaceholder": "한 줄에 값 하나",
 	"rules.type.sender": "보낸 사람",
 	"rules.type.subject": "제목",
 	"rules.type.alias": "별칭",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "배너 숨기기",
 	"rules.applyTo": "적용 대상",
 	"rules.forwards": "전달된 메일",
-	"rules.forwardsHelp": "별칭으로 도착한 메일입니다. 무료 요금제가 변경 없이 전달하는 메시지는 차단하거나 다른 곳으로만 전달할 수 있습니다.",
+	"rules.forwardsHelp": "별칭으로 도착한 메일입니다. 변경 없이 전달된 메일(수신 전용 전달, 또는 무료 요금제가 다시 작성하기에 너무 큰 메시지)은 차단하거나 다른 곳으로만 전달할 수 있습니다. 발신자가 DMARC에 실패하면 배너가 유지됩니다.",
 	"rules.replies": "답장 및 새 메시지",
 	"rules.repliesHelp": "역방향 별칭을 통해 보내는 메일입니다. 여기서 보낸 사람은 메일을 받는 상대방이며, 차단, 제목 바꾸기, 첨부 파일 제거만 적용됩니다.",
 	"rules.active": "켜짐",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "규칙에는 이름, 값이 있는 조건 하나 이상, 동작 하나 이상이 필요합니다.",
 	"notice.ruleLimit": "규칙이 이미 {max}개 있습니다.",
 	"notice.ruleMissing": "해당 규칙은 더 이상 존재하지 않습니다.",
-	"notice.ruleForwardTo": "전달 주소가 올바르지 않거나 별칭 도메인에 있습니다.",
+	"notice.ruleForwardTo": "다음으로 전달의 주소는 전달 주소(별칭의 주소 또는 기본 주소) 중 하나여야 합니다.",
+	"notice.ruleUnsupported": "조건 또는 동작이 지원되지 않거나 너무 많습니다: 조건은 최대 {conditions}개, 조건당 값은 최대 {values}개, 값은 최대 {length}자까지 가능합니다.",
 };
 
 export default dictionary;

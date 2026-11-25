@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Belum ada aturan.",
 	"rules.name": "Nama",
 	"rules.conditions": "Kondisi",
-	"rules.conditionsHelp": "Baris tanpa nilai diabaikan. Pisahkan beberapa nilai dengan koma: salah satunya boleh cocok (untuk “is not” dan “does not”, tidak boleh ada yang cocok).",
+	"rules.conditionsHelp": "Baris tanpa nilai diabaikan. Tulis beberapa nilai di baris terpisah: salah satunya boleh cocok (untuk “tidak sama dengan” dan “tidak berisi”, tidak boleh ada yang cocok).",
 	"rules.operator": "Email harus cocok dengan",
 	"rules.operator.AND": "semua kondisi",
 	"rules.operator.OR": "salah satu kondisi",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Cocok",
 	"rules.values": "Nilai",
 	"rules.value": "Nilai",
-	"rules.valuesPlaceholder": "nilai, nilai lain",
+	"rules.valuesPlaceholder": "Satu nilai per baris",
 	"rules.type.sender": "Pengirim",
 	"rules.type.subject": "Subjek",
 	"rules.type.alias": "Alias",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Sembunyikan banner",
 	"rules.applyTo": "Terapkan ke",
 	"rules.forwards": "Email yang diteruskan",
-	"rules.forwardsHelp": "Email yang masuk ke alias. Pesan yang diteruskan paket Gratis tanpa perubahan hanya bisa diblokir atau diteruskan ke tempat lain.",
+	"rules.forwardsHelp": "Email yang masuk ke alias. Email yang diteruskan tanpa perubahan (penerusan khusus terima, atau pesan yang terlalu besar untuk ditulis ulang paket Gratis) hanya bisa diblokir atau diteruskan ke tempat lain. Banner tetap ada saat pengirim gagal DMARC.",
 	"rules.replies": "Balasan dan pesan baru",
 	"rules.repliesHelp": "Email yang Anda kirim melalui alias balik. Di sini pengirim adalah kontak yang menerimanya, dan hanya Blokir, Ganti subjek, dan Hapus lampiran yang berlaku.",
 	"rules.active": "Aktif",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Aturan memerlukan nama, minimal satu kondisi dengan nilai, dan minimal satu tindakan.",
 	"notice.ruleLimit": "Sudah ada {max} aturan.",
 	"notice.ruleMissing": "Aturan itu sudah tidak ada.",
-	"notice.ruleForwardTo": "Alamat Teruskan ke tidak valid, atau berada di domain alias.",
+	"notice.ruleForwardTo": "Teruskan ke harus berupa salah satu alamat penerusan Anda (milik alias atau alamat default).",
+	"notice.ruleUnsupported": "Suatu kondisi atau tindakan tidak didukung, atau terlalu banyak: paling banyak {conditions} kondisi, {values} nilai dalam satu kondisi, dan {length} karakter dalam satu nilai.",
 };
 
 export default dictionary;

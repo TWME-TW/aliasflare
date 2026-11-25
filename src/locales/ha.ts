@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Babu dokoki tukuna.",
 	"rules.name": "Suna",
 	"rules.conditions": "Sharuɗɗa",
-	"rules.conditionsHelp": "Layin da babu ƙima a cikinsa ana barinsa. Raba ƙimomi da yawa da waƙafi: kowannensu zai iya dacewa (ga “is not” da “does not”, babu ɗaya da zai dace).",
+	"rules.conditionsHelp": "Layin da babu ƙima a cikinsa ana barinsa. Saka ƙimomi da yawa a layuka daban: kowannensu zai iya dacewa (ga “ba daidai da ba” da “ba ya ƙunshi”, babu ɗaya da zai dace).",
 	"rules.operator": "Saƙo dole ne ya dace da",
 	"rules.operator.AND": "duk sharuɗɗa",
 	"rules.operator.OR": "kowane sharaɗi",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Dacewa",
 	"rules.values": "Ƙimomi",
 	"rules.value": "Ƙima",
-	"rules.valuesPlaceholder": "ƙima, wata ƙima",
+	"rules.valuesPlaceholder": "Ƙima ɗaya a kowane layi",
 	"rules.type.sender": "Mai aikawa",
 	"rules.type.subject": "Batu",
 	"rules.type.alias": "Laƙabi",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Ɓoye banner",
 	"rules.applyTo": "Aiwatar a kan",
 	"rules.forwards": "Saƙonnin da aka tura",
-	"rules.forwardsHelp": "Saƙon da ke shiga laƙabi. Saƙon da tsarin Kyauta ke wucewa ba tare da canji ba za a iya toshe shi ko tura shi wani wuri kawai.",
+	"rules.forwardsHelp": "Saƙon da ke shiga laƙabi. Saƙon da aka tura ba tare da canji ba (tura karɓa kawai, ko saƙon da ya yi girma da Tsarin Kyauta ba zai iya sake rubuta shi ba) za a iya toshe shi ko tura shi wani wuri kawai. Banner zai tsaya idan mai aika ya kasa DMARC.",
 	"rules.replies": "Amsoshi da sababbin saƙonni",
 	"rules.repliesHelp": "Saƙonnin da kake aikawa ta laƙabin juyawa. Anan mai aikawa shi ne wanda saƙon ya tafi gare shi, kuma Toshe, Maye gurbin batu da Cire haɗe-haɗe ne kawai ke aiki.",
 	"rules.active": "A kunne",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Doka tana buƙatar suna, aƙalla sharadi ɗaya mai ƙima, da aƙalla aiki ɗaya.",
 	"notice.ruleLimit": "An riga an sami dokoki {max}.",
 	"notice.ruleMissing": "Wannan doka ba ta wanzu yanzu ba.",
-	"notice.ruleForwardTo": "Adireshin Tura zuwa ba shi da inganci, ko yana kan domain ɗin laƙabi.",
+	"notice.ruleForwardTo": "Tura zuwa dole ne ya zama ɗaya daga cikin adiresoshin turawarku (na laƙabi ko na tsoho).",
+	"notice.ruleUnsupported": "Sharadi ko aiki ba a tallafa masa ba, ko sun yi yawa: a mafi yawa {conditions} sharuɗɗa, {values} ƙima a cikin sharadi ɗaya, da {length} haruffa a cikin ƙima ɗaya.",
 };
 
 export default dictionary;

@@ -491,7 +491,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "还没有规则。",
 	"rules.name": "名称",
 	"rules.conditions": "条件",
-	"rules.conditionsHelp": "没有值的行会被忽略。多个值用逗号分隔：任一值匹配即可（对于“不是”和“不包含”，则必须都不匹配）。",
+	"rules.conditionsHelp": "没有值的行会被忽略。多个值请分行填写：任一值匹配即可（对于“不是”和“不包含”，则必须都不匹配）。",
 	"rules.operator": "邮件必须匹配",
 	"rules.operator.AND": "所有条件",
 	"rules.operator.OR": "任一条件",
@@ -500,7 +500,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "匹配",
 	"rules.values": "值",
 	"rules.value": "值",
-	"rules.valuesPlaceholder": "值，另一个值",
+	"rules.valuesPlaceholder": "每行一个值",
 	"rules.type.sender": "发件人",
 	"rules.type.subject": "主题",
 	"rules.type.alias": "别名",
@@ -522,7 +522,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "隐藏横幅",
 	"rules.applyTo": "适用于",
 	"rules.forwards": "转发的邮件",
-	"rules.forwardsHelp": "发往别名的邮件。免费套餐原样转发的邮件只能被拦截或转发到其他地方。",
+	"rules.forwardsHelp": "发往别名的邮件。原样转发的邮件（仅接收的转发，或因过大而免费套餐无法改写的邮件）只能被拦截或转发到其他地方。发件人未通过 DMARC 时仍会显示横幅。",
 	"rules.replies": "回复和新邮件",
 	"rules.repliesHelp": "通过反向别名发出的邮件。此处的发件人是收件对象，仅适用拦截、替换主题和移除附件。",
 	"rules.active": "开",
@@ -539,7 +539,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "规则需要名称、至少一个带值的条件和至少一个操作。",
 	"notice.ruleLimit": "已有 {max} 条规则。",
 	"notice.ruleMissing": "该规则已不存在。",
-	"notice.ruleForwardTo": "“转发到”地址无效，或位于别名域名上。",
+	"notice.ruleForwardTo": "“转发到”地址必须是你的转发地址之一（别名的或默认的）。",
+	"notice.ruleUnsupported": "条件或操作不受支持，或数量过多：最多 {conditions} 个条件，每个条件最多 {values} 个值，每个值最多 {length} 个字符。",
 };
 
 export default dictionary;

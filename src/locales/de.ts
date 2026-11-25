@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Noch keine Regeln.",
 	"rules.name": "Name",
 	"rules.conditions": "Bedingungen",
-	"rules.conditionsHelp": "Eine Zeile ohne Werte wird ausgelassen. Trenne mehrere Werte mit Kommas: Jeder davon kann zutreffen (bei „ist nicht“ und „enthält nicht“ darf keiner zutreffen).",
+	"rules.conditionsHelp": "Eine Zeile ohne Werte wird ausgelassen. Trage mehrere Werte in eigenen Zeilen ein: Jeder davon kann zutreffen (bei „ist nicht“ und „enthält nicht“ darf keiner zutreffen).",
 	"rules.operator": "Mail muss",
 	"rules.operator.AND": "alle Bedingungen erfüllen",
 	"rules.operator.OR": "eine beliebige Bedingung erfüllen",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Prüfen",
 	"rules.values": "Werte",
 	"rules.value": "Wert",
-	"rules.valuesPlaceholder": "Wert, anderer Wert",
+	"rules.valuesPlaceholder": "Ein Wert pro Zeile",
 	"rules.type.sender": "Absender",
 	"rules.type.subject": "Betreff",
 	"rules.type.alias": "Alias",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Banner ausblenden",
 	"rules.applyTo": "Anwenden auf",
 	"rules.forwards": "Weitergeleitete Mails",
-	"rules.forwardsHelp": "Mails, die an einem Alias eingehen. Eine Nachricht, die der kostenlose Tarif unverändert weitergibt, kann nur blockiert oder anderswohin weitergeleitet werden.",
+	"rules.forwardsHelp": "Mails, die an einem Alias eingehen. Unverändert weitergegebene Mails (nur Empfang oder eine Nachricht, die der kostenlose Tarif wegen ihrer Größe nicht umschreiben kann) können nur blockiert oder anderswohin weitergeleitet werden. Der Banner bleibt, wenn der Absender DMARC nicht bestanden hat.",
 	"rules.replies": "Antworten und neue Nachrichten",
 	"rules.repliesHelp": "Mails, die du über einen Reverse-Alias sendest. Hier ist der Absender der Kontakt, an den sie gehen; es gelten nur Blockieren, Betreff ersetzen und Anhänge entfernen.",
 	"rules.active": "An",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Eine Regel braucht einen Namen, mindestens eine Bedingung mit Wert und mindestens eine Aktion.",
 	"notice.ruleLimit": "Es gibt bereits {max} Regeln.",
 	"notice.ruleMissing": "Diese Regel existiert nicht mehr.",
-	"notice.ruleForwardTo": "Die Weiterleitungsadresse ist ungültig oder liegt auf einer Alias-Domain.",
+	"notice.ruleForwardTo": "Weiterleiten an muss eine deiner Weiterleitungsadressen sein (die eines Alias oder die Standardadresse).",
+	"notice.ruleUnsupported": "Eine Bedingung oder Aktion wird nicht unterstützt, oder es gibt zu viele davon: höchstens {conditions} Bedingungen, {values} Werte in einer Bedingung und {length} Zeichen in einem Wert.",
 };
 
 export default dictionary;

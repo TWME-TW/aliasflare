@@ -77,7 +77,8 @@ export function normalizeOutboundOptions(raw: unknown): OutboundOptions {
 		mailgunRegion: value.mailgunRegion === "eu" ? "eu" : "us",
 		sesRegion: SES_REGION.test(region) ? region : DEFAULT_OUTBOUND_OPTIONS.sesRegion,
 		sesAccessKeyId: (str("sesAccessKeyId", 128) ?? "").replace(/[^A-Z0-9]/g, ""),
-		mailbabyOrderId: /^\d{1,18}$/.test(str("mailbabyOrderId", 18) ?? "") ? (str("mailbabyOrderId", 18) as string) : "",
+		// Checked whole (not cut first), and short enough to stay exact as a JSON number.
+		mailbabyOrderId: typeof value.mailbabyOrderId === "string" && /^\d{1,15}$/.test(value.mailbabyOrderId.trim()) ? value.mailbabyOrderId.trim() : "",
 		customUrl: str("customUrl", 2000) ?? "",
 		customHeaders: str("customHeaders", 4000) ?? DEFAULT_OUTBOUND_OPTIONS.customHeaders,
 		customBody: str("customBody", 20_000) ?? DEFAULT_OUTBOUND_OPTIONS.customBody,
@@ -130,6 +131,11 @@ async function post(url: string, headers: Record<string, string>, body: unknown,
 	return request(url, { "Content-Type": "application/json", Accept: "application/json", ...headers }, JSON.stringify(body), secret);
 }
 
+/** Text from a provider's answer, without the key in case the provider echoes it. */
+function redact(text: string, secret: string): string {
+	return secret.length >= 6 ? text.replaceAll(secret, "[redacted]") : text;
+}
+
 /** POSTs a body as it is; a status of 300 or more is an error, with the start of the answer. */
 async function request(url: string, headers: Record<string, string>, body: string | FormData, secret = ""): Promise<{ status: number; json: unknown }> {
 	const response = await fetch(url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers, body });
@@ -141,8 +147,7 @@ async function request(url: string, headers: Record<string, string>, body: strin
 		// Reported with the status below.
 	}
 	if (response.status >= 300) {
-		const safeText = secret.length >= 6 ? text.replaceAll(secret, "[redacted]") : text;
-		throw new OutboundError(`${new URL(url).hostname} answered ${response.status}: ${safeText.slice(0, 300)}`);
+		throw new OutboundError(`${new URL(url).hostname} answered ${response.status}: ${redact(text, secret).slice(0, 300)}`);
 	}
 	return { status: response.status, json };
 }
@@ -200,7 +205,7 @@ async function viaSmtp2go(apiKey: string, message: OutboundMessage): Promise<str
 	// SMTP2GO answers 200 even when the message was refused; the counts say what happened.
 	const data = (json as { data?: { succeeded?: number; failed?: number; failures?: unknown; email_id?: unknown } } | null)?.data;
 	if (!data || (data.failed ?? 0) > 0 || (data.succeeded ?? 0) < 1) {
-		throw new OutboundError(`SMTP2GO did not send the message: ${JSON.stringify(data?.failures ?? json).slice(0, 300)}`);
+		throw new OutboundError(`SMTP2GO did not send the message: ${redact(JSON.stringify(data?.failures ?? json), apiKey).slice(0, 300)}`);
 	}
 	return typeof data.email_id === "string" ? data.email_id : undefined;
 }
@@ -264,7 +269,7 @@ async function viaPostmark(apiKey: string, message: OutboundMessage): Promise<st
 		apiKey,
 	);
 	const id = (json as { MessageID?: unknown; ErrorCode?: unknown } | null)?.MessageID;
-	if ((json as { ErrorCode?: unknown } | null)?.ErrorCode) throw new OutboundError(`Postmark did not send the message: ${JSON.stringify(json).slice(0, 300)}`);
+	if ((json as { ErrorCode?: unknown } | null)?.ErrorCode) throw new OutboundError(`Postmark did not send the message: ${redact(JSON.stringify(json), apiKey).slice(0, 300)}`);
 	return typeof id === "string" ? id : undefined;
 }
 
@@ -343,7 +348,7 @@ async function viaMailbaby(apiKey: string, options: OutboundOptions, message: Ou
 		apiKey,
 	);
 	const answer = json as { status?: unknown; text?: unknown; message?: unknown } | null;
-	if (answer?.status !== "ok") throw new OutboundError(`Mail.baby did not send the message: ${JSON.stringify(json).slice(0, 300)}`);
+	if (answer?.status !== "ok") throw new OutboundError(`Mail.baby did not send the message: ${redact(JSON.stringify(json), apiKey).slice(0, 300)}`);
 	return messageId;
 }
 

@@ -24,7 +24,7 @@ import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES } from "./forward";
 import { readLimited } from "./streams";
 import { carriesAddresses, rewriteAttachment } from "./attachments";
-import { runRules } from "./rules";
+import { ruleForwardAddresses, runRules } from "./rules";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
 
 /** Mailflare's limit per message. */
@@ -233,7 +233,10 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	}
 	const settings = await loadSettings(db);
 	// The owner writes from the alias's address, or from the one this sender's mail goes to.
-	const owners = [...new Set([alias.destination || settings.defaultDestination, contact.destination].filter((value): value is string => !!value))];
+	// A rule may forward the alias's mail to another of the owner's mailboxes, so they count too.
+	const owners = [
+		...new Set([alias.destination || settings.defaultDestination, contact.destination, ...(await ruleForwardAddresses(db))].filter((value): value is string => !!value)),
+	];
 
 	// A reply always has to be rewritten (it goes out as the alias), so on the Free plan, with
 	// 10 ms of CPU, a large one is refused with a clear reason rather than cut off midway.

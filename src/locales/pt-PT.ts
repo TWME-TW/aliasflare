@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Ainda não há regras.",
 	"rules.name": "Nome",
 	"rules.conditions": "Condições",
-	"rules.conditionsHelp": "Uma linha sem valores é ignorada. Separe vários valores com vírgulas: pode corresponder qualquer um deles (para “is not” e “does not”, nenhum pode corresponder).",
+	"rules.conditionsHelp": "Uma linha sem valores é ignorada. Escreva vários valores em linhas separadas: pode corresponder qualquer um deles (para “não é” e “não contém”, nenhum pode corresponder).",
 	"rules.operator": "O correio tem de corresponder a",
 	"rules.operator.AND": "todas as condições",
 	"rules.operator.OR": "qualquer condição",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Corresponder",
 	"rules.values": "Valores",
 	"rules.value": "Valor",
-	"rules.valuesPlaceholder": "valor, outro valor",
+	"rules.valuesPlaceholder": "Um valor por linha",
 	"rules.type.sender": "Remetente",
 	"rules.type.subject": "Assunto",
 	"rules.type.alias": "Alias",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Ocultar o banner",
 	"rules.applyTo": "Aplicar a",
 	"rules.forwards": "Correio reencaminhado",
-	"rules.forwardsHelp": "Correio que chega a um alias. Uma mensagem que o plano Free reencaminha sem alterações só pode ser bloqueada ou reencaminhada para outro endereço.",
+	"rules.forwardsHelp": "Correio que chega a um alias. Correio reencaminhado sem alterações (reencaminhamento apenas de receção, ou uma mensagem demasiado grande para o plano Free reescrever) só pode ser bloqueado ou reencaminhado para outro destino. O banner mantém-se quando o remetente falhou o DMARC.",
 	"rules.replies": "Respostas e novas mensagens",
 	"rules.repliesHelp": "Correio que envia através de um alias inverso. Aqui o remetente é o contacto para quem segue, e só se aplicam Bloquear, Substituir o assunto e Remover anexos.",
 	"rules.active": "Ativa",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Uma regra precisa de um nome, de pelo menos uma condição com valor e de pelo menos uma ação.",
 	"notice.ruleLimit": "Já existem {max} regras.",
 	"notice.ruleMissing": "Essa regra já não existe.",
-	"notice.ruleForwardTo": "O endereço de reencaminhamento não é válido ou está num domínio de alias.",
+	"notice.ruleForwardTo": "Reencaminhar para tem de ser um dos seus endereços de reencaminhamento (de um alias ou o predefinido).",
+	"notice.ruleUnsupported": "Uma condição ou ação não é suportada, ou há demasiadas: no máximo {conditions} condições, {values} valores numa condição e {length} carateres num valor.",
 };
 
 export default dictionary;

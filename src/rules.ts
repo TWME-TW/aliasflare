@@ -50,38 +50,44 @@ export type RuleInput = {
 };
 
 export const MAX_RULES = 50;
-const MAX_CONDITIONS = 10;
+export const MAX_CONDITIONS = 10;
 const MAX_ACTIONS = 10;
-const MAX_VALUES = 20;
-const MAX_VALUE_LENGTH = 200;
+export const MAX_VALUES = 20;
+export const MAX_VALUE_LENGTH = 200;
 export const MAX_RULE_NAME = 60;
 
 export class RuleError extends Error {
-	constructor(readonly reason: "invalid" | "limit" | "missing" | "forwardTo") {
+	constructor(readonly reason: "invalid" | "limit" | "missing" | "forwardTo" | "unsupported") {
 		super(reason);
 	}
 }
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, max) : "");
 
+/**
+ * A condition as given, or null when it has no values. Anything aliasflare cannot test as given
+ * (addy.io's regular expressions, too many or too long values) refuses the whole rule: leaving
+ * part of it out would make a rule match other mail than its author meant.
+ */
 function cleanCondition(raw: unknown): Condition | null {
-	if (!raw || typeof raw !== "object") return null;
+	if (!raw || typeof raw !== "object") throw new RuleError("unsupported");
 	const { type, match, values } = raw as Record<string, unknown>;
-	if (!CONDITION_TYPES.includes(type as ConditionType)) return null;
-	// A match aliasflare does not know (addy.io's regular expressions) drops the condition rather than test something else.
-	if (!MATCHES.includes(match as Match)) return null;
-	const cleanMatch = match as Match;
-	const list = (Array.isArray(values) ? values : typeof values === "string" ? values.split(",") : [])
-		.map((value) => text(value, MAX_VALUE_LENGTH).toLowerCase())
-		.filter(Boolean)
-		.slice(0, MAX_VALUES);
-	return list.length ? { type: type as ConditionType, match: cleanMatch, values: [...new Set(list)] } : null;
+	// Several values: an array from the apps, one per line from the dashboard.
+	const given = (Array.isArray(values) ? values : typeof values === "string" ? values.split(/\r?\n/) : [])
+		.map((value) => (typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim() : typeof value === "number" ? String(value) : ""))
+		.filter(Boolean);
+	if (!given.length) return null;
+	if (!CONDITION_TYPES.includes(type as ConditionType) || !MATCHES.includes(match as Match)) throw new RuleError("unsupported");
+	const list = [...new Set(given.map((value) => value.toLowerCase()))];
+	if (list.length > MAX_VALUES || list.some((value) => value.length > MAX_VALUE_LENGTH)) throw new RuleError("unsupported");
+	return { type: type as ConditionType, match: match as Match, values: list };
 }
 
 function cleanAction(raw: unknown): Action | null {
-	if (!raw || typeof raw !== "object") return null;
+	if (!raw || typeof raw !== "object") throw new RuleError("unsupported");
 	const { type, value } = raw as Record<string, unknown>;
-	if (!ACTION_TYPES.includes(type as ActionType)) return null;
+	// addy.io's webhooks, encryption and description changes are not done here.
+	if (!ACTION_TYPES.includes(type as ActionType)) throw new RuleError("unsupported");
 	const kind = type as ActionType;
 	if (kind === "block" || kind === "removeAttachments") return { type: kind, value: "true" };
 	// Only hiding the banner: addy.io's top and bottom places are both "shown" here.
@@ -99,8 +105,11 @@ function cleanAction(raw: unknown): Action | null {
 /** Checks a rule from a form or an app. A rule needs a name, a condition and an action. */
 export function cleanRule(raw: Record<string, unknown>): RuleInput {
 	const name = text(raw.name, MAX_RULE_NAME);
-	const conditions = (Array.isArray(raw.conditions) ? raw.conditions : []).slice(0, MAX_CONDITIONS).map(cleanCondition).filter((c): c is Condition => !!c);
-	const actions = (Array.isArray(raw.actions) ? raw.actions : []).slice(0, MAX_ACTIONS).map(cleanAction).filter((a): a is Action => !!a);
+	const rawConditions = Array.isArray(raw.conditions) ? raw.conditions : [];
+	const rawActions = Array.isArray(raw.actions) ? raw.actions : [];
+	if (rawConditions.length > MAX_CONDITIONS || rawActions.length > MAX_ACTIONS) throw new RuleError("unsupported");
+	const conditions = rawConditions.map(cleanCondition).filter((c): c is Condition => !!c);
+	const actions = rawActions.map(cleanAction).filter((a): a is Action => !!a);
 	if (!name || !conditions.length || !actions.length) throw new RuleError("invalid");
 	const flag = (value: unknown, fallback: boolean) => (value === undefined ? fallback : value === true || value === 1 || value === "1" || value === "true" || value === "on");
 	return {
@@ -222,6 +231,12 @@ function meets(condition: Condition, message: RuleMessage): boolean {
 export function ruleMatches(rule: Rule, message: RuleMessage): boolean {
 	if (!rule.conditions.length) return false;
 	return rule.operator === "OR" ? rule.conditions.some((c) => meets(c, message)) : rule.conditions.every((c) => meets(c, message));
+}
+
+/** The addresses active rules forward to: the owner's mailboxes, so replies from them are the owner's too. */
+export async function ruleForwardAddresses(db: D1Database): Promise<string[]> {
+	const { results } = await db.prepare("SELECT * FROM rules WHERE active = 1 AND forwards = 1 AND actions LIKE '%forwardTo%'").all<RuleRow>();
+	return [...new Set(results.flatMap((row) => parse(row).actions.filter((action) => action.type === "forwardTo").map((action) => action.value)))];
 }
 
 export type RuleOutcome = {

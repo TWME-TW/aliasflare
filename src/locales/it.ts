@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Nessuna regola per ora.",
 	"rules.name": "Nome",
 	"rules.conditions": "Condizioni",
-	"rules.conditionsHelp": "Una riga senza valori viene ignorata. Separa più valori con virgole: uno qualsiasi può corrispondere (per «is not» e «does not», nessuno deve corrispondere).",
+	"rules.conditionsHelp": "Una riga senza valori viene ignorata. Scrivi più valori su righe separate: basta che ne corrisponda uno (per «non è» e «non contiene», nessuno deve corrispondere).",
 	"rules.operator": "La posta deve corrispondere a",
 	"rules.operator.AND": "tutte le condizioni",
 	"rules.operator.OR": "almeno una condizione",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Corrispondenza",
 	"rules.values": "Valori",
 	"rules.value": "Valore",
-	"rules.valuesPlaceholder": "valore, un altro valore",
+	"rules.valuesPlaceholder": "Un valore per riga",
 	"rules.type.sender": "Mittente",
 	"rules.type.subject": "Oggetto",
 	"rules.type.alias": "Alias",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Nascondi il banner",
 	"rules.applyTo": "Applica a",
 	"rules.forwards": "Posta inoltrata",
-	"rules.forwardsHelp": "Posta che arriva a un alias. Un messaggio che il piano Free inoltra senza modifiche può solo essere bloccato o inoltrato altrove.",
+	"rules.forwardsHelp": "Posta che arriva a un alias. La posta inoltrata senza modifiche (inoltro solo in ricezione, o un messaggio troppo grande perché il piano Free possa riscriverlo) può solo essere bloccata o inoltrata altrove. Il banner resta se il mittente non ha superato il DMARC.",
 	"rules.replies": "Risposte e nuovi messaggi",
 	"rules.repliesHelp": "Posta che invii tramite un alias inverso. Qui il mittente è il destinatario a cui va, e si applicano solo Blocca, Sostituisci l'oggetto e Rimuovi allegati.",
 	"rules.active": "Attiva",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Una regola richiede un nome, almeno una condizione con un valore e almeno un'azione.",
 	"notice.ruleLimit": "Ci sono già {max} regole.",
 	"notice.ruleMissing": "Quella regola non esiste più.",
-	"notice.ruleForwardTo": "L'indirizzo di inoltro non è valido, oppure si trova su un dominio alias.",
+	"notice.ruleForwardTo": "Inoltra a deve essere uno dei tuoi indirizzi di inoltro (quello di un alias o quello predefinito).",
+	"notice.ruleUnsupported": "Una condizione o un'azione non è supportata, oppure ce ne sono troppe: al massimo {conditions} condizioni, {values} valori per condizione e {length} caratteri per valore.",
 };
 
 export default dictionary;

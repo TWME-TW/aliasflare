@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Belum ada peraturan.",
 	"rules.name": "Nama",
 	"rules.conditions": "Syarat",
-	"rules.conditionsHelp": "Baris tanpa nilai diabaikan. Asingkan beberapa nilai dengan koma: mana-mana satu boleh dipadankan (untuk \"is not\" dan \"does not\", tiada satu pun boleh dipadankan).",
+	"rules.conditionsHelp": "Baris tanpa nilai diabaikan. Tulis beberapa nilai pada baris berasingan: mana-mana satu boleh dipadankan (untuk “bukan” dan “tidak mengandungi”, tiada satu pun boleh dipadankan).",
 	"rules.operator": "Mel mesti sepadan dengan",
 	"rules.operator.AND": "semua syarat",
 	"rules.operator.OR": "mana-mana syarat",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Padanan",
 	"rules.values": "Nilai",
 	"rules.value": "Nilai",
-	"rules.valuesPlaceholder": "nilai, nilai lain",
+	"rules.valuesPlaceholder": "Satu nilai setiap baris",
 	"rules.type.sender": "Penghantar",
 	"rules.type.subject": "Subjek",
 	"rules.type.alias": "Alias",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Sembunyikan sepanduk",
 	"rules.applyTo": "Guna pada",
 	"rules.forwards": "Mel dimajukan",
-	"rules.forwardsHelp": "Mel yang tiba untuk alias. Mesej yang dihantar oleh pelan Percuma tanpa perubahan hanya boleh disekat atau dimajukan ke tempat lain.",
+	"rules.forwardsHelp": "Mel yang tiba untuk alias. Mel yang dihantar tanpa perubahan (pemajuan terima sahaja, atau mesej terlalu besar untuk ditulis semula oleh pelan Percuma) hanya boleh disekat atau dimajukan ke tempat lain. Sepanduk kekal apabila pengirim gagal DMARC.",
 	"rules.replies": "Balasan dan mesej baharu",
 	"rules.repliesHelp": "Mel yang anda hantar melalui alias terbalik. Di sini penghantar ialah pihak yang dihubungi, dan hanya Sekat, Gantikan subjek dan Alih keluar lampiran yang terpakai.",
 	"rules.active": "Hidup",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Peraturan memerlukan nama, sekurang-kurangnya satu syarat dengan nilai dan sekurang-kurangnya satu tindakan.",
 	"notice.ruleLimit": "Sudah ada {max} peraturan.",
 	"notice.ruleMissing": "Peraturan itu tidak wujud lagi.",
-	"notice.ruleForwardTo": "Alamat Majukan ke tidak sah, atau ia berada pada domain alias.",
+	"notice.ruleForwardTo": "Majukan ke mesti merupakan salah satu alamat pemajuan anda (alamat alias atau alamat lalai).",
+	"notice.ruleUnsupported": "Syarat atau tindakan tidak disokong, atau terlalu banyak: paling banyak {conditions} syarat, {values} nilai dalam satu syarat dan {length} aksara dalam satu nilai.",
 };
 
 export default dictionary;

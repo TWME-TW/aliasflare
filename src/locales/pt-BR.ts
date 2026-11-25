@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Nenhuma regra ainda.",
 	"rules.name": "Nome",
 	"rules.conditions": "Condições",
-	"rules.conditionsHelp": "Uma linha sem valores é ignorada. Separe vários valores com vírgulas: qualquer um pode corresponder (para “is not” e “does not”, nenhum pode corresponder).",
+	"rules.conditionsHelp": "Uma linha sem valores é ignorada. Coloque vários valores em linhas separadas: qualquer um pode corresponder (para “não é” e “não contém”, nenhum pode corresponder).",
 	"rules.operator": "O e-mail deve corresponder a",
 	"rules.operator.AND": "todas as condições",
 	"rules.operator.OR": "qualquer condição",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Corresponder",
 	"rules.values": "Valores",
 	"rules.value": "Valor",
-	"rules.valuesPlaceholder": "valor, outro valor",
+	"rules.valuesPlaceholder": "Um valor por linha",
 	"rules.type.sender": "Remetente",
 	"rules.type.subject": "Assunto",
 	"rules.type.alias": "Alias",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Ocultar o banner",
 	"rules.applyTo": "Aplicar a",
 	"rules.forwards": "E-mails encaminhados",
-	"rules.forwardsHelp": "E-mails que chegam a um alias. Uma mensagem que o plano Free repassa sem alterações só pode ser bloqueada ou encaminhada para outro endereço.",
+	"rules.forwardsHelp": "E-mails que chegam a um alias. E-mails repassados sem alterações (encaminhamento somente de recebimento, ou uma mensagem grande demais para o plano Free reescrever) só podem ser bloqueados ou encaminhados para outro lugar. O banner permanece quando o remetente falhou no DMARC.",
 	"rules.replies": "Respostas e novas mensagens",
 	"rules.repliesHelp": "E-mails que você envia por um alias reverso. Aqui o remetente é o contato para quem a mensagem vai, e só se aplicam Bloquear, Substituir o assunto e Remover anexos.",
 	"rules.active": "Ativa",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Uma regra precisa de um nome, de pelo menos uma condição com valor e de pelo menos uma ação.",
 	"notice.ruleLimit": "Já existem {max} regras.",
 	"notice.ruleMissing": "Essa regra não existe mais.",
-	"notice.ruleForwardTo": "O endereço de encaminhamento não é válido ou está em um domínio de alias.",
+	"notice.ruleForwardTo": "Encaminhar para precisa ser um dos seus endereços de encaminhamento (de um alias ou o padrão).",
+	"notice.ruleUnsupported": "Uma condição ou ação não é suportada, ou há muitas: no máximo {conditions} condições, {values} valores em uma condição e {length} caracteres em um valor.",
 };
 
 export default dictionary;

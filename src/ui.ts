@@ -126,6 +126,8 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 .rule-rows { display:grid; gap:8px; margin:8px 0; }
 .rule-rows .row > * { flex:1; min-width:0; }
 .rule-rows .row > select { flex:0 1 auto; }
+.rule-rows .row { align-items:flex-start; }
+.rule-rows textarea { min-height:38px; resize:vertical; }
 .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
 .alias-cell { display:inline-flex; align-items:center; gap:2px; flex-wrap:wrap; }
 button.copy { min-height:28px; padding:0 8px; }
@@ -1357,8 +1359,8 @@ ${index < rules.length - 1 ? html`<form class="inline" method="post" action="${b
 	);
 }
 
-export function ruleEditPage(t: Translate, input: { rule: Rule | null; notice?: string }): Html {
-	const { rule, notice } = input;
+export function ruleEditPage(t: Translate, input: { rule: Rule | null; destinations: string[]; notice?: string }): Html {
+	const { rule, destinations, notice } = input;
 	const conditions: (Condition | null)[] = [...(rule?.conditions ?? [])];
 	while (conditions.length < Math.max(3, (rule?.conditions.length ?? 0) + 1)) conditions.push(null);
 	const actions: (Action | null)[] = [...(rule?.actions ?? [])];
@@ -1383,7 +1385,7 @@ ${noticeBox(notice)}
 	(condition, i) => html`<div class="row">
 <select name="cond_type_${i}" aria-label="${t("rules.conditions")} ${i + 1}">${CONDITION_TYPES.map((type) => html`<option value="${type}" ${condition?.type === type ? "selected" : ""}>${t(`rules.type.${type}`)}</option>`)}</select>
 <select name="cond_match_${i}" aria-label="${t("rules.matchLabel")} ${i + 1}">${MATCHES.map((match) => html`<option value="${match}" ${(condition?.match ?? "contains") === match ? "selected" : ""}>${t(`rules.match.${match}`)}</option>`)}</select>
-<input type="text" name="cond_values_${i}" value="${condition?.values.join(", ") ?? ""}" placeholder="${t("rules.valuesPlaceholder")}" aria-label="${t("rules.values")} ${i + 1}" />
+<textarea name="cond_values_${i}" rows="${Math.min(5, Math.max(1, condition?.values.length ?? 1))}" placeholder="${t("rules.valuesPlaceholder")}" aria-label="${t("rules.values")} ${i + 1}">${condition?.values.join("\n") ?? ""}</textarea>
 </div>`,
 )}</div>
 <h3>${t("rules.actions")}</h3>
@@ -1391,9 +1393,10 @@ ${noticeBox(notice)}
 <div class="rule-rows">${actions.map(
 	(act, i) => html`<div class="row">
 <select name="act_type_${i}" aria-label="${t("rules.actions")} ${i + 1}"><option value="">—</option>${ACTION_TYPES.map((type) => html`<option value="${type}" ${act?.type === type ? "selected" : ""}>${t(`rules.action.${type}`)}</option>`)}</select>
-<input type="text" name="act_value_${i}" value="${act && act.type !== "block" && act.type !== "removeAttachments" && act.type !== "banner" ? act.value : ""}" aria-label="${t("rules.value")} ${i + 1}" />
+<input type="text" name="act_value_${i}" value="${act && act.type !== "block" && act.type !== "removeAttachments" && act.type !== "banner" ? act.value : ""}" aria-label="${t("rules.value")} ${i + 1}" list="rule-destinations" />
 </div>`,
 )}</div>
+<datalist id="rule-destinations">${destinations.map((email) => html`<option value="${email}"></option>`)}</datalist>
 <h3>${t("rules.applyTo")}</h3>
 ${checkbox("forwards", rule ? !!rule.forwards : true, t("rules.forwards"), t("rules.forwardsHelp"))}
 ${checkbox("replies", rule ? !!(rule.replies || rule.sends) : false, t("rules.replies"), t("rules.repliesHelp"))}

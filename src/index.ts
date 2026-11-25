@@ -17,7 +17,7 @@ import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
 import { mcp } from "./mcp";
 import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api, apiThrottled } from "./compat/api";
-import { ClientError, cleanPrefix, createAlias, createRandomAlias, forgetStatements } from "./compat/aliases";
+import { ClientError, cleanPrefix, createAlias, createRandomAlias, forgetStatements, listDestinations } from "./compat/aliases";
 import { ConfigError, DOMAIN_PATTERN, envOverrides, isWorkersPlan, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
 import { customValues, fillTemplate, isOutboundProvider, normalizeOutboundOptions, parseHeaderLines, SES_REGION, type OutboundOptions } from "./outbound";
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
@@ -52,7 +52,7 @@ import {
 } from "./passkeys";
 import { handleReverseAliasMail } from "./reply";
 import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabel, updateLabel } from "./labels";
-import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_RULES, moveRule, RuleError, setRuleActive, updateRule } from "./rules";
+import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, type Rule } from "./rules";
 import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings } from "./settings";
 import {
 	aliasPage,
@@ -866,7 +866,7 @@ app.post("/labels/:id/delete", async (c) => {
 // ---------- rules ----------
 
 /** A rule from the editor's rows: a row without values (or an action without a type) is left out. */
-function ruleFromForm(form: Record<string, unknown>) {
+function ruleFromForm(form: Record<string, unknown>, existing: Rule | null) {
 	const conditions = [];
 	const actions = [];
 	for (let i = 0; i < 20; i += 1) {
@@ -875,7 +875,13 @@ function ruleFromForm(form: Record<string, unknown>) {
 		const type = form[`act_type_${i}`];
 		if (typeof type === "string" && type) actions.push({ type, value: type === "banner" ? "off" : form[`act_value_${i}`] });
 	}
-	return { name: form.name, operator: form.operator, conditions, actions, forwards: form.forwards === "1", replies: form.replies === "1", sends: form.replies === "1", active: form.active === "1" };
+	// The editor has one box for replies and new messages; an app may have set them apart, which
+	// stays so while the box is left as it was.
+	const box = form.replies === "1";
+	const unchanged = existing && box === !!(existing.replies || existing.sends);
+	const replies = unchanged ? !!existing.replies : box;
+	const sends = unchanged ? !!existing.sends : box;
+	return { name: form.name, operator: form.operator, conditions, actions, forwards: form.forwards === "1", replies, sends, active: form.active === "1" };
 }
 
 const RULE_NOTICES: Record<RuleError["reason"], MessageKey> = {
@@ -883,31 +889,47 @@ const RULE_NOTICES: Record<RuleError["reason"], MessageKey> = {
 	limit: "notice.ruleLimit",
 	missing: "notice.ruleMissing",
 	forwardTo: "notice.ruleForwardTo",
+	unsupported: "notice.ruleUnsupported",
 };
 
 async function saveRule(c: C, id: string | null): Promise<Response> {
 	const back = id ? `/rules/${encodeURIComponent(id)}` : "/rules/new";
 	try {
-		const input = cleanRule(ruleFromForm(await c.req.parseBody()));
-		const settings = await loadSettings(c.env.DB);
+		const existing = id ? await getRule(c.env.DB, id) : null;
+		if (id && !existing) return redirectWithNotice(c, "/rules", "notice.ruleMissing");
+		const input = cleanRule(ruleFromForm(await c.req.parseBody(), existing));
+		// Mail goes only to the owner's own forwarding addresses, as in the apps: it carries the
+		// banner's signed links, which should not reach anyone else.
 		const forwardTo = input.actions.find((action) => action.type === "forwardTo");
-		if (forwardTo && isOwnAddress(forwardTo.value, settings.aliasDomains)) return redirectWithNotice(c, back, "notice.ruleForwardTo");
+		if (forwardTo && !(await ruleDestinations(c)).includes(forwardTo.value)) return redirectWithNotice(c, back, "notice.ruleForwardTo");
 		if (id) await updateRule(c.env.DB, id, input);
 		else await createRule(c.env.DB, input);
 	} catch (error) {
-		if (error instanceof RuleError) return redirectWithNotice(c, back, RULE_NOTICES[error.reason], { max: String(MAX_RULES) });
+		if (error instanceof RuleError) {
+			return redirectWithNotice(c, back, RULE_NOTICES[error.reason], {
+				max: String(MAX_RULES),
+				conditions: String(MAX_CONDITIONS),
+				values: String(MAX_VALUES),
+				length: String(MAX_VALUE_LENGTH),
+			});
+		}
 		throw error;
 	}
 	return redirectWithNotice(c, "/rules", "notice.ruleSaved");
 }
 
 app.get("/rules", async (c) => c.html(rulesPage(c.get("t"), { rules: await listRules(c.env.DB), notice: noticeFrom(c) })));
-app.get("/rules/new", (c) => c.html(ruleEditPage(c.get("t"), { rule: null, notice: noticeFrom(c) })));
+/** The addresses a rule may forward to: the owner's forwarding addresses. */
+async function ruleDestinations(c: C): Promise<string[]> {
+	return (await listDestinations(c.env.DB, await loadSettings(c.env.DB))).map((destination) => destination.email);
+}
+
+app.get("/rules/new", async (c) => c.html(ruleEditPage(c.get("t"), { rule: null, destinations: await ruleDestinations(c), notice: noticeFrom(c) })));
 app.post("/rules", (c) => saveRule(c, null));
 app.get("/rules/:id", async (c) => {
 	const rule = await getRule(c.env.DB, c.req.param("id"));
 	if (!rule) return redirectWithNotice(c, "/rules", "notice.ruleMissing");
-	return c.html(ruleEditPage(c.get("t"), { rule, notice: noticeFrom(c) }));
+	return c.html(ruleEditPage(c.get("t"), { rule, destinations: await ruleDestinations(c), notice: noticeFrom(c) }));
 });
 app.post("/rules/:id", (c) => saveRule(c, c.req.param("id")));
 app.post("/rules/:id/active", async (c) => {
@@ -1092,8 +1114,14 @@ app.post("/aliases/bulk", async (c) => {
 	const ids = [...new Set((Array.isArray(form.ids) ? form.ids : [form.ids]).filter((id): id is string => typeof id === "string").map(normalizeEmail))].slice(0, 500);
 	const labelAction = typeof form.action === "string" ? /^(label|unlabel):(lb_[0-9a-f]{32})$/.exec(form.action) : null;
 	if (labelAction && ids.length) {
-		const { results } = await c.env.DB.prepare(`SELECT address FROM aliases WHERE deleted_at IS NULL AND address IN (${ids.map(() => "?").join(", ")})`).bind(...ids).all<{ address: string }>();
-		const changed = await toggleAliasLabel(c.env.DB, results.map((row) => row.address), labelAction[2]!, labelAction[1] === "label");
+		// D1 binds at most 100 values a statement: the aliases are looked up in chunks.
+		const addresses: string[] = [];
+		for (let i = 0; i < ids.length; i += 90) {
+			const chunk = ids.slice(i, i + 90);
+			const { results } = await c.env.DB.prepare(`SELECT address FROM aliases WHERE deleted_at IS NULL AND address IN (${chunk.map(() => "?").join(", ")})`).bind(...chunk).all<{ address: string }>();
+			addresses.push(...results.map((row) => row.address));
+		}
+		const changed = await toggleAliasLabel(c.env.DB, addresses, labelAction[2]!, labelAction[1] === "label");
 		return done("notice.bulkDone", { count: String(changed) });
 	}
 	if (!BULK_ACTIONS.includes(action) || ids.length === 0) return done("notice.bulkBad");

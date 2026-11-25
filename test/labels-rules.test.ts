@@ -108,11 +108,23 @@ describe("rules", () => {
 	it("match on sender, subject and alias, with any or all conditions", () => {
 		const message = { sender: "Deals@Shop.test", subject: "Big SALE today", alias: "shop@a.test" };
 		expect(ruleMatches(rule({ name: "x", conditions: [{ type: "sender", match: "ends with", values: ["@shop.test"] }], actions: [{ type: "block" }] }), message)).toBe(true);
-		expect(ruleMatches(rule({ name: "x", conditions: [{ type: "subject", match: "contains", values: "promo, sale" }], actions: [{ type: "block" }] }), message)).toBe(true);
+		expect(ruleMatches(rule({ name: "x", conditions: [{ type: "subject", match: "contains", values: "promo\nsale" }], actions: [{ type: "block" }] }), message)).toBe(true);
 		expect(ruleMatches(rule({ name: "x", conditions: [{ type: "subject", match: "does not contain", values: ["promo", "sale"] }], actions: [{ type: "block" }] }), message)).toBe(false);
 		const both = { name: "x", conditions: [{ type: "alias", match: "is exactly", values: ["other@a.test"] }, { type: "sender", match: "starts with", values: ["deals"] }], actions: [{ type: "block" }] };
 		expect(ruleMatches(rule(both), message)).toBe(false);
 		expect(ruleMatches(rule({ ...both, operator: "OR" }), message)).toBe(true);
+	});
+
+	it("refuse a rule with anything they cannot apply as given, rather than leave part of it out", () => {
+		const sender = { type: "sender", match: "ends with", values: ["@corp.test"] };
+		// Leaving the regular expression out would block all of corp.test's mail.
+		expect(() => cleanRule({ name: "x", operator: "AND", conditions: [sender, { type: "subject", match: "matches regex", values: ["^invoice"] }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
+		expect(() => cleanRule({ name: "x", conditions: [{ type: "sender", match: "is not", values: Array.from({ length: 21 }, (_, i) => `a${i}@x.test`) }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
+		expect(() => cleanRule({ name: "x", conditions: [{ type: "subject", match: "contains", values: ["x".repeat(201)] }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
+		expect(() => cleanRule({ name: "x", conditions: [sender], actions: [{ type: "block" }, { type: "webhook", value: "https://x.test" }] })).toThrow(/unsupported/);
+		expect(() => cleanRule({ name: "x", conditions: Array.from({ length: 11 }, () => sender), actions: [{ type: "block" }] })).toThrow(/unsupported/);
+		// A value with a comma stays one value.
+		expect(cleanRule({ name: "x", conditions: [{ type: "subject", match: "contains", values: ["hello, world"] }], actions: [{ type: "block" }] }).conditions[0]!.values).toEqual(["hello, world"]);
 	});
 
 	it("refuse a rule without a name, condition or supported action", () => {
@@ -153,7 +165,7 @@ describe("rules", () => {
 			operator: "AND",
 			cond_type_0: "subject",
 			cond_match_0: "contains",
-			cond_values_0: "receipt, invoice",
+			cond_values_0: "receipt\r\ninvoice, paid",
 			cond_type_1: "sender",
 			cond_match_1: "contains",
 			cond_values_1: "",
@@ -166,11 +178,18 @@ describe("rules", () => {
 		expect(response.headers.get("location")).toContain("notice.ruleSaved");
 		const rules = await (await import("../src/rules")).listRules(db);
 		expect(rules).toHaveLength(1);
-		expect(rules[0]).toMatchObject({ name: "Receipts", conditions: [{ type: "subject", match: "contains", values: ["receipt", "invoice"] }], actions: [{ type: "subject", value: "[Receipt]" }] });
+		expect(rules[0]).toMatchObject({ name: "Receipts", conditions: [{ type: "subject", match: "contains", values: ["receipt", "invoice, paid"] }], actions: [{ type: "subject", value: "[Receipt]" }] });
 		expect(await get(cookie, "/rules")).toContain("Receipts");
-		expect(await get(cookie, `/rules/${rules[0]!.id}`)).toContain('value="receipt, invoice"');
+		const editor = await get(cookie, `/rules/${rules[0]!.id}`);
+		expect(editor).toContain(">receipt\ninvoice, paid</textarea>");
+		expect(editor).toContain('<option value="me@home.test">');
 		const own = await post(cookie, "/rules", { name: "Loop", cond_type_0: "sender", cond_match_0: "contains", cond_values_0: "x", act_type_0: "forwardTo", act_value_0: "x@a.test", forwards: "1" });
 		expect(own.headers.get("location")).toContain("notice.ruleForwardTo");
+		// Not one of the owner's forwarding addresses: the banner's signed links would reach a stranger.
+		const stranger = await post(cookie, "/rules", { name: "Out", cond_type_0: "sender", cond_match_0: "contains", cond_values_0: "x", act_type_0: "forwardTo", act_value_0: "someone@else.test", forwards: "1" });
+		expect(stranger.headers.get("location")).toContain("notice.ruleForwardTo");
+		const many = await post(cookie, "/rules", { name: "Many", cond_type_0: "sender", cond_match_0: "is not", cond_values_0: Array.from({ length: 21 }, (_, i) => `a${i}`).join("\n"), act_type_0: "block", forwards: "1" });
+		expect(many.headers.get("location")).toContain("notice.ruleUnsupported");
 	});
 });
 
@@ -216,6 +235,8 @@ describe("rules on forwarded mail", () => {
 		expect(sent[0]).toMatchObject({ subject: "Receipt", from: { name: "The Shop" }, attachments: [] });
 
 		const cookie = await signIn(db);
+		// lists@home.test is a forwarding address of the owner's: another alias uses it.
+		await db.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, destination, created_at, updated_at) VALUES ('lists@a.test', 3, 'u3', 'all', 1, 'lists@home.test', 3, 3)").run();
 		await post(cookie, "/rules", { name: "Lists", cond_type_0: "alias", cond_match_0: "is exactly", cond_values_0: "news@a.test", act_type_0: "forwardTo", act_value_0: "lists@home.test", forwards: "1", active: "1" });
 		await deliver("someone@else.test", "Weekly", "news@a.test");
 		expect(sent[1]?.to).toMatchObject({ email: "lists@home.test" });
@@ -241,8 +262,8 @@ describe("rules on replies", () => {
 		});
 	});
 	afterEach(() => vi.unstubAllGlobals());
-	const reply = async (subject: string) => {
-		const raw = `Authentication-Results: mx.cloudflare.net; spf=pass; dmarc=pass header.from=home.test\r\nFrom: me@home.test\r\nTo: reply+rbob@r.a.test\r\nSubject: ${subject}\r\nContent-Type: text/plain\r\n\r\nHi\r\n`;
+	const reply = async (subject: string, from = "me@home.test") => {
+		const raw = `Authentication-Results: mx.cloudflare.net; spf=pass; dmarc=pass header.from=home.test\r\nFrom: ${from}\r\nTo: reply+rbob@r.a.test\r\nSubject: ${subject}\r\nContent-Type: text/plain\r\n\r\nHi\r\n`;
 		let rejected: string | null = null;
 		await handleReverseAliasMail({ to: "reply+rbob@r.a.test", raw: new Response(raw).body, setReject: (why: string) => void (rejected = why) } as never, env, config);
 		return rejected;
@@ -259,6 +280,15 @@ describe("rules on replies", () => {
 		expect(await reply("Re: hello")).toBeNull();
 		expect(outgoing[0]?.subject).toBe("Re: hello");
 	});
+
+	it("come from the owner when written from the mailbox a rule forwards to", async () => {
+		await db.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, destination, created_at, updated_at) VALUES ('lists@a.test', 3, 'u3', 'all', 1, 'work@home.test', 3, 3)").run();
+		expect(await reply("Re: hello", "work@home.test")).toMatch(/owner/i);
+		const work = ((await call("/v1/recipients")).json.data as { id: string; email: string }[]).find((r) => r.email === "work@home.test")!;
+		await call("/v1/rules", "POST", { name: "To work", conditions: [{ type: "alias", match: "is exactly", values: ["shop@a.test"] }], actions: [{ type: "forwardTo", value: work.id }] });
+		expect(await reply("Re: hello", "work@home.test")).toBeNull();
+		expect(outgoing).toHaveLength(1);
+	});
 });
 
 describe("failed deliveries in the addy.io API", () => {
@@ -271,10 +301,73 @@ describe("failed deliveries in the addy.io API", () => {
 		const list = await call("/v1/failed-deliveries");
 		expect(list.json.data).toEqual([expect.objectContaining({ id: "f1", alias_email: "shop@a.test", alias_id: "u1", code: "mailbox full", status: "failed" })]);
 		expect(list.json.meta).toMatchObject({ total: 1, links: [] });
+		expect(list.json.links).toMatchObject({ prev: null, next: null });
+		expect(list.json.links.first).toContain("page%5Bnumber%5D=1");
 		expect((await call("/v1/failed-deliveries/f1")).json.data.id).toBe("f1");
 		expect((await call("/v1/failed-deliveries/f1/resend", "POST")).status).toBe(422);
 		expect((await call("/v1/failed-deliveries/f2", "DELETE")).status).toBe(404);
 		expect((await call("/v1/failed-deliveries/f1", "DELETE")).status).toBe(204);
 		expect((await call("/v1/failed-deliveries")).json.data).toEqual([]);
+		expect((await call("/v1/failed-deliveries/f1", "DELETE")).status).toBe(404);
+		// Still the retry record and the activity entry.
+		expect(await db.prepare("SELECT status, dismissed FROM forwards WHERE id = 'f1'").first()).toEqual({ status: "failed", dismissed: 1 });
+		const paged = await call("/v1/failed-deliveries?page[size]=1");
+		expect(paged.json.links.next).toBeNull();
+	});
+});
+
+describe("review fixes", () => {
+	it("match a pass-through subject as people read it, not its encoded words", async () => {
+		await saveSettings(db, { ...(await loadSettings(db)), forwardMethod: "direct" });
+		await call("/v1/rules", "POST", { name: "Bills", conditions: [{ type: "subject", match: "contains", values: ["rechnung für"] }], actions: [{ type: "block" }] });
+		const raw = "From: shop@store.test\r\nTo: shop@a.test\r\nSubject: =?utf-8?q?Rechnung_f=C3=BCr_Mai?=\r\nMessage-ID: <e1@x>\r\nContent-Type: text/plain\r\n\r\nHi\r\n";
+		const forwarded: string[] = [];
+		await worker.email!(
+			{ to: "shop@a.test", from: "shop@store.test", headers: new Headers({ From: "shop@store.test", To: "shop@a.test", Subject: "=?utf-8?q?Rechnung_f=C3=BCr_Mai?=" }), raw: new Response(raw).body, rawSize: raw.length, forward: async (to: string) => void forwarded.push(to), setReject: () => {} } as never,
+			env,
+		);
+		expect(forwarded).toEqual([]);
+		expect(await db.prepare("SELECT error FROM forwards").first()).toEqual({ error: "blocked by the rule Bills" });
+	});
+
+	it("keep the banner of a message that failed DMARC, and clean a rule's sender name", async () => {
+		await saveSettings(db, { ...(await loadSettings(db)), showBanner: true });
+		await call("/v1/rules", "POST", { name: "Quiet", conditions: [{ type: "alias", match: "is exactly", values: ["shop@a.test"] }], actions: [{ type: "banner", value: "off" }, { type: "displayFrom", value: 'PayPal <service@paypal.com>' }] });
+		await deliver("a@store.test", "Calm");
+		const failed = "Authentication-Results: mx.cloudflare.net; dmarc=fail header.from=store.test\r\n";
+		const raw = `${failed}From: b@store.test\r\nTo: shop@a.test\r\nSubject: Urgent\r\nMessage-ID: <e2@x>\r\nContent-Type: text/plain\r\n\r\nPay now\r\n`;
+		await worker.email!({ to: "shop@a.test", from: "b@store.test", headers: new Headers({ From: "b@store.test", To: "shop@a.test" }), raw: new Response(raw).body, rawSize: raw.length, forward: async () => {}, setReject: () => {} } as never, env);
+		expect(sent).toHaveLength(2);
+		expect(String(sent[0]!.text ?? "")).not.toContain("/action/");
+		expect(String(sent[1]!.text ?? "") + String(sent[1]!.html ?? "")).toContain("/action/");
+		expect((sent[0]!.from as { name: string }).name).not.toMatch(/[<>@"]/);
+	});
+
+	it("keep a rule's Forward to from an app once no alias uses that address", async () => {
+		await db.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, destination, created_at, updated_at) VALUES ('lists@a.test', 3, 'u3', 'all', 1, 'lists@home.test', 3, 3)").run();
+		const lists = ((await call("/v1/recipients")).json.data as { id: string; email: string }[]).find((r) => r.email === "lists@home.test")!;
+		const made = await call("/v1/rules", "POST", { name: "L", conditions: [{ type: "sender", match: "contains", values: ["x"] }], actions: [{ type: "forwardTo", value: lists.id }], sends: true, replies: false });
+		await db.prepare("UPDATE aliases SET destination = NULL WHERE address = 'lists@a.test'").run();
+		const shown = await call(`/v1/rules/${made.json.data.id}`);
+		expect(shown.json.data.actions[0].value).toBe("lists@home.test");
+		const saved = await call(`/v1/rules/${made.json.data.id}`, "PATCH", { ...shown.json.data, name: "L2" });
+		expect(saved.status).toBe(200);
+		expect((await call(`/v1/rules/${made.json.data.id}`, "PATCH", { ...shown.json.data, actions: [{ type: "forwardTo", value: "other@home.test" }] })).status).toBe(422);
+		// Mail is not sent to an address no alias uses any more: it goes to the alias's own.
+		await deliver("x@store.test", "Hi");
+		expect(sent[0]!.to).toMatchObject({ email: "me@home.test" });
+		// The dashboard keeps "sends" apart from "replies" while its box is left alone.
+		const cookie = await signIn(db);
+		await post(cookie, `/rules/${made.json.data.id}`, { name: "L3", cond_type_0: "sender", cond_match_0: "contains", cond_values_0: "x", act_type_0: "block", forwards: "1", replies: "1", active: "1" });
+		expect(await db.prepare("SELECT replies, sends FROM rules").first()).toEqual({ replies: 0, sends: 1 });
+	});
+
+	it("add a label to more aliases than one statement can bind", async () => {
+		const many = Array.from({ length: 150 }, (_, i) => `bulk${i}@a.test`);
+		await db.batch(many.map((address, i) => db.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at) VALUES (?, ?, ?, 'all', 1, 1, 1)").bind(address, 100 + i, `b${i}`)));
+		const label = (await call("/v1/labels", "POST", { name: "Many" })).json.data.id;
+		const cookie = await signIn(db);
+		await post(cookie, "/aliases/bulk", { action: `label:${label}`, ids: many, back: "/" });
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM alias_labels").first()).toEqual({ n: 150 });
 	});
 });

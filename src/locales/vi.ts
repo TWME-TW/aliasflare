@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Chưa có quy tắc nào.",
 	"rules.name": "Tên",
 	"rules.conditions": "Điều kiện",
-	"rules.conditionsHelp": "Dòng không có giá trị sẽ bị bỏ qua. Ngăn cách nhiều giá trị bằng dấu phẩy: chỉ cần một trong số đó khớp (với “is not” và “does not”, không được khớp giá trị nào).",
+	"rules.conditionsHelp": "Dòng không có giá trị sẽ bị bỏ qua. Ghi nhiều giá trị trên các dòng riêng: chỉ cần một trong số đó khớp (với “không phải là” và “không chứa”, không được khớp giá trị nào).",
 	"rules.operator": "Thư phải khớp",
 	"rules.operator.AND": "tất cả điều kiện",
 	"rules.operator.OR": "bất kỳ điều kiện nào",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Khớp",
 	"rules.values": "Giá trị",
 	"rules.value": "Giá trị",
-	"rules.valuesPlaceholder": "giá trị, giá trị khác",
+	"rules.valuesPlaceholder": "Mỗi dòng một giá trị",
 	"rules.type.sender": "Người gửi",
 	"rules.type.subject": "Chủ đề",
 	"rules.type.alias": "Bí danh",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Ẩn biểu ngữ",
 	"rules.applyTo": "Áp dụng cho",
 	"rules.forwards": "Thư được chuyển tiếp",
-	"rules.forwardsHelp": "Thư gửi đến một bí danh. Thư mà gói Miễn phí chuyển đi nguyên vẹn chỉ có thể bị chặn hoặc chuyển tiếp sang nơi khác.",
+	"rules.forwardsHelp": "Thư gửi đến một bí danh. Thư được chuyển đi nguyên vẹn (chuyển tiếp chỉ nhận, hoặc thư quá lớn để gói Miễn phí viết lại) chỉ có thể bị chặn hoặc chuyển tiếp sang nơi khác. Biểu ngữ vẫn hiển thị khi người gửi không qua được DMARC.",
 	"rules.replies": "Thư trả lời và thư mới",
 	"rules.repliesHelp": "Thư bạn gửi qua bí danh ngược. Ở đây người gửi là người nhận bên ngoài, và chỉ Chặn, Thay chủ đề và Xóa tệp đính kèm được áp dụng.",
 	"rules.active": "Bật",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Quy tắc cần có tên, ít nhất một điều kiện có giá trị và ít nhất một hành động.",
 	"notice.ruleLimit": "Đã có {max} quy tắc.",
 	"notice.ruleMissing": "Quy tắc đó không còn tồn tại.",
-	"notice.ruleForwardTo": "Địa chỉ Chuyển tiếp đến không hợp lệ, hoặc nằm trên tên miền bí danh.",
+	"notice.ruleForwardTo": "Chuyển tiếp đến phải là một trong các địa chỉ chuyển tiếp của bạn (của bí danh hoặc địa chỉ mặc định).",
+	"notice.ruleUnsupported": "Điều kiện hoặc hành động không được hỗ trợ, hoặc có quá nhiều: tối đa {conditions} điều kiện, {values} giá trị trong một điều kiện và {length} ký tự trong một giá trị.",
 };
 
 export default dictionary;

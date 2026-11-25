@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "ابھی کوئی قاعدہ نہیں۔",
 	"rules.name": "نام",
 	"rules.conditions": "شرائط",
-	"rules.conditionsHelp": "بغیر قدر کی قطار شامل نہیں کی جاتی۔ کئی قدریں کاما سے الگ کریں: ان میں سے کوئی بھی مماثل ہو سکتی ہے (“is not” اور “does not” کے لیے ان میں سے کوئی بھی مماثل نہ ہو)۔",
+	"rules.conditionsHelp": "بغیر قدر کی قطار شامل نہیں کی جاتی۔ کئی قدریں الگ سطروں میں لکھیں: ان میں سے کوئی بھی مماثل ہو سکتی ہے (“نہیں ہے” اور “پر مشتمل نہیں” کے لیے ان میں سے کوئی بھی مماثل نہ ہو)۔",
 	"rules.operator": "میل کا مماثل ہونا لازم ہے",
 	"rules.operator.AND": "تمام شرائط",
 	"rules.operator.OR": "کوئی ایک شرط",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "مماثلت",
 	"rules.values": "قدریں",
 	"rules.value": "قدر",
-	"rules.valuesPlaceholder": "قدر، ایک اور قدر",
+	"rules.valuesPlaceholder": "ہر سطر میں ایک قدر",
 	"rules.type.sender": "بھیجنے والا",
 	"rules.type.subject": "موضوع",
 	"rules.type.alias": "عرف",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "بینر چھپائیں",
 	"rules.applyTo": "لاگو کریں",
 	"rules.forwards": "فارورڈ کی گئی میل",
-	"rules.forwardsHelp": "وہ میل جو کسی عرف کے لیے آئے۔ مفت پلان جو پیغام بغیر تبدیلی کے آگے بھیجتا ہے، اسے صرف بلاک یا کہیں اور فارورڈ کیا جا سکتا ہے۔",
+	"rules.forwardsHelp": "وہ میل جو کسی عرف کے لیے آئے۔ بغیر تبدیلی کے آگے بھیجی گئی میل (صرف وصولی والی فارورڈنگ، یا ایسا پیغام جو مفت پلان دوبارہ نہیں لکھ سکتا) صرف بلاک یا کہیں اور فارورڈ کی جا سکتی ہے۔ بھیجنے والے کا DMARC ناکام ہونے پر بینر باقی رہتا ہے۔",
 	"rules.replies": "جوابات اور نئے پیغامات",
 	"rules.repliesHelp": "وہ میل جو آپ ریورس عرف کے ذریعے بھیجتے ہیں۔ یہاں بھیجنے والا وہ رابطہ ہے جس تک یہ جاتی ہے، اور صرف بلاک، موضوع بدلنا اور اٹیچمنٹس ہٹانا لاگو ہوتے ہیں۔",
 	"rules.active": "آن",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "قاعدے کے لیے نام، کم از کم ایک قدر والی شرط اور کم از کم ایک ایکشن درکار ہے۔",
 	"notice.ruleLimit": "پہلے ہی {max} قواعد موجود ہیں۔",
 	"notice.ruleMissing": "وہ قاعدہ اب موجود نہیں۔",
-	"notice.ruleForwardTo": "فارورڈ کا پتا درست نہیں، یا یہ کسی عرف ڈومین پر ہے۔",
+	"notice.ruleForwardTo": "فارورڈ کریں بہ کا پتا آپ کے فارورڈنگ پتوں میں سے ایک ہونا چاہیے (کسی عرف کا یا ڈیفالٹ)۔",
+	"notice.ruleUnsupported": "کوئی شرط یا ایکشن تعاون یافتہ نہیں، یا وہ بہت زیادہ ہیں: زیادہ سے زیادہ {conditions} شرائط، ایک شرط میں {values} قدریں اور ایک قدر میں {length} حروف۔",
 };
 
 export default dictionary;

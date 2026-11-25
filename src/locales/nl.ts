@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Nog geen regels.",
 	"rules.name": "Naam",
 	"rules.conditions": "Voorwaarden",
-	"rules.conditionsHelp": "Een rij zonder waarden wordt overgeslagen. Scheid meerdere waarden met komma's: elk ervan mag overeenkomen (bij “is not” en “does not” mag geen enkele overeenkomen).",
+	"rules.conditionsHelp": "Een rij zonder waarden wordt overgeslagen. Zet meerdere waarden op aparte regels: elk ervan mag overeenkomen (bij “is niet” en “bevat niet” mag geen enkele overeenkomen).",
 	"rules.operator": "Mail moet overeenkomen met",
 	"rules.operator.AND": "alle voorwaarden",
 	"rules.operator.OR": "een van de voorwaarden",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Overeenkomst",
 	"rules.values": "Waarden",
 	"rules.value": "Waarde",
-	"rules.valuesPlaceholder": "waarde, nog een waarde",
+	"rules.valuesPlaceholder": "Eén waarde per regel",
 	"rules.type.sender": "Afzender",
 	"rules.type.subject": "Onderwerp",
 	"rules.type.alias": "Alias",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "De banner verbergen",
 	"rules.applyTo": "Toepassen op",
 	"rules.forwards": "Doorgestuurde mail",
-	"rules.forwardsHelp": "Mail die binnenkomt voor een alias. Een bericht dat het gratis abonnement ongewijzigd doorgeeft, kan alleen worden geblokkeerd of elders worden doorgestuurd.",
+	"rules.forwardsHelp": "Mail die binnenkomt voor een alias. Mail die ongewijzigd wordt doorgegeven (doorsturen alleen ontvangen, of een bericht dat te groot is om door het gratis abonnement te worden herschreven) kan alleen worden geblokkeerd of elders worden doorgestuurd. De banner blijft staan wanneer de afzender DMARC niet heeft gehaald.",
 	"rules.replies": "Antwoorden en nieuwe berichten",
 	"rules.repliesHelp": "Mail die je verstuurt via een omgekeerd alias. Hier is de afzender de correspondent naar wie het gaat, en alleen Blokkeren, Onderwerp vervangen en Bijlagen verwijderen zijn van toepassing.",
 	"rules.active": "Aan",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Een regel heeft een naam, minstens één voorwaarde met een waarde en minstens één actie nodig.",
 	"notice.ruleLimit": "Er zijn al {max} regels.",
 	"notice.ruleMissing": "Die regel bestaat niet meer.",
-	"notice.ruleForwardTo": "Het doorstuuradres is niet geldig, of het staat op een aliasdomein.",
+	"notice.ruleForwardTo": "Doorsturen naar moet een van je doorstuuradressen zijn (van een alias of het standaardadres).",
+	"notice.ruleUnsupported": "Een voorwaarde of actie wordt niet ondersteund, of er zijn er te veel: maximaal {conditions} voorwaarden, {values} waarden per voorwaarde en {length} tekens per waarde.",
 };
 
 export default dictionary;

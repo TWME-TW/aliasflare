@@ -14,6 +14,8 @@ import { readLimited } from "./streams";
 import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
 import type { Replacement } from "./format";
 import { runRules } from "./rules";
+import { listDestinations } from "./compat/aliases";
+import type { Settings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
 
 export const LOOP_HEADER = "X-Aliasflare";
@@ -289,9 +291,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				return await skip("promotional mail is blocked for this alias");
 			}
 			// The message is passed on unchanged, so of a rule's actions only Block and Forward to act on it.
-			const rules = await runRules(db, "forwards", { sender: primarySender, subject: headers.get("Subject") ?? "", alias: aliasAddress });
+			const rules = await runRules(db, "forwards", { sender: primarySender, subject: await decodedSubject(headers.get("Subject")), alias: aliasAddress });
 			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
-			const ruleTarget = rules.forwardTo && !isOwnAddress(rules.forwardTo, [...settings.aliasDomains, aliasDomain]) ? rules.forwardTo : null;
+			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
 			const contact = await ensureContact(db, aliasAddress, primarySender, null, settings.includeSenderInReverseAlias);
@@ -367,7 +369,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const rules = await runRules(db, "forwards", { sender: senderEmail, subject: email.subject ?? "", alias: aliasAddress });
 		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 		// A rule's Forward to comes first, then the sender's own address, then the alias's.
-		const ruleRecipient = rules.forwardTo && !isOwnAddress(rules.forwardTo, [...settings.aliasDomains, aliasDomain]) ? rules.forwardTo : null;
+		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo);
 		const recipient = ruleRecipient ?? (contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain]) ? contact.destination : destination);
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
@@ -380,7 +382,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 
 		const sign = (purpose: string, payload: string) => signToken(config.signingSecret, purpose, payload, LINK_TTL_SECONDS);
 		// Without a known origin there is nowhere for the banner's links to point.
-		const banner: BannerInfo | null = settings.showBanner && origin && !rules.hideBanner
+		const banner: BannerInfo | null = settings.showBanner && origin && !(rules.hideBanner && !spoofed)
 			? {
 					alias: aliasAddress,
 					sender: contact.name ? `${sanitizeDisplayName(contact.name)} <${contact.email}>` : contact.email,
@@ -409,7 +411,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				calendarReplacements.push({ from: organizer, to: reverseAddressOf(organizerContact.reverse_local, reverseDomain) });
 			}
 		}
-		const displayName = rules.displayFrom ?? formatSenderName(settings.senderFormat, contact.name, contact.email);
+		const displayName = rules.displayFrom ? sanitizeDisplayName(rules.displayFrom) : formatSenderName(settings.senderFormat, contact.name, contact.email);
 		const headers: Record<string, string> = {
 			[LOOP_HEADER]: aliasAddress,
 			"X-Original-To": aliasAddress,
@@ -472,5 +474,27 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		}
 		console.error("Forward failed", event.messageId, message);
 		return { status: 500, result: "failed" };
+	}
+}
+
+/**
+ * Where a rule's Forward to may send: one of the owner's forwarding addresses (an alias's or the
+ * default one). A rule saved before that was required, or whose address no alias uses any more,
+ * falls back to the usual destination.
+ */
+async function ruleTargetOf(db: D1Database, settings: Settings, address: string | undefined): Promise<string | null> {
+	if (!address) return null;
+	const known = await listDestinations(db, settings);
+	return known.some((destination) => destination.email === address) ? address : null;
+}
+
+/** A Subject header's value with its RFC 2047 encoded words decoded, as a rule should see it. */
+async function decodedSubject(value: string | null): Promise<string> {
+	const subject = (value ?? "").replace(/[\r\n]+/g, " ");
+	if (!subject.includes("=?")) return subject;
+	try {
+		return (await PostalMime.parse(`Subject: ${subject}\r\n\r\n`)).subject ?? subject;
+	} catch {
+		return subject;
 	}
 }

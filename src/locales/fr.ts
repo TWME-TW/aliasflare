@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Aucune règle pour le moment.",
 	"rules.name": "Nom",
 	"rules.conditions": "Conditions",
-	"rules.conditionsHelp": "Une ligne sans valeur est ignorée. Séparez plusieurs valeurs par des virgules : l'une d'elles suffit pour correspondre (pour « n'est pas » et « ne contient pas », aucune ne doit correspondre).",
+	"rules.conditionsHelp": "Une ligne sans valeur est ignorée. Indiquez plusieurs valeurs sur des lignes séparées : l'une d'elles suffit pour correspondre (pour « n'est pas » et « ne contient pas », aucune ne doit correspondre).",
 	"rules.operator": "Le message doit correspondre à",
 	"rules.operator.AND": "toutes les conditions",
 	"rules.operator.OR": "n'importe quelle condition",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Correspond",
 	"rules.values": "Valeurs",
 	"rules.value": "Valeur",
-	"rules.valuesPlaceholder": "valeur, autre valeur",
+	"rules.valuesPlaceholder": "Une valeur par ligne",
 	"rules.type.sender": "Expéditeur",
 	"rules.type.subject": "Objet",
 	"rules.type.alias": "Alias",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Masquer la bannière",
 	"rules.applyTo": "Appliquer à",
 	"rules.forwards": "E-mails transférés",
-	"rules.forwardsHelp": "E-mails reçus sur un alias. Un message que l'offre gratuite transmet sans modification ne peut être que bloqué ou transféré ailleurs.",
+	"rules.forwardsHelp": "E-mails reçus sur un alias. Un e-mail transmis sans modification (transfert en réception seule, ou message trop volumineux pour que l'offre gratuite le réécrive) ne peut être que bloqué ou transféré ailleurs. La bannière reste lorsque l'expéditeur a échoué au DMARC.",
 	"rules.replies": "Réponses et nouveaux messages",
 	"rules.repliesHelp": "E-mails envoyés via un alias inversé. Ici, l'expéditeur est le correspondant à qui ils sont adressés ; seuls Bloquer, Remplacer l'objet et Supprimer les pièces jointes s'appliquent.",
 	"rules.active": "Activée",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Une règle doit avoir un nom, au moins une condition avec une valeur et au moins une action.",
 	"notice.ruleLimit": "Il existe déjà {max} règles.",
 	"notice.ruleMissing": "Cette règle n'existe plus.",
-	"notice.ruleForwardTo": "L'adresse de transfert n'est pas valide, ou elle se trouve sur un domaine d'alias.",
+	"notice.ruleForwardTo": "Transférer à doit être l'une de vos adresses de transfert (celle d'un alias ou celle par défaut).",
+	"notice.ruleUnsupported": "Une condition ou une action n'est pas prise en charge, ou il y en a trop : au maximum {conditions} conditions, {values} valeurs par condition et {length} caractères par valeur.",
 };
 
 export default dictionary;

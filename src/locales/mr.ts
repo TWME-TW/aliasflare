@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "अजून नियम नाहीत.",
 	"rules.name": "नाव",
 	"rules.conditions": "अटी",
-	"rules.conditionsHelp": "मूल्य नसलेली ओळ वगळली जाते. अनेक मूल्ये स्वल्पविरामाने वेगळी करा: त्यांपैकी कोणतेही जुळू शकते (\"is not\" आणि \"does not\" साठी कोणतेही जुळू नये).",
+	"rules.conditionsHelp": "मूल्य नसलेली ओळ वगळली जाते. अनेक मूल्ये वेगवेगळ्या ओळींत लिहा: त्यांपैकी कोणतेही जुळू शकते (“नाही” आणि “समाविष्ट नाही” साठी कोणतेही जुळू नये).",
 	"rules.operator": "मेल जुळला पाहिजे",
 	"rules.operator.AND": "सर्व अटी",
 	"rules.operator.OR": "कोणतीही एक अट",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "जुळणी",
 	"rules.values": "मूल्ये",
 	"rules.value": "मूल्य",
-	"rules.valuesPlaceholder": "मूल्य, दुसरे मूल्य",
+	"rules.valuesPlaceholder": "प्रत्येक ओळीत एक मूल्य",
 	"rules.type.sender": "प्रेषक",
 	"rules.type.subject": "विषय",
 	"rules.type.alias": "उपनाव",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "बॅनर लपवा",
 	"rules.applyTo": "यावर लागू करा",
 	"rules.forwards": "फॉरवर्ड केलेले मेल",
-	"rules.forwardsHelp": "उपनावासाठी आलेले मेल. मोफत योजना बदल न करता पुढे पाठवलेला संदेश फक्त ब्लॉक किंवा दुसरीकडे फॉरवर्ड करता येतो.",
+	"rules.forwardsHelp": "उपनावासाठी आलेले मेल. बदल न करता पुढे पाठवलेला मेल (फक्त प्राप्तीसाठीचे फॉरवर्डिंग, किंवा मोफत योजनेला पुन्हा लिहिण्यासाठी खूप मोठा संदेश) फक्त ब्लॉक किंवा दुसरीकडे फॉरवर्ड करता येतो. प्रेषकाचे DMARC अयशस्वी झाल्यास बॅनर राहतो.",
 	"rules.replies": "प्रत्युत्तरे आणि नवीन संदेश",
 	"rules.repliesHelp": "रिव्हर्स उपनावाद्वारे तुम्ही पाठवलेला मेल. येथे प्रेषक म्हणजे ज्याला मेल जातो तो संपर्क; फक्त ब्लॉक, विषय बदला आणि जोडपत्रे काढा लागू होतात.",
 	"rules.active": "चालू",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "नियमाला नाव, मूल्य असलेली किमान एक अट आणि किमान एक कृती आवश्यक आहे.",
 	"notice.ruleLimit": "आधीच {max} नियम आहेत.",
 	"notice.ruleMissing": "तो नियम आता अस्तित्वात नाही.",
-	"notice.ruleForwardTo": "\"Forward to\" पत्ता वैध नाही, किंवा तो उपनाव डोमेनवर आहे.",
+	"notice.ruleForwardTo": "“यावर फॉरवर्ड करा” चा पत्ता तुमच्या फॉरवर्डिंग पत्त्यांपैकी एक असला पाहिजे (उपनावाचा किंवा डीफॉल्ट).",
+	"notice.ruleUnsupported": "एखादी अट किंवा कृती समर्थित नाही, किंवा त्या खूप आहेत: जास्तीत जास्त {conditions} अटी, एका अटीत {values} मूल्ये आणि एका मूल्यात {length} अक्षरे.",
 };
 
 export default dictionary;

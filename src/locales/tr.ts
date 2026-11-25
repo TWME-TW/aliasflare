@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Henüz kural yok.",
 	"rules.name": "Ad",
 	"rules.conditions": "Koşullar",
-	"rules.conditionsHelp": "Değeri olmayan satır dikkate alınmaz. Birden fazla değeri virgülle ayırın: bunlardan herhangi biri eşleşebilir (“is not” ve “does not” için hiçbiri eşleşmemelidir).",
+	"rules.conditionsHelp": "Değeri olmayan satır dikkate alınmaz. Birden fazla değeri ayrı satırlara yazın: bunlardan herhangi biri eşleşebilir (“eşit değildir” ve “içermez” için hiçbiri eşleşmemelidir).",
 	"rules.operator": "E-posta şunu karşılamalı",
 	"rules.operator.AND": "tüm koşulları",
 	"rules.operator.OR": "herhangi bir koşulu",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Eşleşme",
 	"rules.values": "Değerler",
 	"rules.value": "Değer",
-	"rules.valuesPlaceholder": "değer, başka bir değer",
+	"rules.valuesPlaceholder": "Her satıra bir değer",
 	"rules.type.sender": "Gönderen",
 	"rules.type.subject": "Konu",
 	"rules.type.alias": "Takma ad",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Banneri gizle",
 	"rules.applyTo": "Uygulanacak yer",
 	"rules.forwards": "Yönlendirilen e-postalar",
-	"rules.forwardsHelp": "Bir takma ada gelen e-postalar. Ücretsiz plan tarafından değiştirilmeden iletilen bir ileti yalnızca engellenebilir ya da başka bir yere iletilebilir.",
+	"rules.forwardsHelp": "Bir takma ada gelen e-postalar. Değiştirilmeden iletilen e-postalar (yalnızca alma amaçlı yönlendirme ya da Ücretsiz planın yeniden yazamayacağı kadar büyük ileti) yalnızca engellenebilir veya başka bir yere iletilebilir. Gönderen DMARC'ta başarısız olduğunda banner görünmeye devam eder.",
 	"rules.replies": "Yanıtlar ve yeni iletiler",
 	"rules.repliesHelp": "Ters takma ad üzerinden gönderdiğiniz e-postalar. Burada gönderen, iletinin gittiği muhataptır ve yalnızca Engelle, Konuyu değiştir ve Ekleri kaldır uygulanır.",
 	"rules.active": "Açık",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Bir kuralın adı, değeri olan en az bir koşulu ve en az bir işlemi olmalıdır.",
 	"notice.ruleLimit": "Zaten {max} kural var.",
 	"notice.ruleMissing": "Bu kural artık yok.",
-	"notice.ruleForwardTo": "Şuraya ilet adresi geçerli değil ya da bir takma ad alan adında.",
+	"notice.ruleForwardTo": "Şuraya ilet, yönlendirme adreslerinizden biri olmalıdır (bir takma adın ya da varsayılan adresin).",
+	"notice.ruleUnsupported": "Bir koşul ya da işlem desteklenmiyor veya çok fazla: en fazla {conditions} koşul, bir koşulda {values} değer ve bir değerde {length} karakter.",
 };
 
 export default dictionary;

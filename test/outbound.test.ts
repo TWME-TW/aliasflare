@@ -128,6 +128,21 @@ describe("replies through Mail.baby", () => {
 		const { normalizeOutboundOptions } = await import("../src/outbound");
 		expect(normalizeOutboundOptions({ mailbabyOrderId: " 66 " }).mailbabyOrderId).toBe("66");
 		expect(normalizeOutboundOptions({ mailbabyOrderId: "mb66" }).mailbabyOrderId).toBe("");
+		// Refused whole rather than cut, and never past what a JSON number holds exactly.
+		expect(normalizeOutboundOptions({ mailbabyOrderId: "1234567890123456789" }).mailbabyOrderId).toBe("");
+		expect(normalizeOutboundOptions({ mailbabyOrderId: "123456789012345" }).mailbabyOrderId).toBe("123456789012345");
+	});
+
+	it("never put the key in the reason a refused reply gives", async () => {
+		await db.prepare("INSERT INTO config (key, value) VALUES ('outboundProvider', 'mailbaby'), ('outboundApiKey', 'mb-secret-key-123')").run();
+		stubProvider(() => Response.json({ status: "error", text: "key mb-secret-key-123 has no active order" }));
+		const reverse = await reverseAliasOfBob();
+		const { msg, rejected } = inbound(reverse, "owner@gmail.test", `${PASS}\r\nFrom: owner@gmail.test`, "Thanks");
+		await deliver(msg);
+		expect(rejected()).toMatch(/could not be sent/);
+		expect(rejected()).not.toContain("mb-secret-key-123");
+		const events = await db.prepare("SELECT detail FROM events").all<{ detail: string | null }>();
+		expect(events.results.map((event) => event.detail ?? "").join(" ")).not.toContain("mb-secret-key-123");
 	});
 });
 

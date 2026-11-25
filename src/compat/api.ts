@@ -963,7 +963,8 @@ const bulkDone = (c: C, aliases: AliasView[], verb: string) =>
 
 api.post("/v1/aliases/get/bulk", async (c) => {
 	const { aliases } = await bulkAliases(c, true);
-	return c.json({ data: await Promise.all(aliases.map((alias) => addyAlias(c, alias))) });
+	const labels = await labelsOf(c.env.DB, aliases.map((alias) => alias.address));
+	return c.json({ data: await Promise.all(aliases.map((alias) => addyAlias(c, alias, labels.get(alias.address) ?? []))) });
 });
 
 for (const [action, verb, includeDeleted, run] of [
@@ -1059,9 +1060,12 @@ api.post("/v1/aliases/labels/bulk", async (c) => {
 
 // ---------- rules ----------
 
+type Destinations = Awaited<ReturnType<typeof listDestinations>>;
+const ruleDestinations = (c: C): Promise<Destinations> => listDestinations(c.env.DB, c.get("settings"));
+
 // A rule's Forward to is an address here and a recipient id in the apps.
-async function addyRule(c: C, rule: Rule) {
-	const destinations = await listDestinations(c.env.DB, c.get("settings"));
+async function addyRule(c: C, rule: Rule, known?: Destinations) {
+	const destinations = known ?? (await ruleDestinations(c));
 	return {
 		id: rule.id,
 		user_id: OWNER_ID,
@@ -1088,17 +1092,21 @@ const RULE_ERRORS: Record<RuleError["reason"], [number, string]> = {
 	limit: [422, "There are too many rules."],
 	missing: [404, "Not found"],
 	forwardTo: [422, "The Forward to recipient is not known."],
+	unsupported: [422, "aliasflare cannot apply this rule as given: it supports no regular expressions, webhooks, encryption or description changes, and at most 10 conditions, 20 values in a condition and 200 characters in a value."],
 };
 
-async function ruleInput(c: C) {
+/** A rule from an app; its Forward to may stay the address it had, even if no alias uses it any more. */
+async function ruleInput(c: C, existing: Rule | null = null) {
 	const input = await body(c);
-	const destinations = await listDestinations(c.env.DB, c.get("settings"));
+	const destinations = await ruleDestinations(c);
+	const kept = existing?.actions.find((action) => action.type === "forwardTo")?.value;
 	const actions = (Array.isArray(input.actions) ? input.actions : []).map((action) => {
 		if (!action || typeof action !== "object" || (action as { type?: unknown }).type !== "forwardTo") return action;
 		const value = (action as { value?: unknown }).value;
 		const match = destinations.find((d) => d.uid === value || String(d.numId) === String(value));
-		if (!match) throw new ClientError(...RULE_ERRORS.forwardTo);
-		return { type: "forwardTo", value: match.email };
+		if (match) return { type: "forwardTo", value: match.email };
+		if (kept && typeof value === "string" && value.toLowerCase() === kept) return { type: "forwardTo", value: kept };
+		throw new ClientError(...RULE_ERRORS.forwardTo);
 	});
 	try {
 		return cleanRule({ ...input, actions });
@@ -1123,14 +1131,17 @@ async function findRule(c: C, id: string): Promise<Rule> {
 	return rule;
 }
 
-api.get("/v1/rules", async (c) => c.json({ data: await Promise.all((await listRules(c.env.DB)).map((rule) => addyRule(c, rule))) }));
+api.get("/v1/rules", async (c) => {
+	const destinations = await ruleDestinations(c);
+	return c.json({ data: await Promise.all((await listRules(c.env.DB)).map((rule) => addyRule(c, rule, destinations))) });
+});
 api.get("/v1/rules/:id", async (c) => c.json({ data: await addyRule(c, await findRule(c, c.req.param("id"))) }));
 api.post("/v1/rules", async (c) => {
 	const input = await ruleInput(c);
 	return c.json({ data: await addyRule(c, await ruleCall(() => createRule(c.env.DB, input))) }, 201);
 });
 api.patch("/v1/rules/:id", async (c) => {
-	const input = await ruleInput(c);
+	const input = await ruleInput(c, await findRule(c, c.req.param("id")));
 	return c.json({ data: await addyRule(c, await ruleCall(() => updateRule(c.env.DB, c.req.param("id"), input))) });
 });
 api.delete("/v1/rules/:id", async (c) => {
@@ -1155,10 +1166,12 @@ api.post("/v1/reorder-rules", async (c) => {
 // ---------- failed deliveries ----------
 
 // Forwards that could not be sent. No copy is kept, so one cannot be downloaded or sent again.
+// Deleting one only hides it here: the row is also the forward's retry record and its activity
+// entry, so a redelivery of the same message does not start its attempts over.
 type FailedRow = { id: string; alias_address: string; error: string | null; created_at: number; updated_at: number; alias_uid: string | null; alias_note: string | null; sender: string | null };
 
 const FAILED_SELECT = `SELECT f.id, f.alias_address, f.error, f.created_at, f.updated_at, a.uid AS alias_uid, a.note AS alias_note, ct.email AS sender
-	FROM forwards f LEFT JOIN aliases a ON a.address = f.alias_address LEFT JOIN contacts ct ON ct.id = f.contact_id WHERE f.status = 'failed'`;
+	FROM forwards f LEFT JOIN aliases a ON a.address = f.alias_address LEFT JOIN contacts ct ON ct.id = f.contact_id WHERE f.status = 'failed' AND f.dismissed = 0`;
 
 function addyFailed(row: FailedRow) {
 	return {
@@ -1193,16 +1206,22 @@ api.get("/v1/failed-deliveries", async (c) => {
 	const pageNumber = pageParam(c.req.query("page[number]"), 1);
 	const [list, counted] = await c.env.DB.batch([
 		c.env.DB.prepare(`${FAILED_SELECT} ORDER BY f.created_at DESC LIMIT ? OFFSET ?`).bind(size, (pageNumber - 1) * size),
-		c.env.DB.prepare("SELECT COUNT(*) AS total FROM forwards WHERE status = 'failed'"),
+		c.env.DB.prepare("SELECT COUNT(*) AS total FROM forwards WHERE status = 'failed' AND dismissed = 0"),
 	]);
 	const rows = (list?.results ?? []) as FailedRow[];
 	const total = Number((counted?.results?.[0] as { total?: number } | undefined)?.total ?? 0);
 	const from = rows.length ? (pageNumber - 1) * size + 1 : null;
 	const url = new URL(c.req.url);
+	const lastPage = Math.max(1, Math.ceil(total / size));
+	const pageUrl = (n: number) => {
+		const next = new URL(url);
+		next.searchParams.set("page[number]", String(n));
+		return next.toString();
+	};
 	return c.json({
 		data: rows.map(addyFailed),
-		links: { first: null, last: null, prev: null, next: null },
-		meta: { current_page: pageNumber, from, last_page: Math.max(1, Math.ceil(total / size)), links: [], path: `${url.origin}${url.pathname}`, per_page: size, to: from ? from + rows.length - 1 : null, total },
+		links: { first: pageUrl(1), last: pageUrl(lastPage), prev: pageNumber > 1 ? pageUrl(pageNumber - 1) : null, next: pageNumber < lastPage ? pageUrl(pageNumber + 1) : null },
+		meta: { current_page: pageNumber, from, last_page: lastPage, links: [], path: `${url.origin}${url.pathname}`, per_page: size, to: from ? from + rows.length - 1 : null, total },
 	});
 });
 api.get("/v1/failed-deliveries/:id", async (c) => {
@@ -1211,7 +1230,7 @@ api.get("/v1/failed-deliveries/:id", async (c) => {
 	return c.json({ data: addyFailed(row) });
 });
 api.delete("/v1/failed-deliveries/:id", async (c) => {
-	const result = await c.env.DB.prepare("DELETE FROM forwards WHERE id = ? AND status = 'failed'").bind(c.req.param("id")).run();
+	const result = await c.env.DB.prepare("UPDATE forwards SET dismissed = 1 WHERE id = ? AND status = 'failed' AND dismissed = 0").bind(c.req.param("id")).run();
 	if (!result.meta.changes) throw new ClientError(404, "Not found");
 	return c.body(null, 204);
 });

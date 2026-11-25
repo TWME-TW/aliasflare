@@ -514,7 +514,7 @@ export const en = {
 	"rules.empty": "No rules yet.",
 	"rules.name": "Name",
 	"rules.conditions": "Conditions",
-	"rules.conditionsHelp": "A row without values is left out. Separate several values with commas: any of them can match (for “is not” and “does not”, none may).",
+	"rules.conditionsHelp": "A row without values is left out. Put several values on separate lines: any of them can match (for “is not” and “does not”, none may).",
 	"rules.operator": "Mail must match",
 	"rules.operator.AND": "all conditions",
 	"rules.operator.OR": "any condition",
@@ -523,7 +523,7 @@ export const en = {
 	"rules.matchLabel": "Match",
 	"rules.values": "Values",
 	"rules.value": "Value",
-	"rules.valuesPlaceholder": "value, another value",
+	"rules.valuesPlaceholder": "One value per line",
 	"rules.type.sender": "Sender",
 	"rules.type.subject": "Subject",
 	"rules.type.alias": "Alias",
@@ -545,7 +545,7 @@ export const en = {
 	"rules.action.banner": "Hide the banner",
 	"rules.applyTo": "Apply to",
 	"rules.forwards": "Forwarded mail",
-	"rules.forwardsHelp": "Mail that arrives for an alias. A message the Free plan passes on unchanged can only be blocked or forwarded elsewhere.",
+	"rules.forwardsHelp": "Mail that arrives for an alias. Mail passed on unchanged (receive-only forwarding, or a message too large for the Free plan to rewrite) can only be blocked or forwarded elsewhere. The banner stays when the sender failed DMARC.",
 	"rules.replies": "Replies and new messages",
 	"rules.repliesHelp": "Mail you send through a reverse alias. Here the sender is the correspondent it goes to, and only Block, Replace the subject and Remove attachments apply.",
 	"rules.active": "On",
@@ -562,7 +562,8 @@ export const en = {
 	"notice.ruleInvalid": "A rule needs a name, at least one condition with a value and at least one action.",
 	"notice.ruleLimit": "There are already {max} rules.",
 	"notice.ruleMissing": "That rule no longer exists.",
-	"notice.ruleForwardTo": "The Forward to address is not valid, or it is on an alias domain.",
+	"notice.ruleForwardTo": "Forward to must be one of your forwarding addresses (an alias's or the default one).",
+	"notice.ruleUnsupported": "A condition or action is not supported, or there are too many: at most {conditions} conditions, {values} values in a condition and {length} characters in a value.",
 };
 
 export type MessageKey = keyof typeof en;

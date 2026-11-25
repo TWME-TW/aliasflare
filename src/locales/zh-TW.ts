@@ -491,7 +491,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "還沒有規則。",
 	"rules.name": "名稱",
 	"rules.conditions": "條件",
-	"rules.conditionsHelp": "沒有值的列會被忽略。多個值以逗號分隔：任一值符合即可（若為「不是」和「不包含」，則都不能符合）。",
+	"rules.conditionsHelp": "沒有值的列會被忽略。多個值請分行填寫：任一值符合即可（若為「不是」和「不包含」，則都不能符合）。",
 	"rules.operator": "信件必須符合",
 	"rules.operator.AND": "所有條件",
 	"rules.operator.OR": "任一條件",
@@ -500,7 +500,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "符合",
 	"rules.values": "值",
 	"rules.value": "值",
-	"rules.valuesPlaceholder": "值，另一個值",
+	"rules.valuesPlaceholder": "每行一個值",
 	"rules.type.sender": "寄件者",
 	"rules.type.subject": "主旨",
 	"rules.type.alias": "別名",
@@ -522,7 +522,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "隱藏橫幅",
 	"rules.applyTo": "套用於",
 	"rules.forwards": "轉寄的信件",
-	"rules.forwardsHelp": "寄到別名的信件。免費方案原樣轉寄的信件只能封鎖或轉寄到其他地方。",
+	"rules.forwardsHelp": "寄到別名的信件。原封不動轉寄的信件（僅收不寄的轉寄，或因過大而免費方案無法改寫的信件）只能封鎖或轉寄到其他地方。寄件者未通過 DMARC 時仍會顯示橫幅。",
 	"rules.replies": "回信與新信件",
 	"rules.repliesHelp": "透過反向別名寄出的信件。這裡的寄件者是收信對象，只有封鎖、替換主旨和移除附件適用。",
 	"rules.active": "開啟",
@@ -539,7 +539,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "規則需要名稱、至少一個有值的條件，以及至少一個動作。",
 	"notice.ruleLimit": "已有 {max} 條規則。",
 	"notice.ruleMissing": "該規則已不存在。",
-	"notice.ruleForwardTo": "「轉寄到」地址無效，或位於別名網域上。",
+	"notice.ruleForwardTo": "「轉寄到」地址必須是你的轉寄地址之一（別名的或預設的）。",
+	"notice.ruleUnsupported": "條件或動作不受支援，或數量過多：最多 {conditions} 個條件，每個條件最多 {values} 個值，每個值最多 {length} 個字元。",
 };
 
 export default dictionary;

@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Aún no hay reglas.",
 	"rules.name": "Nombre",
 	"rules.conditions": "Condiciones",
-	"rules.conditionsHelp": "Una fila sin valores se omite. Separa varios valores con comas: basta con que coincida cualquiera de ellos (en «no es» y «no contiene», ninguno debe coincidir).",
+	"rules.conditionsHelp": "Una fila sin valores se omite. Escribe varios valores en líneas separadas: basta con que coincida cualquiera de ellos (en «no es» y «no contiene», ninguno debe coincidir).",
 	"rules.operator": "El correo debe cumplir",
 	"rules.operator.AND": "todas las condiciones",
 	"rules.operator.OR": "cualquier condición",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Coincidir",
 	"rules.values": "Valores",
 	"rules.value": "Valor",
-	"rules.valuesPlaceholder": "valor, otro valor",
+	"rules.valuesPlaceholder": "Un valor por línea",
 	"rules.type.sender": "Remitente",
 	"rules.type.subject": "Asunto",
 	"rules.type.alias": "Alias",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Ocultar el banner",
 	"rules.applyTo": "Aplicar a",
 	"rules.forwards": "Correo reenviado",
-	"rules.forwardsHelp": "Correo que llega a un alias. Un mensaje que el plan gratuito pasa sin cambios solo se puede bloquear o reenviar a otro destino.",
+	"rules.forwardsHelp": "Correo que llega a un alias. El correo reenviado sin cambios (reenvío solo de recepción, o un mensaje demasiado grande para que el plan gratuito lo reescriba) solo se puede bloquear o reenviar a otro destino. El banner se mantiene cuando el remitente no superó DMARC.",
 	"rules.replies": "Respuestas y mensajes nuevos",
 	"rules.repliesHelp": "Correo que envías mediante un alias inverso. Aquí el remitente es el contacto al que se envía, y solo se aplican Bloquear, Sustituir el asunto y Quitar adjuntos.",
 	"rules.active": "Activada",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Una regla necesita un nombre, al menos una condición con valor y al menos una acción.",
 	"notice.ruleLimit": "Ya hay {max} reglas.",
 	"notice.ruleMissing": "Esa regla ya no existe.",
-	"notice.ruleForwardTo": "La dirección de reenvío no es válida o está en un dominio de alias.",
+	"notice.ruleForwardTo": "Reenviar a debe ser una de tus direcciones de reenvío (la de un alias o la predeterminada).",
+	"notice.ruleUnsupported": "Una condición o acción no es compatible, o hay demasiadas: como máximo {conditions} condiciones, {values} valores en una condición y {length} caracteres en un valor.",
 };
 
 export default dictionary;

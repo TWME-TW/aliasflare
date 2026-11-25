@@ -512,7 +512,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Bado hakuna sheria.",
 	"rules.name": "Jina",
 	"rules.conditions": "Masharti",
-	"rules.conditionsHelp": "Safu isiyo na thamani haizingatiwi. Tenganisha thamani kadhaa kwa koma: yoyote kati yake inaweza kulingana (kwa “is not” na “does not”, hakuna hata moja inayopaswa kulingana).",
+	"rules.conditionsHelp": "Safu isiyo na thamani haizingatiwi. Andika thamani kadhaa kwenye mistari tofauti: yoyote kati yake inaweza kulingana (kwa “si sawa na” na “haina”, hakuna hata moja inayopaswa kulingana).",
 	"rules.operator": "Barua pepe lazima ilingane na",
 	"rules.operator.AND": "masharti yote",
 	"rules.operator.OR": "sharti lolote",
@@ -521,7 +521,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Linganisha",
 	"rules.values": "Thamani",
 	"rules.value": "Thamani",
-	"rules.valuesPlaceholder": "thamani, thamani nyingine",
+	"rules.valuesPlaceholder": "Thamani moja kwa kila mstari",
 	"rules.type.sender": "Mtumaji",
 	"rules.type.subject": "Mada",
 	"rules.type.alias": "Lakabu",
@@ -543,7 +543,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Ficha bango",
 	"rules.applyTo": "Tumia kwa",
 	"rules.forwards": "Barua zilizotumwa",
-	"rules.forwardsHelp": "Barua zinazofika kwa lakabu. Ujumbe ambao mpango wa Bure unaupitisha bila mabadiliko unaweza tu kuzuiwa au kutumwa mahali pengine.",
+	"rules.forwardsHelp": "Barua zinazofika kwa lakabu. Ujumbe unaotumwa bila mabadiliko (kutuma kwa kupokea pekee, au ujumbe mkubwa mno kwa mpango wa Bure kuuandika upya) unaweza tu kuzuiwa au kutumwa mahali pengine. Bango hubaki mtumaji akishindwa DMARC.",
 	"rules.replies": "Majibu na ujumbe mpya",
 	"rules.repliesHelp": "Barua unazotuma kupitia lakabu ya kinyume. Hapa mtumaji ni mhusika unayemtumia, na ni Zuia, Badilisha mada na Ondoa viambatisho pekee zinazotumika.",
 	"rules.active": "Imewashwa",
@@ -560,7 +560,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Sheria inahitaji jina, angalau sharti moja lenye thamani na angalau kitendo kimoja.",
 	"notice.ruleLimit": "Tayari kuna sheria {max}.",
 	"notice.ruleMissing": "Sheria hiyo haipo tena.",
-	"notice.ruleForwardTo": "Anwani ya Tuma kwa si sahihi, au iko kwenye kikoa cha lakabu.",
+	"notice.ruleForwardTo": "Tuma kwa lazima iwe mojawapo ya anwani zako za kutuma (ya lakabu au ile ya chaguo-msingi).",
+	"notice.ruleUnsupported": "Sharti au kitendo hakitumiki, au kipo kingi mno: kiwango cha juu ni masharti {conditions}, thamani {values} katika sharti moja na herufi {length} katika thamani moja.",
 };
 
 export default dictionary;

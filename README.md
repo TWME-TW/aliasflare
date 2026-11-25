@@ -44,7 +44,7 @@ On a phone:
 - **Blocklist** of addresses, or domains with their subdomains, across all aliases.
 - **Search and batch editing** of the alias list, and **notes** edited in place.
 - **Labels** to group aliases: filter the list by one, or add one to many aliases at once.
-- **Rules** (as in addy.io): when the sender, subject or alias is, contains, starts or ends with (or is not, …) the values you give, block the message, replace its subject or sender name, forward it to another address, remove its attachments or hide the banner. They can act on replies too, in the order you choose.
+- **Rules** (as in addy.io): when the sender, subject or alias is, contains, starts or ends with (or is not, …) the values you give, block the message, replace its subject or sender name, forward it to another of your forwarding addresses, remove its attachments or hide the banner (not on mail that failed DMARC). They can act on replies too, in the order you choose. A rule from an app that uses something aliasflare cannot do, such as a regular expression, is refused rather than saved in part.
 
 **Apps and browser extensions**
 - **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. Bitwarden's alias generator works too.
@@ -127,7 +127,7 @@ A subdomain allows at most 200 routing rules, which is why one rule for `reply@`
 2. On **API keys**, create one key per app or extension.
 3. In the app or extension, choose the self-hosted option and enter the URL shown on the API keys page and the key (SimpleLogin: *API URL*; addy.io: *Instance URL*).
 
-In the addy.io apps, aliases, recipients (your forwarding addresses), domains, labels, rules, the blocklist, failed deliveries and actions on several aliases at once work. aliasflare has no usernames (alias domains take their place), so that screen stays empty; rules have no regular expressions or webhooks, and a failed delivery cannot be sent again because no copy is kept. Recipient, domain and account settings are changed in aliasflare, not in the app.
+In the addy.io apps, aliases, recipients (your forwarding addresses), domains, labels, rules, the blocklist, failed deliveries and actions on several aliases at once work. aliasflare has no usernames (alias domains take their place), so that screen stays empty; rules have no regular expressions or webhooks, and a failed delivery cannot be sent again because no copy is kept (deleting one hides it from the list). Recipient, domain and account settings are changed in aliasflare, not in the app.
 
 **Bitwarden** (and Vaultwarden, which uses the same apps) can create an alias for each new login with its *Forwarded email alias* generator. It is available in the browser extension and the desktop app.
 

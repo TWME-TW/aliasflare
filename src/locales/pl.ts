@@ -497,7 +497,7 @@ const dictionary: Dictionary = {
 	"rules.empty": "Brak reguł.",
 	"rules.name": "Nazwa",
 	"rules.conditions": "Warunki",
-	"rules.conditionsHelp": "Wiersz bez wartości jest pomijany. Oddzielaj wiele wartości przecinkami: może pasować dowolna z nich (dla „is not” i „does not” żadna nie może pasować).",
+	"rules.conditionsHelp": "Wiersz bez wartości jest pomijany. Wpisz wiele wartości w osobnych wierszach: może pasować dowolna z nich (dla „nie jest” i „nie zawiera” żadna nie może pasować).",
 	"rules.operator": "Poczta musi spełniać",
 	"rules.operator.AND": "wszystkie warunki",
 	"rules.operator.OR": "dowolny warunek",
@@ -506,7 +506,7 @@ const dictionary: Dictionary = {
 	"rules.matchLabel": "Dopasuj",
 	"rules.values": "Wartości",
 	"rules.value": "Wartość",
-	"rules.valuesPlaceholder": "wartość, inna wartość",
+	"rules.valuesPlaceholder": "Jedna wartość w wierszu",
 	"rules.type.sender": "Nadawca",
 	"rules.type.subject": "Temat",
 	"rules.type.alias": "Alias",
@@ -528,7 +528,7 @@ const dictionary: Dictionary = {
 	"rules.action.banner": "Ukryj baner",
 	"rules.applyTo": "Zastosuj do",
 	"rules.forwards": "Przekazana poczta",
-	"rules.forwardsHelp": "Poczta przychodząca na alias. Wiadomość, którą plan Free przekazuje bez zmian, można tylko zablokować albo przekazać gdzie indziej.",
+	"rules.forwardsHelp": "Poczta przychodząca na alias. Poczta przekazana bez zmian (przekazywanie tylko do odbioru albo wiadomość zbyt duża, by plan Free mógł ją przepisać) może być tylko zablokowana lub przekazana gdzie indziej. Baner pozostaje, gdy nadawca nie przeszedł DMARC.",
 	"rules.replies": "Odpowiedzi i nowe wiadomości",
 	"rules.repliesHelp": "Poczta wysyłana przez alias zwrotny. Tutaj nadawcą jest korespondent, do którego trafia, a stosują się tylko Zablokuj, Zamień temat i Usuń załączniki.",
 	"rules.active": "Włączona",
@@ -545,7 +545,8 @@ const dictionary: Dictionary = {
 	"notice.ruleInvalid": "Reguła wymaga nazwy, co najmniej jednego warunku z wartością i co najmniej jednego działania.",
 	"notice.ruleLimit": "Jest już {max} reguł.",
 	"notice.ruleMissing": "Ta reguła już nie istnieje.",
-	"notice.ruleForwardTo": "Adres do przekazania jest nieprawidłowy albo znajduje się w domenie aliasów.",
+	"notice.ruleForwardTo": "Przekaż do musi być jednym z Twoich adresów przekazywania (aliasu lub domyślnym).",
+	"notice.ruleUnsupported": "Warunek lub działanie nie jest obsługiwane albo jest ich zbyt wiele: najwyżej {conditions} warunków, {values} wartości w warunku i {length} znaków w wartości.",
 };
 
 export default dictionary;
