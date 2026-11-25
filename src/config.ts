@@ -144,9 +144,10 @@ function parseJson(text: string): unknown {
 	}
 }
 
-export async function loadConfig(env: Env): Promise<AppConfig> {
+/** The configuration; `rows` are the config table's rows when they were read already (in a batch). */
+export async function loadConfig(env: Env, rows?: { key: string; value: string }[]): Promise<AppConfig> {
 	checkEnv(env);
-	const stored = await readStored(env.DB);
+	const stored: Partial<Record<StoredKey | "siteOrigin", string>> = rows ? Object.fromEntries(rows.map((row) => [row.key, row.value])) : await readStored(env.DB);
 	const pick = (key: StoredKey): string => {
 		const fromEnv = env[ENV_OVERRIDES[key]];
 		if (typeof fromEnv === "string" && fromEnv.trim()) return fromEnv.trim();

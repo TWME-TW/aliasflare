@@ -10,7 +10,7 @@ function emptyDb(): D1Database {
 		run: async () => ({ results: [], success: true, meta: { changes: 0 } }),
 		raw: async () => [],
 	};
-	return { prepare: () => statement, batch: async () => [], exec: async () => ({}), dump: async () => new ArrayBuffer(0) } as unknown as D1Database;
+	return { prepare: () => statement, batch: async (statements: unknown[]) => statements.map(() => ({ results: [], success: true, meta: {} })), exec: async () => ({}), dump: async () => new ArrayBuffer(0) } as unknown as D1Database;
 }
 
 const env = { DB: emptyDb(), SIGNING_SECRET: "test-signing-secret-that-is-long-enough-0123456789" } as unknown as Env;

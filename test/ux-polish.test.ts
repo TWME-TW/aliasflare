@@ -233,20 +233,37 @@ describe("review follow-ups", () => {
 });
 
 describe("moving between pages", () => {
-	it("lets dashboard pages fetch links ahead, but not sign-in or one-time pages", async () => {
+	it("does not fetch pages ahead, and only shows a bar when a page is slow", async () => {
 		const dashboard = await app.fetch(new Request(`${ORIGIN}/`, { headers: { cookie } }), env);
-		expect(dashboard.headers.get("Speculation-Rules")).toBe('"/assets/speculation.json"');
-		const login = await app.fetch(new Request(`${ORIGIN}/login`), env);
-		expect(login.headers.get("Speculation-Rules")).toBeNull();
+		expect(dashboard.headers.get("Speculation-Rules")).toBeNull();
 		const css = await (await app.fetch(new Request(`${ORIGIN}/assets/app.css`), env)).text();
-		expect(css).toContain("@view-transition");
-		expect(css).toContain("html[data-navigating]");
-		const rules = await app.fetch(new Request(`${ORIGIN}/assets/speculation.json`), env);
-		expect(rules.headers.get("Content-Type")).toBe("application/speculationrules+json");
-		const json = await rules.json<{ prefetch: { where: { and: { not?: { href_matches?: string[] } }[] }; eagerness: string }[] }>();
-		expect(json.prefetch[0]!.eagerness).toBe("moderate");
-		const excluded = json.prefetch[0]!.where.and.flatMap((part) => part.not?.href_matches ?? []);
-		for (const path of ["/unsubscribe/*", "/action/*", "/login", "/api/*", "/mcp"]) expect(excluded).toContain(path);
+		expect(css).not.toContain("@view-transition");
+		expect(css).toContain("nav-sweep");
+		expect(css).toMatch(/html\[data-navigating\] body::before \{[^}]*opacity:0;[^}]*nav-show 0s \.3s/);
+	});
+
+	it("reads the configuration, settings and session in one round trip", async () => {
+		let batches = 0;
+		let others = 0;
+		let inBatch = false;
+		const counted = new Proxy(db, {
+			get(target, prop) {
+				if (prop === "batch") return async (statements: D1PreparedStatement[]) => { batches += 1; inBatch = true; try { return await target.batch(statements); } finally { inBatch = false; } };
+				if (prop === "prepare") return (sql: string) => { const statement = target.prepare(sql); return new Proxy(statement, { get(t, p) { if (p === "first" || p === "all" || p === "run") { if (!inBatch) others += 1; } if (p === "bind") return (...args: unknown[]) => { const bound = t.bind(...args); return new Proxy(bound, { get(bt, bp) { if (bp === "first" || bp === "all" || bp === "run") { if (!inBatch) others += 1; } const v = Reflect.get(bt, bp); return typeof v === "function" ? v.bind(bt) : v; } }); }; const v = Reflect.get(t, p); return typeof v === "function" ? v.bind(t) : v; } }); };
+				const value = Reflect.get(target, prop);
+				return typeof value === "function" ? value.bind(target) : value;
+			},
+		});
+		const fast = { ...env, DB: counted } as Env;
+		const response = await app.fetch(new Request(`${ORIGIN}/settings`, { headers: { cookie } }), fast);
+		expect(response.status).toBe(200);
+		expect({ batches, others }).toEqual({ batches: 1, others: 0 });
+		// A cookie naming a live session but signed with another key is still refused.
+		const id = cookie.match(/af_session=([^.;]+)/)![1];
+		const forged = `__Host-af_session=${id}.9999999999.forged`;
+		const refused = await app.fetch(new Request(`${ORIGIN}/settings`, { headers: { cookie: forged } }), env);
+		expect(refused.status).toBe(302);
+		expect(refused.headers.get("location")).toBe("/login");
 	});
 
 	it("puts a jump bar on the settings page and the theme in its own section", async () => {
