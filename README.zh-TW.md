@@ -100,6 +100,16 @@ npx wrangler deploy
 2. 在「API 金鑰」為每個 App 或擴充功能建立一把金鑰。
 3. 在 App 或擴充功能選擇自架選項，填入 API 金鑰頁面上顯示的網址和金鑰（SimpleLogin：*API URL*；addy.io：*Instance URL*）。
 
+**Bitwarden**（以及使用相同 App 的 Vaultwarden）可以用「轉寄電子郵件別名」產生器，在建立新登入資料時自動產生別名。這個功能在瀏覽器擴充功能與桌面版中提供。
+
+1. 依上面的步驟開啟 SimpleLogin 或 addy.io 支援，並為 Bitwarden 建立一把 API 金鑰。
+2. 在 Bitwarden 開啟「產生器 → 使用者名稱」，選擇「轉寄電子郵件別名」，再選擇服務：
+   - **SimpleLogin**：*API 金鑰*填入金鑰；*自架伺服器網址*填入 Worker 的網址，例如 `https://alias.example.com`。別名前綴會取自網站名稱。
+   - **Addy.io**：*API 存取權杖*填入金鑰；*網域名稱*填入你的一個別名網域；*自架伺服器網址*填入 Worker 的網址。網站名稱會存成別名的備註。
+3. 網址**不要**加上 `/api`，但要包含 `https://`：Bitwarden 會自行補上 API 路徑。
+
+如果 Worker 前面有 WAF，請不要對 `/api/` 加上驗證（見第 9 步）。
+
 ### 6. 選用：從 SimpleLogin 或 addy.io 匯入
 
 在「匯入」頁列出要匯入的網域，貼上 API 金鑰或上傳匯出的 CSV。SimpleLogin 或 addy.io 自己網域上的別名會繼續在那裡收信，請不要列入；你自己的網域請移到 Cloudflare，並加為別名網域。

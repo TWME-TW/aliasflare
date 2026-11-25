@@ -30,7 +30,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 - **Search and batch editing** of the alias list, and **notes** edited in place.
 
 **Apps and browser extensions**
-- **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker.
+- **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. Bitwarden's alias generator works too.
 - **Import from SimpleLogin or addy.io**, with their API key or alias export (CSV), including SimpleLogin contacts.
 
 **Dashboard**
@@ -108,6 +108,16 @@ A subdomain allows at most 200 routing rules, which is why one rule for `reply@`
 1. In **Settings → Apps and browser extensions**, turn on *Support SimpleLogin clients*, *Support addy.io clients*, or both.
 2. On **API keys**, create one key per app or extension.
 3. In the app or extension, choose the self-hosted option and enter the URL shown on the API keys page and the key (SimpleLogin: *API URL*; addy.io: *Instance URL*).
+
+**Bitwarden** (and Vaultwarden, which uses the same apps) can create an alias for each new login with its *Forwarded email alias* generator. It is available in the browser extension and the desktop app.
+
+1. Turn on SimpleLogin or addy.io support and create an API key for Bitwarden, as above.
+2. In Bitwarden, open **Generator → Username**, choose **Forwarded email alias**, then a service:
+   - **SimpleLogin**: *API key* is the key; *Self-host server URL* is your Worker's URL, for example `https://alias.example.com`. The alias prefix comes from the site's name.
+   - **Addy.io**: *API access token* is the key; *Domain name* is one of your alias domains; *Self-host server URL* is your Worker's URL. The site's name is saved as the alias's note.
+3. Enter the URL **without** `/api` and with `https://`: Bitwarden adds the API path itself.
+
+If a WAF is in front of the Worker, keep `/api/` free of challenges (see step 9).
 
 ### 6. Optional: import from SimpleLogin or addy.io
 
