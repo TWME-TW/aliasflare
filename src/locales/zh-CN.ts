@@ -457,6 +457,9 @@ const dictionary: Dictionary = {
 	"theme.system": "跟随系统",
 	"theme.light": "浅色",
 	"theme.dark": "深色",
+	"activity.searchPlaceholder": "搜索别名、状态或说明",
+	"activity.results": "{count} 条记录",
+	"activity.noResults": "找不到匹配的活动记录。",
 };
 
 export default dictionary;

@@ -478,6 +478,9 @@ const dictionary: Dictionary = {
 	"theme.system": "පද්ධතිය",
 	"theme.light": "ආලෝකමත්",
 	"theme.dark": "අඳුරු",
+	"activity.searchPlaceholder": "අන්වර්ථ නාමය, තත්ත්වය හෝ විස්තර සොයන්න",
+	"activity.results": "සටහන් {count}",
+	"activity.noResults": "ගැළපෙන ක්‍රියාකාරකම් නොමැත.",
 };
 
 export default dictionary;

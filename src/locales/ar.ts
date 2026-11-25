@@ -478,6 +478,9 @@ const dictionary: Dictionary = {
 	"theme.system": "النظام",
 	"theme.light": "فاتح",
 	"theme.dark": "داكن",
+	"activity.searchPlaceholder": "ابحث في الاسم المستعار أو الحالة أو التفاصيل",
+	"activity.results": "{count} سجل",
+	"activity.noResults": "لا توجد أنشطة مطابقة.",
 };
 
 export default dictionary;

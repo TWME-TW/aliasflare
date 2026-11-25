@@ -457,6 +457,9 @@ const dictionary: Dictionary = {
 	"theme.system": "跟隨系統",
 	"theme.light": "淺色",
 	"theme.dark": "深色",
+	"activity.searchPlaceholder": "搜尋別名、狀態或說明",
+	"activity.results": "{count} 筆紀錄",
+	"activity.noResults": "找不到符合的活動紀錄。",
 };
 
 export default dictionary;

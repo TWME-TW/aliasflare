@@ -371,3 +371,41 @@ describe("light/dark/system theme setting", () => {
 		expect(await res.json()).toMatchObject({ ok: true, theme: "dark" });
 	});
 });
+
+describe("UI layout and activity search / pagination", () => {
+	it("styles search inputs consistently and aligns create-alias note and destination fields", async () => {
+		const css = await (await app.fetch(new Request(`${ORIGIN}/assets/app.css`), env)).text();
+		expect(css).toContain("input[type=search]");
+		expect(css).toContain(".create-extra { display:grid;");
+		expect(css).toContain("align-items:end;");
+		expect(css).toContain(".create-extra label { display:flex; flex-direction:column;");
+	});
+
+	it("supports searching and changing per-page count on /activity", async () => {
+		const cookie = await signIn(db);
+		for (let i = 1; i <= 30; i += 1) {
+			await db
+				.prepare("INSERT INTO forwards (id, inbound_id, alias_address, subject, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'sent', ?, ?)")
+				.bind(`f${i}`, `in${i}`, i === 1 ? "special@a.test" : `user${i}@a.test`, i === 1 ? "Invoice 100%" : `Hello ${i}`, i, i)
+				.run();
+		}
+		await db
+			.prepare("INSERT INTO events (id, kind, alias_address, status, detail, created_at) VALUES ('e1', 'reply', 'replybox@a.test', 'sent', 'Replied to Bob', 100)")
+			.run();
+
+		const paged = await (await app.fetch(new Request(`${ORIGIN}/activity?per=25&page=1`, { headers: { cookie } }), env)).text();
+		expect(paged).toContain("31 entries");
+		expect(paged).toContain('name="q"');
+		expect(paged).toContain('name="per"');
+		expect(paged).toContain("/activity?per=25&amp;page=2");
+
+		const searched = await (await app.fetch(new Request(`${ORIGIN}/activity?q=100%25&per=25`, { headers: { cookie } }), env)).text();
+		expect(searched).toContain("1 entries");
+		expect(searched).toContain("special@a.test");
+		expect(searched).not.toContain("user2@a.test");
+
+		const eventSearch = await (await app.fetch(new Request(`${ORIGIN}/activity?q=replybox`, { headers: { cookie } }), env)).text();
+		expect(eventSearch).toContain("1 entries");
+		expect(eventSearch).toContain("replybox@a.test");
+	});
+});

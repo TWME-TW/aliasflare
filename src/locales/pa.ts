@@ -472,6 +472,9 @@ const dictionary: Dictionary = {
 	"theme.system": "ਸਿਸਟਮ",
 	"theme.light": "ਹਲਕਾ",
 	"theme.dark": "ਗੂੜ੍ਹਾ",
+	"activity.searchPlaceholder": "ਉਪਨਾਮ, ਸਥਿਤੀ ਜਾਂ ਵੇਰਵਾ ਖੋਜੋ",
+	"activity.results": "{count} ਇੰਦਰਾਜ਼",
+	"activity.noResults": "ਕੋਈ ਮੇਲ ਖਾਂਦੀ ਗਤੀਵਿਧੀ ਨਹੀਂ ਮਿਲੀ।",
 };
 
 export default dictionary;

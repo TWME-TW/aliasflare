@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "సిస్టమ్",
 	"theme.light": "లైట్",
 	"theme.dark": "డార్క్",
+	"activity.searchPlaceholder": "అలియాస్, స్థితి లేదా వివరాలను వెతకండి",
+	"activity.results": "{count} ఎంట్రీలు",
+	"activity.noResults": "సరిపోయే కార్యాచరణ ఏదీ లేదు.",
 };
 
 export default dictionary;

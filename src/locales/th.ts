@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "ตามระบบ",
 	"theme.light": "สว่าง",
 	"theme.dark": "มืด",
+	"activity.searchPlaceholder": "ค้นหาอีเมลแฝง สถานะ หรือรายละเอียด",
+	"activity.results": "{count} รายการ",
+	"activity.noResults": "ไม่พบกิจกรรมที่ตรงกัน",
 };
 
 export default dictionary;

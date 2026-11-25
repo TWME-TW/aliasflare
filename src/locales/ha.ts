@@ -478,6 +478,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Tsari",
 	"theme.light": "Haske",
 	"theme.dark": "Duhu",
+	"activity.searchPlaceholder": "Nemi sunan laƙabi, matsayi ko bayani",
+	"activity.results": "Bayanai {count}",
+	"activity.noResults": "Babu aikin da ya dace.",
 };
 
 export default dictionary;

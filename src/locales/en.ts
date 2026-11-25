@@ -480,6 +480,9 @@ export const en = {
 	"theme.system": "System",
 	"theme.light": "Light",
 	"theme.dark": "Dark",
+	"activity.searchPlaceholder": "Search alias, status or detail",
+	"activity.results": "{count} entries",
+	"activity.noResults": "No matching activity.",
 };
 
 export type MessageKey = keyof typeof en;

@@ -478,6 +478,9 @@ const dictionary: Dictionary = {
 	"theme.system": "시스템",
 	"theme.light": "라이트",
 	"theme.dark": "다크",
+	"activity.searchPlaceholder": "별칭, 상태 또는 세부 정보 검색",
+	"activity.results": "{count}개 항목",
+	"activity.noResults": "일치하는 활동이 없습니다.",
 };
 
 export default dictionary;

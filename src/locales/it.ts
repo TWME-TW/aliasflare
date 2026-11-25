@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Sistema",
 	"theme.light": "Chiaro",
 	"theme.dark": "Scuro",
+	"activity.searchPlaceholder": "Cerca alias, stato o dettaglio",
+	"activity.results": "{count} voci",
+	"activity.noResults": "Nessuna attività corrispondente.",
 };
 
 export default dictionary;

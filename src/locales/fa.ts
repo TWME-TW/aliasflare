@@ -478,6 +478,9 @@ const dictionary: Dictionary = {
 	"theme.system": "سیستم",
 	"theme.light": "روشن",
 	"theme.dark": "تیره",
+	"activity.searchPlaceholder": "جستجوی نشانی مستعار، وضعیت یا جزئیات",
+	"activity.results": "{count} مورد",
+	"activity.noResults": "هیچ فعالیت مطابقی یافت نشد.",
 };
 
 export default dictionary;

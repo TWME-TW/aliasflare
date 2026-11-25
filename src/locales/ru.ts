@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Системная",
 	"theme.light": "Светлая",
 	"theme.dark": "Тёмная",
+	"activity.searchPlaceholder": "Поиск по псевдониму, статусу или описанию",
+	"activity.results": "{count} записей",
+	"activity.noResults": "Совпадающих записей не найдено.",
 };
 
 export default dictionary;

@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Sistem",
 	"theme.light": "Cerah",
 	"theme.dark": "Gelap",
+	"activity.searchPlaceholder": "Cari alias, status atau butiran",
+	"activity.results": "{count} entri",
+	"activity.noResults": "Tiada aktiviti yang sepadan.",
 };
 
 export default dictionary;

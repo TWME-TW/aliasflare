@@ -68,6 +68,7 @@ import {
 	setupPage,
 	ALIAS_PAGE_SIZES,
 	activityListPage,
+	DEFAULT_ACTIVITY_PAGE_SIZE,
 	DEFAULT_ALIAS_PAGE_SIZE,
 	type ActivityItem,
 } from "./ui";
@@ -422,14 +423,29 @@ app.use("*", async (c, next) => {
 /** Alias domains one Cloudflare setup run may handle on the Workers Free plan. */
 const FREE_PLAN_SETUP_DOMAINS = 2;
 const DASHBOARD_ACTIVITY = 10;
-const ACTIVITY_PER_PAGE = 50;
 
 /**
- * Forwards and other events, newest first. One compound query whose two halves each read an
- * index in time order (forwards_updated_idx, events_created_idx), so a page never sorts the
- * whole history.
+ * Forwards and other events, newest first. Without a search term, both halves read an index
+ * in time order (forwards_updated_idx, events_created_idx), so a page never sorts the whole history.
  */
-async function activityPage(db: D1Database, limit: number, offset: number): Promise<ActivityItem[]> {
+async function activityPage(db: D1Database, limit: number, offset: number, query = ""): Promise<ActivityItem[]> {
+	if (!query) {
+		const { results } = await db
+			.prepare(
+				`SELECT 'forward' AS kind, status, alias_address AS alias,
+					CASE WHEN error IS NOT NULL THEN error
+						WHEN trackers_removed > 0 THEN COALESCE(subject, '') || ' · ' || trackers_removed || ' tracker(s)'
+						ELSE subject END AS detail,
+					updated_at AS at FROM forwards
+				UNION ALL
+				SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
+				ORDER BY at DESC LIMIT ? OFFSET ?`,
+			)
+			.bind(limit, offset)
+			.all<ActivityItem>();
+		return results;
+	}
+	const like = `%${query.toLowerCase().replace(/[!%_]/g, (char) => `!${char}`)}%`;
 	const { results } = await db
 		.prepare(
 			`SELECT 'forward' AS kind, status, alias_address AS alias,
@@ -437,24 +453,43 @@ async function activityPage(db: D1Database, limit: number, offset: number): Prom
 					WHEN trackers_removed > 0 THEN COALESCE(subject, '') || ' · ' || trackers_removed || ' tracker(s)'
 					ELSE subject END AS detail,
 				updated_at AS at FROM forwards
+				WHERE 'forward' LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR alias_address LIKE ? ESCAPE '!' OR COALESCE(subject, '') LIKE ? ESCAPE '!' OR COALESCE(error, '') LIKE ? ESCAPE '!'
 			UNION ALL
 			SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
+				WHERE kind LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR COALESCE(alias_address, '') LIKE ? ESCAPE '!' OR COALESCE(detail, '') LIKE ? ESCAPE '!'
 			ORDER BY at DESC LIMIT ? OFFSET ?`,
 		)
-		.bind(limit, offset)
+		.bind(like, like, like, like, like, like, like, like, like, limit, offset)
 		.all<ActivityItem>();
 	return results;
 }
 
+async function activityTotal(db: D1Database, query = ""): Promise<number> {
+	if (!query) {
+		const row = await db.prepare("SELECT (SELECT COUNT(*) FROM forwards) + (SELECT COUNT(*) FROM events) AS total").first<{ total: number }>();
+		return row?.total ?? 0;
+	}
+	const like = `%${query.toLowerCase().replace(/[!%_]/g, (char) => `!${char}`)}%`;
+	const row = await db
+		.prepare(
+			`SELECT
+				(SELECT COUNT(*) FROM forwards WHERE 'forward' LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR alias_address LIKE ? ESCAPE '!' OR COALESCE(subject, '') LIKE ? ESCAPE '!' OR COALESCE(error, '') LIKE ? ESCAPE '!')
+				+ (SELECT COUNT(*) FROM events WHERE kind LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR COALESCE(alias_address, '') LIKE ? ESCAPE '!' OR COALESCE(detail, '') LIKE ? ESCAPE '!') AS total`,
+		)
+		.bind(like, like, like, like, like, like, like, like, like)
+		.first<{ total: number }>();
+	return row?.total ?? 0;
+}
+
 app.get("/activity", async (c) => {
 	const db = c.env.DB;
+	const query = (c.req.query("q") ?? "").trim().slice(0, 100);
 	const page = pageParam(c.req.query("page"), 1);
-	const [items, counted] = await Promise.all([
-		activityPage(db, ACTIVITY_PER_PAGE, (page - 1) * ACTIVITY_PER_PAGE),
-		db.prepare("SELECT (SELECT COUNT(*) FROM forwards) + (SELECT COUNT(*) FROM events) AS total").first<{ total: number }>(),
-	]);
-	const lastPage = Math.max(1, Math.ceil((counted?.total ?? 0) / ACTIVITY_PER_PAGE));
-	return c.html(activityListPage(c.get("t"), { items, page, lastPage }));
+	const requestedSize = Number(c.req.query("per"));
+	const perPage = (ALIAS_PAGE_SIZES as readonly number[]).includes(requestedSize) ? requestedSize : DEFAULT_ACTIVITY_PAGE_SIZE;
+	const [items, total] = await Promise.all([activityPage(db, perPage, (page - 1) * perPage, query), activityTotal(db, query)]);
+	const lastPage = Math.max(1, Math.ceil(total / perPage));
+	return c.html(activityListPage(c.get("t"), { items, page, lastPage, query, perPage, total }));
 });
 
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;

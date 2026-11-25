@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Hệ thống",
 	"theme.light": "Sáng",
 	"theme.dark": "Tối",
+	"activity.searchPlaceholder": "Tìm bí danh, trạng thái hoặc chi tiết",
+	"activity.results": "{count} mục",
+	"activity.noResults": "Không có hoạt động phù hợp.",
 };
 
 export default dictionary;

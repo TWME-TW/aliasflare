@@ -72,7 +72,7 @@ th { color:var(--muted); font-weight:500; font-size:13px; }
 
 /* Forms */
 label { display:block; font-weight:500; margin:18px 0 6px; }
-input[type=text], input[type=email], input[type=password], input[type=url], select {
+input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], select {
 	width:100%; max-width:480px; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:12px;
 	background:var(--card); color:inherit; font:inherit; }
 input:focus, select:focus, button:focus-visible, a:focus-visible { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--focus); }
@@ -135,7 +135,7 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	.mobile-only { display:flex !important; }
 	section { padding:18px; border-radius:20px; }
 	main.single, main.center { margin-top:3vh; }
-	input[type=text], input[type=email], input[type=password], input[type=url], select { max-width:none; font-size:16px; }
+	input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], select { max-width:none; font-size:16px; }
 	table.rt thead { display:none; }
 	table.rt, table.rt tbody, table.rt tr, table.rt td { display:block; width:100%; }
 	table.rt tr { border:1px solid var(--line); border-radius:16px; margin:10px 0; padding:4px 14px; }
@@ -149,13 +149,16 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 }
 .mobile-only { display:none; }
 .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
-.toolbar input[type=search], .toolbar input[type=text] { flex:1 1 220px; width:auto; }
-.toolbar select { width:auto; }
+.toolbar input[type=search], .toolbar input[type=text] { flex:1 1 240px; width:auto; max-width:none; min-height:44px; }
+.toolbar select { width:auto; min-height:44px; }
+.toolbar button { min-height:44px; }
 .bulk { padding:10px 12px; border-radius:16px; background:var(--bg); }
-.create { margin:12px 0; padding:10px 14px; border-radius:16px; background:var(--bg); }
+.create { margin:12px 0; padding:14px 16px; border-radius:16px; background:var(--bg); }
 .create h2 { margin:0; }
 .create-random { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.create-extra { display:grid; gap:10px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
+.create-extra { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); align-items:end; }
+.create-extra label { display:flex; flex-direction:column; gap:6px; margin:0; }
+.create-extra input { max-width:none; }
 .create-form { display:grid; gap:10px; margin-top:10px; }
 .create-address { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .create-address input { flex:1 1 200px; width:auto; }
@@ -399,9 +402,10 @@ function statusPill(t: Translate, status: string): Html {
 	return html`<span class="pill ${tone}">${translated(t, `status.${status}`, status)}</span>`;
 }
 
-/** Rows per page the alias list offers. */
+/** Rows per page the alias and activity lists offer. */
 export const ALIAS_PAGE_SIZES = [25, 50, 100, 200] as const;
 export const DEFAULT_ALIAS_PAGE_SIZE = 100;
+export const DEFAULT_ACTIVITY_PAGE_SIZE = 50;
 
 export type AliasListState = { query: string; filter: "all" | "active" | "disabled" | "pinned" | "deleted"; page: number; perPage: number; total: number };
 
@@ -428,8 +432,8 @@ ${settings.aliasDomains.map((domain) => html`<option value="${domain}">${domain}
 ${RANDOM_ALIAS_FORMATS.map((format) => html`<button name="kind" value="${format}" formnovalidate>${t(`new.random.${format}`)}</button>`)}
 </div>
 <div class="create-extra">
-<label>${t("new.note")} <input type="text" name="note" maxlength="500" /></label>
-<label>${t("new.destination")} <input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
+<label><span>${t("new.note")}</span><input type="text" name="note" maxlength="500" /></label>
+<label><span>${t("new.destination")}</span><input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
 </div>
 </form>
 </section>`;
@@ -566,24 +570,51 @@ ${items.map(
 </tbody></table>`;
 }
 
-/** Every forward and event, newest first, a page at a time. */
-export function activityListPage(t: Translate, input: { items: ActivityItem[]; page: number; lastPage: number }): Html {
+/** Every forward and event, newest first, searchable and paged. */
+export function activityListPage(
+	t: Translate,
+	input: { items: ActivityItem[]; page: number; lastPage: number; query?: string; perPage?: number; total?: number },
+): Html {
 	const { items, page: current, lastPage } = input;
-	const at = (n: number) => (n > 1 ? `/activity?page=${n}` : "/activity");
+	const query = input.query ?? "";
+	const perPage = input.perPage ?? DEFAULT_ACTIVITY_PAGE_SIZE;
+	const total = input.total ?? items.length;
+	const at = (changes: { page?: number; query?: string; perPage?: number }) => {
+		const nextQuery = changes.query ?? query;
+		const nextPer = changes.perPage ?? perPage;
+		const nextPage = changes.page ?? current;
+		const params = new URLSearchParams();
+		if (nextQuery) params.set("q", nextQuery);
+		if (nextPer !== DEFAULT_ACTIVITY_PAGE_SIZE) params.set("per", String(nextPer));
+		if (nextPage > 1) params.set("page", String(nextPage));
+		const search = params.toString();
+		return search ? `/activity?${search}` : "/activity";
+	};
 	return page(
 		t("nav.activity"),
 		html`<main><section>
 <h2>${t("nav.activity")}</h2>
-${activityTable(t, items)}
+<form class="toolbar" method="get" action="/activity" role="search">
+<input type="search" name="q" value="${query}" placeholder="${t("activity.searchPlaceholder")}" aria-label="${t("dash.search")}" />
+<select name="per" aria-label="${t("dash.perPageLabel")}" data-autosubmit>
+${ALIAS_PAGE_SIZES.map((size) => html`<option value="${size}" ${perPage === size ? "selected" : ""}>${t("dash.perPage", { count: String(size) })}</option>`)}
+</select>
+<button>${t("dash.searchButton")}</button>
+</form>
+<p class="muted">${t("activity.results", { count: String(total) })}${query ? html` · <a href="${at({ query: "", page: 1 })}">${t("dash.clear")}</a>` : ""}</p>
+${items.length === 0
+	? html`<p class="muted">${query ? t("activity.noResults") : t("dash.nothingYet")}</p>
+${current > 1 ? html`<nav class="pager" aria-label="${t("dash.pages")}"><a href="${at({ page: Math.max(1, lastPage) })}">← ${t("dash.prev")}</a></nav>` : ""}`
+	: html`${activityTable(t, items)}
 ${lastPage > 1
 	? html`<nav class="pager" aria-label="${t("dash.pages")}">
-${current > 1 ? html`<a href="${at(current - 1)}">← ${t("dash.prev")}</a>` : ""}
+${current > 1 ? html`<a href="${at({ page: current - 1 })}">← ${t("dash.prev")}</a>` : ""}
 <span class="muted">${current} / ${lastPage}</span>
-${current < lastPage ? html`<a href="${at(current + 1)}">${t("dash.next")} →</a>` : ""}
+${current < lastPage ? html`<a href="${at({ page: current + 1 })}">${t("dash.next")} →</a>` : ""}
 </nav>`
-	: ""}
+	: ""}`}
 </section></main>`,
-		{ t, nav: true, current: "/activity", path: "/activity" },
+		{ t, nav: true, current: "/activity", path: at({}) },
 	);
 }
 

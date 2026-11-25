@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Системна",
 	"theme.light": "Світла",
 	"theme.dark": "Темна",
+	"activity.searchPlaceholder": "Пошук за псевдонімом, статусом або описом",
+	"activity.results": "{count} записів",
+	"activity.noResults": "Відповідних записів не знайдено.",
 };
 
 export default dictionary;

@@ -457,6 +457,9 @@ const dictionary: Dictionary = {
 	"theme.system": "システム",
 	"theme.light": "ライト",
 	"theme.dark": "ダーク",
+	"activity.searchPlaceholder": "エイリアス、状態、詳細を検索",
+	"activity.results": "{count} 件",
+	"activity.noResults": "一致するアクティビティはありません。",
 };
 
 export default dictionary;

@@ -472,6 +472,9 @@ const dictionary: Dictionary = {
 	"theme.system": "கணினி",
 	"theme.light": "ஒளி",
 	"theme.dark": "இருள்",
+	"activity.searchPlaceholder": "மாற்றுப்பெயர், நிலை அல்லது விவரத்தைத் தேடு",
+	"activity.results": "{count} பதிவுகள்",
+	"activity.noResults": "பொருந்தும் செயல்பாடு எதுவுமில்லை.",
 };
 
 export default dictionary;

@@ -478,6 +478,9 @@ const dictionary: Dictionary = {
 	"theme.system": "سسٹم",
 	"theme.light": "ہلکا",
 	"theme.dark": "گہرا",
+	"activity.searchPlaceholder": "عرفیت، حالت یا تفصیل تلاش کریں",
+	"activity.results": "{count} اندراجات",
+	"activity.noResults": "کوئی مماثل سرگرمی نہیں ملی۔",
 };
 
 export default dictionary;

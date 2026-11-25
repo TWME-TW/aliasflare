@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "सिस्टम",
 	"theme.light": "प्रकाशमय",
 	"theme.dark": "गडद",
+	"activity.searchPlaceholder": "उर्फ नाव, स्थिती किंवा तपशील शोधा",
+	"activity.results": "{count} नोंदी",
+	"activity.noResults": "कोणतीही जुळणारी क्रियाकलाप नाही.",
 };
 
 export default dictionary;

@@ -463,6 +463,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Sistem",
 	"theme.light": "Açık",
 	"theme.dark": "Koyu",
+	"activity.searchPlaceholder": "Takma ad, durum veya ayrıntı ara",
+	"activity.results": "{count} kayıt",
+	"activity.noResults": "Eşleşen etkinlik yok.",
 };
 
 export default dictionary;

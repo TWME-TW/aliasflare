@@ -472,6 +472,9 @@ const dictionary: Dictionary = {
 	"theme.system": "સિસ્ટમ",
 	"theme.light": "લાઇટ",
 	"theme.dark": "ડાર્ક",
+	"activity.searchPlaceholder": "ઉપનામ, સ્થિતિ અથવા વિગત શોધો",
+	"activity.results": "{count} નોંધો",
+	"activity.noResults": "કોઈ મળતી પ્રવૃત્તિ નથી.",
 };
 
 export default dictionary;

@@ -478,6 +478,9 @@ const dictionary: Dictionary = {
 	"theme.system": "Mfumo",
 	"theme.light": "Angavu",
 	"theme.dark": "Giza",
+	"activity.searchPlaceholder": "Tafuta jina mbadala, hali au maelezo",
+	"activity.results": "Rekodi {count}",
+	"activity.noResults": "Hakuna shughuli inayolingana.",
 };
 
 export default dictionary;

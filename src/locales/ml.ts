@@ -472,6 +472,9 @@ const dictionary: Dictionary = {
 	"theme.system": "സിസ്റ്റം",
 	"theme.light": "ലൈറ്റ്",
 	"theme.dark": "ഡാർക്ക്",
+	"activity.searchPlaceholder": "അലിയാസ്, നില അല്ലെങ്കിൽ വിശദാംശം തിരയുക",
+	"activity.results": "{count} എൻട്രികൾ",
+	"activity.noResults": "പൊരുത്തപ്പെടുന്ന പ്രവർത്തനങ്ങളൊന്നുമില്ല.",
 };
 
 export default dictionary;
