@@ -280,7 +280,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "{count} regels toegevoegd.",
 	"imp.doneBlocked": "{count} afzenders toegevoegd aan de blokkeerlijst.",
 	"imp.unread": "Deze konden niet worden gelezen, dus ze zijn niet geïmporteerd: {parts}. Al het andere wel. Opnieuw importeren is veilig.",
-	"imp.rulesSkipped": "Deze regels zijn niet geïmporteerd: ze gebruiken iets wat aliasflare niet doet (zoals reguliere expressies, webhooks, versleuteling of labels), of er waren al 50 regels. Voeg ze zo nodig met de hand opnieuw toe:",
+	"imp.rulesSkipped": "Deze regels zijn niet geïmporteerd: ze gebruiken iets wat aliasflare niet doet (zoals reguliere expressies, webhooks, versleuteling of labels), of ze sturen door naar een adres dat niet een van je doorstuuradressen hier is, of er waren al 50 regels. Voeg ze zo nodig met de hand opnieuw toe:",
 	"hist.title": "Geïmporteerde geschiedenis",
 	"hist.from": "Op {date} geïmporteerd van {source}.",
 	"hist.help": "De aantallen en data hieronder hebben plaatsgevonden bij {source}. Hier verbonden apps zien ze opgeteld bij de activiteit die hier is vastgelegd.",

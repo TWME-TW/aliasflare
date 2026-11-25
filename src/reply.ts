@@ -17,7 +17,7 @@ import {
 	cleanAttachment,
 } from "./format";
 import { mailflareReady } from "./config";
-import { aliasDomainOfReverse } from "./domains";
+import { aliasDomainOfReverse, isOwnAddress } from "./domains";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
@@ -126,7 +126,8 @@ export function singleSender(rawHeaders: string, parsedFrom: string | undefined)
 }
 
 /** Signed block, turn-off and unsubscribe links of this service, with any host in front. */
-const SIGNED_PATH = /\/(?:action|unsubscribe)\/(?:(?:block|disable)~)?fw_[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+/gi;
+const SIGNED_PATH =
+	/\/(?:action|unsubscribe)\/(?:(?:block|disable)(?:~|%7e|&#0*126;|&#x0*7e;|&tilde;))?fw(?:_|%5f)[0-9a-f]{32}(?:\.|%2e)\d+(?:\.|%2e)[A-Za-z0-9_-]+/gi;
 const URL_CHAR = /[^\s"'<>]/;
 
 /**
@@ -152,7 +153,8 @@ function stripSignedUrls(body: string): string {
  * entity, or inside a link a mail filter wrapped (Safe Links and the like), the URL above does
  * not match, but the token still works, so it is removed too.
  */
-const SIGNED_TOKEN = /(?:(?:block|disable)(?:~|%7e|&#126;|&#x0*7e;|&tilde;))?fw_[0-9a-f]{32}(?:\.|%2e)\d+(?:\.|%2e)[A-Za-z0-9_-]+/gi;
+const SIGNED_TOKEN =
+	/(?:(?:block|disable)(?:~|%7e|&#0*126;|&#x0*7e;|&tilde;))?fw(?:_|%5f)[0-9a-f]{32}(?:\.|%2e)\d+(?:\.|%2e)[A-Za-z0-9_-]+/gi;
 
 export function stripSignedLinks(body: string): string {
 	return stripSignedUrls(body).replace(SIGNED_TOKEN, "[link removed]");
@@ -295,9 +297,20 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	// Drop automatic replies silently (no bounce, per RFC 3834) to prevent vacation/auto-responder loops.
+	const incomingAutoReply = isAutoReply(headerOnly?.headers ?? []);
 	const automatic = automaticReason(headerOnly?.headers, settings.sendAutoReplies);
 	if (automatic) {
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: automatic });
+		return;
+	}
+	// Even when sendAutoReplies is on, never auto-reply back to an own alias or owner mailbox (loop).
+	if (
+		incomingAutoReply &&
+		(isOwnAddress(contact.email, [...settings.aliasDomains, aliasDomain]) ||
+			knownDestinations.has(normalizeEmail(contact.email)) ||
+			owners.some((owner) => normalizeEmail(owner) === normalizeEmail(contact.email)))
+	) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: "Not sent: automatic reply loop" });
 		return;
 	}
 	// The owner turned this alias or this correspondent off: an auto-reply or a stray reply
@@ -382,13 +395,14 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(`Too many attachments: at most ${limit} per message`);
 		return;
 	}
+	const ownSites = new Set(owners.map((owner) => siteOf(domainOf(owner))).filter(Boolean));
 	const files = await Promise.all(
 		email.attachments.map(async (attachment, index) => ({
 			...cleanAttachment(attachment, index),
 			inline: attachment.disposition === "inline" || !!attachment.related,
 			content:
 				addressParts[index] === "message"
-					? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripSignedLinks)
+					? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripSignedLinks, { ownSites, removeBanner })
 					: addressParts[index] === "calendar"
 						? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", replacements, { stripLinks: stripSignedLinks })
 						: (attachment.content as ArrayBuffer),
@@ -423,6 +437,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			const headers: Record<string, string> = {};
 			if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
 			if (references.length) headers.References = references.join(" ");
+			if (incomingAutoReply) headers["Auto-Submitted"] = "auto-replied";
 			await sendOutbound(env, config, {
 				from: name ? { name, email: contact.alias_address } : contact.alias_address,
 				to: contact.email,

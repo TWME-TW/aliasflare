@@ -295,7 +295,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "An ƙara dokoki {count}.",
 	"imp.doneBlocked": "An ƙara masu aika saƙo {count} zuwa jerin toshewa.",
 	"imp.unread": "Ba a iya karanta waɗannan ba, don haka ba a shigo da su ba: {parts}. An shigo da sauran duka. Sake shigo da shi lafiya ne.",
-	"imp.rulesSkipped": "Ba a shigo da waɗannan dokokin ba: suna amfani da wani abu da aliasflare ba ya yi (kamar maganganun yau da kullum, webhooks, ɓoyewa ko alamomi), ko kuma akwai dokoki 50 tuni. Sake ƙara su da hannu idan kana buƙatar su:",
+	"imp.rulesSkipped": "Ba a shigo da waɗannan dokokin ba: suna amfani da wani abu da aliasflare ba ya yi (kamar maganganun yau da kullum, webhooks, ɓoyewa ko alamomi), ko kuma suna tura saƙo zuwa adireshin da ba ɗaya ba ne daga cikin adiresoshin turawa a nan, ko kuma akwai dokoki 50 tuni. Sake ƙara su da hannu idan kana buƙatar su:",
 	"hist.title": "Tarihin da aka shigo da shi",
 	"hist.from": "An shigo da shi daga {source} a ranar {date}.",
 	"hist.help": "Ƙididdiga da kwanakin da ke ƙasa sun faru a {source}. Manhajojin da aka haɗa a nan suna ganin an ƙara su a kan ayyukan da aka rubuta a nan.",

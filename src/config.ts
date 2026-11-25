@@ -155,13 +155,14 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 	let signingSecret = pick("signingSecret");
 	if (signingSecret.length < 32) {
 		// First run (no SIGNING_SECRET secret): create the key that signs sessions and links.
-		// Only a missing or too short stored key is replaced, so two racing requests agree.
+		// Strip all ASCII whitespace in SQLite (not only space) so JS .trim() and SQL trim() agree.
 		await env.DB.prepare(
-			"INSERT INTO config (key, value) VALUES ('signingSecret', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE length(trim(config.value)) < 32",
+			"INSERT INTO config (key, value) VALUES ('signingSecret', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE length(trim(config.value, char(9, 10, 11, 12, 13, 32))) < 32",
 		)
 			.bind(randomToken(48))
 			.run();
 		signingSecret = (await readStored(env.DB)).signingSecret?.trim() ?? "";
+		if (signingSecret.length < 32) throw new ConfigError("signingSecret could not be initialized");
 	}
 	const mailflareUrl = validOrigin(pick("mailflareUrl")) ?? "";
 	const publicUrl = validOrigin(pick("publicUrl")) ?? "";

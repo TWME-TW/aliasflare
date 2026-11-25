@@ -125,7 +125,19 @@ async function findAlias(db: D1Database, address: unknown): Promise<AliasView> {
 	return alias;
 }
 
+const ALLOWED_ARGS: Record<string, Set<string>> = {
+	list_domains: new Set(),
+	list_aliases: new Set(["search", "status", "page"]),
+	create_alias: new Set(["domain", "local_part", "note"]),
+	set_alias_mode: new Set(["address", "mode"]),
+	set_alias_note: new Set(["address", "note"]),
+};
+
 async function callTool(db: D1Database, settings: Settings, name: string, args: Json): Promise<ToolResult> {
+	const allowed = Object.hasOwn(ALLOWED_ARGS, name) ? ALLOWED_ARGS[name]! : null;
+	if (!allowed) throw new RpcError(-32602, `Unknown tool: ${name}`);
+	const unexpected = Object.keys(args).find((key) => !allowed.has(key));
+	if (unexpected) return { error: `Unknown argument: ${unexpected}.` };
 	switch (name) {
 		case "list_domains":
 			return { data: { domains: settings.aliasDomains, default_domain: settings.aliasDomains[0] ?? null } };
@@ -160,7 +172,9 @@ async function callTool(db: D1Database, settings: Settings, name: string, args: 
 		case "set_alias_mode": {
 			if (!MODES.includes(args.mode as ForwardMode)) return { error: `mode must be one of: ${MODES.join(", ")}.` };
 			const alias = await findAlias(db, args.address);
-			await setForwardMode(db, alias.address, args.mode as ForwardMode);
+			if (!(await setForwardMode(db, alias.address, args.mode as ForwardMode))) {
+				throw new ClientError(404, "There is no such alias.");
+			}
 			return { data: { alias: view({ ...alias, forward_mode: args.mode as ForwardMode }) } };
 		}
 		case "set_alias_note": {
@@ -235,15 +249,16 @@ mcp.post("/", async (c) => {
 	if (!message || typeof message !== "object" || Array.isArray(message)) return rpcError(c, null, -32600, "One JSON-RPC message per request.", 400);
 	const record = message as Record<string, unknown>;
 	const { jsonrpc, id, method, params } = record;
-	if (jsonrpc !== "2.0") return rpcError(c, id ?? null, -32600, "Invalid Request", 400);
-	// A notification or a response from the client: accepted, nothing to answer.
+	const validId = typeof id === "string" || Number.isSafeInteger(id);
+	if (jsonrpc !== "2.0") return rpcError(c, validId ? id : null, -32600, "Invalid Request", 400);
+	// A notification from the client: accepted, nothing to answer.
 	if (id === undefined) {
-		if (typeof method !== "string" && !Object.hasOwn(record, "result") && !Object.hasOwn(record, "error")) {
+		if (typeof method !== "string") {
 			return rpcError(c, null, -32600, "Invalid Request", 400);
 		}
 		return c.body(null, 202);
 	}
-	if (typeof id !== "string" && !Number.isSafeInteger(id)) {
+	if (!validId) {
 		return rpcError(c, null, -32600, "Invalid Request", 400);
 	}
 	if (typeof method !== "string") return rpcError(c, id, -32600, "Invalid Request", 400);

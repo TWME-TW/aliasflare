@@ -274,7 +274,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "已添加 {count} 条规则。",
 	"imp.doneBlocked": "已将 {count} 个发件人添加到屏蔽列表。",
 	"imp.unread": "以下内容无法读取，因此未导入：{parts}。其余内容均已导入。重复导入也没问题。",
-	"imp.rulesSkipped": "以下规则未导入：它们使用了 aliasflare 不支持的功能（例如正则表达式、Webhook、加密或标签），或者已经有 50 条规则。如有需要，请手动重新添加：",
+	"imp.rulesSkipped": "以下规则未导入：它们用到了 aliasflare 不支持的功能（例如正则表达式、Webhook、加密或标签）、会转发到这里没有设置的转发地址，或者规则已达 50 条上限。如有需要，请手动重新添加：",
 	"hist.title": "导入的历史记录",
 	"hist.from": "于 {date} 从 {source} 导入。",
 	"hist.help": "以下数量和时间发生在 {source}。连接到这里的应用看到的数字，会再加上这里记录的活动。",

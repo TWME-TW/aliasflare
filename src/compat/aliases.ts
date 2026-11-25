@@ -385,7 +385,7 @@ export async function updateAliases(
 	if (fields.destination !== undefined) sets.push("destination = ?"), params.push(fields.destination);
 	if (!sets.length) return;
 	sets.push("updated_at = ?"), params.push(now());
-	const sql = `UPDATE aliases SET ${sets.join(", ")} WHERE address = ?`;
+	const sql = `UPDATE aliases SET ${sets.join(", ")} WHERE address = ? AND deleted_at IS NULL`;
 	if (addresses.length === 1) {
 		await db.prepare(sql).bind(...params, addresses[0]).run();
 		return;

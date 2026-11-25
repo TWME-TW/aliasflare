@@ -102,13 +102,43 @@ export function isPromotional(headers: { key: string; value: string }[]): boolea
 }
 
 /**
+ * Takes only the first Authentication-Results header when Fetch `Headers.get()` joined multiple
+ * headers with `, `. RFC 8601 forbids unquoted commas outside comments, so the first top-level
+ * comma marks where a second (sender-supplied) Authentication-Results header begins.
+ */
+function firstHeaderValue(value: string | null): string | null {
+	if (!value) return null;
+	let depth = 0;
+	let quoted = false;
+	for (let i = 0; i < value.length; i += 1) {
+		const ch = value[i]!;
+		if (quoted) {
+			if (ch === "\\") i += 1;
+			else if (ch === '"') quoted = false;
+		} else if (depth > 0) {
+			if (ch === "\\") i += 1;
+			else if (ch === "(") depth += 1;
+			else if (ch === ")") depth -= 1;
+		} else if (ch === '"') {
+			quoted = true;
+		} else if (ch === "(") {
+			depth = 1;
+		} else if (ch === ",") {
+			return value.slice(0, i);
+		}
+	}
+	return value;
+}
+
+/**
  * True only when Cloudflare checked the message and DMARC explicitly failed. The header is
  * split like the reply check splits it, so quoted text, comments and look-alike hosts
  * (mx.cloudflare.net.example) are not read as Cloudflare's verdict.
  */
 export function dmarcFailedAtCloudflare(authResults: string | null): boolean {
-	if (!authResults) return false;
-	const [authserv, ...results] = authResultClauses(authResults);
+	const first = firstHeaderValue(authResults);
+	if (!first) return false;
+	const [authserv, ...results] = authResultClauses(first);
 	if (authserv?.split(/\s+/)[0]?.toLowerCase() !== "mx.cloudflare.net") return false;
 	return results.some((result) => /^dmarc\s*=\s*(?:fail|permerror)\b/i.test(result));
 }
@@ -271,7 +301,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			// sender and every address in the From header as on a rewritten message.
 			const headers = input.headers ?? new Headers();
 			const envelopeSender = parseBareEmail(event.from);
-			const parsedFrom = addressParser(headers.get("From") ?? "", { flatten: true })
+			const rawFromEntries = addressParser(headers.get("From") ?? "", { flatten: true });
+			const parsedFrom = rawFromEntries
 				.map((entry) => parseBareEmail(entry.address))
 				.filter((value): value is string => !!value);
 			if (parsedFrom.length > 20) return await skip("too many From addresses");
@@ -293,10 +324,17 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				return await skip("promotional mail is blocked for this alias");
 			}
 			// The message is passed on unchanged, so of a rule's actions only Block and Forward to act on it.
-			const passSpoofed = parsedFrom.length > 1 || dmarcFailedAtCloudflare(headers.get("Authentication-Results"));
-			const rules = await runRules(db, "forwards", { sender: primarySender, senders, spoofed: passSpoofed, subject: await decodedSubject(headers.get("Subject")), alias: aliasAddress });
+			const passSpoofed = rawFromEntries.length !== 1 || parsedFrom.length !== 1 || dmarcFailedAtCloudflare(headers.get("Authentication-Results"));
+			const rules = await runRules(db, "forwards", {
+				sender: primarySender,
+				senders,
+				envelopeSender,
+				spoofed: passSpoofed,
+				subject: await decodedSubject(headers.get("Subject")),
+				alias: aliasAddress,
+			});
 			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
-			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo);
+			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
 			const contact = await ensureContact(db, aliasAddress, primarySender, null, settings.includeSenderInReverseAlias);
@@ -334,11 +372,11 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// local part hiding another address, or multiple From addresses/headers) is not trusted:
 		// the envelope sender stands in when needed, and the message is marked as unverified.
 		const headerSender = parseBareEmail(email.from?.address);
-		const malformedFrom = !!email.from?.address && !headerSender;
+		const missingOrMalformedFrom = !headerSender;
 		const senderEmail = headerSender ?? parseBareEmail(event.from);
 		if (!senderEmail || isReverseDomainOf(domainOf(senderEmail), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
 		const multiFrom = headerBlock !== null && !!headerSender && !hasSingleFromHeader(headerBlock);
-		const spoofed = malformedFrom || multiFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
+		const spoofed = missingOrMalformedFrom || multiFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
 		await finish(db, forwardId, {
 			original_message_id: ensureAngle(email.messageId),
 			// The unsubscribe of a sender that failed DMARC is not trusted: unsubscribing blocks it instead.
@@ -370,10 +408,10 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (contact.blocked) return await skip("sender is blocked");
 		// A sender can have an address of its own (set by an unsubscribe, say).
 		const ruleSenders = [senderEmail, ...(envelopeSender ? [envelopeSender] : [])];
-		const rules = await runRules(db, "forwards", { sender: senderEmail, senders: ruleSenders, spoofed, subject: email.subject ?? "", alias: aliasAddress });
+		const rules = await runRules(db, "forwards", { sender: senderEmail, senders: ruleSenders, envelopeSender, spoofed, subject: email.subject ?? "", alias: aliasAddress });
 		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 		// A rule's Forward to comes first, then the sender's own address, then the alias's.
-		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo);
+		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 		const recipient = ruleRecipient ?? (contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain]) ? contact.destination : destination);
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
@@ -437,14 +475,15 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (references.length) headers.References = references.join(" ");
 
 		// The banner can be hidden by the message's own CSS; a subject prefix cannot.
-		const subject = cleanSubjectLine(rules.subject ?? email.subject) || "(no subject)";
+		const rawSubject = cleanSubjectLine(rules.subject ?? email.subject) || "(no subject)";
+		const finalSubject = spoofed ? cleanSubjectLine(`${translator(settings.language)("banner.spoofSubject")} ${rawSubject}`) : rawSubject;
 		const result = await env.EMAIL.send({
 			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
 			// Cloudflare will not take a To header of our own, so the alias goes in the display name:
 			// the message still reads as sent to the alias, and the real mailbox stays the recipient.
 			to: { name: aliasAddress, email: recipient },
 			replyTo: reverseAddress,
-			subject: spoofed ? `${translator(settings.language)("banner.spoofSubject")} ${subject}` : subject,
+			subject: finalSubject,
 			headers,
 			...(body.html ? { html: body.html } : {}),
 			text: body.text ?? (body.html ? undefined : ""),
@@ -494,8 +533,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
  * default one). A rule saved before that was required, or whose address no alias uses any more,
  * falls back to the usual destination.
  */
-async function ruleTargetOf(db: D1Database, settings: Settings, address: string | undefined): Promise<string | null> {
-	if (!address) return null;
+async function ruleTargetOf(db: D1Database, settings: Settings, address: string | undefined, aliasDomain: string): Promise<string | null> {
+	if (!address || isOwnAddress(address, [...settings.aliasDomains, aliasDomain])) return null;
 	const known = await listDestinations(db, settings);
 	return known.some((destination) => destination.email === address) ? address : null;
 }

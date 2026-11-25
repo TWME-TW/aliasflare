@@ -108,18 +108,24 @@ async function call(config: MailflareConfig, path: string, init: RequestInit = {
 /** Larger messages are not forwarded: Email Sending would refuse them anyway. */
 export const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
 
-let cachedAccountId: { key: string; id: string } | null = null;
+const ACCOUNT_CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedAccountId: { keyHash: string; id: string; expiresAt: number } | null = null;
+
+async function cacheKeyHash(config: MailflareConfig): Promise<string> {
+	const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${config.service ? "binding" : "url"}|${config.baseUrl}|${config.apiKey}`));
+	return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 async function jmapAccountId(config: MailflareConfig): Promise<string> {
-	// Keyed by where and how Mailflare is reached as well, so a changed URL never reuses an id.
-	const key = `${config.service ? "binding" : "url"}|${config.baseUrl}|${config.apiKey}`;
-	if (cachedAccountId?.key === key) return cachedAccountId.id;
+	// Keyed by a SHA-256 hash so the raw API key is never kept in module-level memory.
+	const keyHash = await cacheKeyHash(config);
+	if (cachedAccountId?.keyHash === keyHash && Date.now() < cachedAccountId.expiresAt) return cachedAccountId.id;
 	const session = (await readJson(await call(config, "/jmap/session"))) as {
 		primaryAccounts?: Record<string, string>;
 	};
 	const id = session.primaryAccounts?.[JMAP_MAIL];
 	if (!id || !validJmapSegment(id)) throw new MailflareError("Mailflare's JMAP session has no valid mail account", 502);
-	cachedAccountId = { key, id };
+	cachedAccountId = { keyHash, id, expiresAt: Date.now() + ACCOUNT_CACHE_TTL_MS };
 	return id;
 }
 
@@ -133,10 +139,16 @@ export async function getStoredMessage(config: MailflareConfig, messageId: strin
 			using: [JMAP_CORE, JMAP_MAIL],
 			methodCalls: [["Email/get", { accountId, ids: [messageId], properties: ["id", "mailboxIds", "blobId", "size"] }, "0"]],
 		}),
+	}).catch((error) => {
+		if (error instanceof MailflareError && (error.status === 401 || error.status === 403 || error.status === 404)) cachedAccountId = null;
+		throw error;
 	});
 	const body = await readJson<{ methodResponses?: [string, Record<string, unknown>, string][] }>(response);
 	const [name, result] = body.methodResponses?.[0] ?? [];
-	if (name !== "Email/get" || !result) throw new MailflareError(`Mailflare JMAP Email/get failed: ${redact(JSON.stringify(result ?? body), config.apiKey).slice(0, 300)}`, 502);
+	if (name !== "Email/get" || !result) {
+		cachedAccountId = null;
+		throw new MailflareError(`Mailflare JMAP Email/get failed: ${redact(JSON.stringify(result ?? body), config.apiKey).slice(0, 300)}`, 502);
+	}
 	const email = (result.list as { mailboxIds?: Record<string, boolean>; blobId?: string; size?: number }[] | undefined)?.[0];
 	if (!email?.blobId) throw new MailflareError(`Message ${messageId} was not found in Mailflare`, 404);
 	if (!validJmapSegment(email.blobId)) throw new MailflareError("Mailflare returned an invalid blob id", 502);

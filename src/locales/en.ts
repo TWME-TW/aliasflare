@@ -297,7 +297,7 @@ export const en = {
 	"imp.doneRules": "{count} rules added.",
 	"imp.doneBlocked": "{count} senders added to the blocklist.",
 	"imp.unread": "Could not read these, so they were not imported: {parts}. Everything else was. Importing again is safe.",
-	"imp.rulesSkipped": "These rules were not imported: they use something aliasflare does not do (such as regular expressions, webhooks, encryption or labels), or there were already 50 rules. Add them again by hand if you need them:",
+	"imp.rulesSkipped": "These rules were not imported: they use something aliasflare does not do (such as regular expressions, webhooks, encryption or labels), forward to an address that is not one of your forwarding addresses here, or there were already 50 rules. Add them again by hand if you need them:",
 	"hist.title": "Imported history",
 	"hist.from": "Imported from {source} on {date}.",
 	"hist.help": "The counts and dates below happened at {source}. Apps connected here see them added to the activity recorded here.",

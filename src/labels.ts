@@ -75,14 +75,18 @@ export async function createLabel(db: D1Database, input: { name: unknown; colour
 	if (!name) throw new LabelError("name");
 	const colour = cleanColour(input.colour);
 	if (!colour) throw new LabelError("colour");
-	const count = await db.prepare("SELECT COUNT(*) AS n FROM labels").first<{ n: number }>();
-	if (Number(count?.n ?? 0) >= MAX_LABELS) throw new LabelError("limit");
 	const row: LabelRow = { id: newId("lb"), name, colour, created_at: now(), updated_at: now() };
+	// Enforce MAX_LABELS atomically inside the INSERT so concurrent requests cannot exceed the cap.
 	const result = await db
-		.prepare("INSERT INTO labels (id, name, colour, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING")
-		.bind(row.id, row.name, row.colour, row.created_at, row.updated_at)
+		.prepare(
+			"INSERT INTO labels (id, name, colour, created_at, updated_at) SELECT ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM labels) < ? ON CONFLICT (name) DO NOTHING",
+		)
+		.bind(row.id, row.name, row.colour, row.created_at, row.updated_at, MAX_LABELS)
 		.run();
-	if (!result.meta.changes) throw new LabelError("taken");
+	if (!result.meta.changes) {
+		const exists = await db.prepare("SELECT 1 FROM labels WHERE name = ?").bind(row.name).first();
+		throw new LabelError(exists ? "taken" : "limit");
+	}
 	return row;
 }
 
@@ -152,16 +156,53 @@ export async function setAliasLabels(db: D1Database, addresses: string[], labelI
 
 /** Adds (or removes) one label on each alias, leaving their other labels. */
 export async function toggleAliasLabel(db: D1Database, addresses: string[], labelId: string, add: boolean): Promise<number> {
-	const statements = addresses.map((address) =>
-		add
-			? db.prepare("INSERT OR IGNORE INTO alias_labels (alias_address, label_id) SELECT ?, id FROM labels WHERE id = ?").bind(address, labelId)
-			: db.prepare("DELETE FROM alias_labels WHERE alias_address = ? AND label_id = ?").bind(address, labelId),
-	);
-	let changed = 0;
-	for (let i = 0; i < statements.length; i += 100) {
-		for (const result of await db.batch(statements.slice(i, i + 100))) changed += result.meta.changes ?? 0;
+	return toggleAliasLabels(db, addresses, [labelId], add);
+}
+
+/**
+ * Adds (or removes) several labels on several aliases in minimal D1 batches (chunking 45 aliases ×
+ * 45 labels = <=90 bound parameters per statement), returning the number of distinct aliases changed.
+ */
+export async function toggleAliasLabels(db: D1Database, addresses: string[], labelIds: string[], add: boolean): Promise<number> {
+	const uniqueAddresses = [...new Set(addresses)];
+	const uniqueLabels = [...new Set(labelIds)];
+	if (!uniqueAddresses.length || !uniqueLabels.length) return 0;
+	const statements: D1PreparedStatement[] = [];
+	for (let a = 0; a < uniqueAddresses.length; a += 45) {
+		const aChunk = uniqueAddresses.slice(a, a + 45);
+		const aPlaceholders = aChunk.map(() => "?").join(", ");
+		for (let l = 0; l < uniqueLabels.length; l += 45) {
+			const lChunk = uniqueLabels.slice(l, l + 45);
+			const lPlaceholders = lChunk.map(() => "?").join(", ");
+			statements.push(
+				add
+					? db
+							.prepare(
+								`INSERT OR IGNORE INTO alias_labels (alias_address, label_id)
+								 SELECT a.address, l.id FROM aliases a JOIN labels l ON l.id IN (${lPlaceholders})
+								 WHERE a.deleted_at IS NULL AND a.address IN (${aPlaceholders})
+								 RETURNING alias_address`,
+							)
+							.bind(...lChunk, ...aChunk)
+					: db
+							.prepare(
+								`DELETE FROM alias_labels WHERE alias_address IN (${aPlaceholders}) AND label_id IN (${lPlaceholders})
+								 RETURNING alias_address`,
+							)
+							.bind(...aChunk, ...lChunk),
+			);
+		}
 	}
-	return changed;
+	const touched = new Set<string>();
+	for (let i = 0; i < statements.length; i += 100) {
+		const results = await db.batch(statements.slice(i, i + 100));
+		for (const result of results) {
+			for (const row of (result.results ?? []) as { alias_address?: string }[]) {
+				if (row.alias_address) touched.add(row.alias_address);
+			}
+		}
+	}
+	return touched.size;
 }
 
 /** The labels of each alias, by address. */

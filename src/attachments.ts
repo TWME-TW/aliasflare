@@ -1,6 +1,7 @@
 import PostalMime from "postal-mime";
-import { cleanAttachment, cleanSubjectLine, extractEmail, parseBareEmail, parseMessageIds, replaceAddresses, type Replacement } from "./format";
+import { cleanAttachment, cleanSubjectLine, domainOf, extractEmail, parseBareEmail, parseMessageIds, replaceAddresses, sanitizeDisplayName, type Replacement } from "./format";
 import { buildMime } from "./mime";
+import { siteOf } from "./unsubscribe";
 
 /**
  * Attachments that name people by address in plain text: calendar invitations (ORGANIZER,
@@ -67,47 +68,94 @@ export function rewriteAttachment(
 	return out === text && kind === "message" ? content : binaryToBytes(out);
 }
 
-const ENCODED_PART = /^content-transfer-encoding:\s*(?:base64|quoted-printable)\b/im;
+const MAX_EML_DEPTH = 5;
 
 /**
  * Extracts searchable plain text from a calendar or message attachment so reverse aliases inside
- * folded `.ics` lines or base64/quoted-printable `.eml` parts are discovered before rewriting.
+ * folded `.ics` lines, RFC 2047 headers, filenames, or nested `.eml` parts are discovered before rewriting.
  */
 export async function attachmentSearchText(content: ArrayBuffer, kind: "calendar" | "message", depth = 0): Promise<string> {
 	const raw = new TextDecoder("latin1").decode(content);
 	if (kind === "calendar") return unfoldCalendar(raw);
 	const unfolded = unfoldHeaders(raw);
-	if (depth >= 2 || !ENCODED_PART.test(raw)) return unfolded;
+	if (depth >= MAX_EML_DEPTH) return unfolded;
 	try {
 		const parsed = await PostalMime.parse(content, { attachmentEncoding: "arraybuffer" });
+		const headerParts = [
+			parsed.subject ?? "",
+			parsed.from?.name ?? "",
+			parsed.from?.address ?? "",
+			...(parsed.to ?? []).flatMap((a) => [a.name ?? "", a.address ?? ""]),
+			...(parsed.cc ?? []).flatMap((a) => [a.name ?? "", a.address ?? ""]),
+			...(parsed.replyTo ?? []).flatMap((a) => [a.name ?? "", a.address ?? ""]),
+			parsed.messageId ?? "",
+			parsed.inReplyTo ?? "",
+			parsed.references ?? "",
+		];
 		const nested = await Promise.all(
-			parsed.attachments.map((attachment, index) => {
-				const { filename, type } = cleanAttachment(attachment, index);
+			parsed.attachments.map(async (attachment, index) => {
+				const { filename, type, contentId } = cleanAttachment(attachment, index);
 				const nestedKind = carriesAddresses(type, filename);
-				return nestedKind ? attachmentSearchText(attachment.content as ArrayBuffer, nestedKind, depth + 1) : "";
+				const body = nestedKind ? await attachmentSearchText(attachment.content as ArrayBuffer, nestedKind, depth + 1) : "";
+				return [filename, contentId ?? "", body].join("\n");
 			}),
 		);
-		return [unfolded, parsed.html ?? "", parsed.text ?? "", ...nested].join("\n");
+		return [unfolded, ...headerParts, parsed.html ?? "", parsed.text ?? "", ...nested].join("\n");
 	} catch {
 		return unfolded;
 	}
 }
 
+function safeMessageId(id: string | undefined, ownSites: Set<string>, scrub: (value: string) => string): string | null {
+	if (!id) return null;
+	const parsed = parseMessageIds(id)[0];
+	if (!parsed) return null;
+	const inner = parsed.slice(1, -1);
+	// Drop any Message-ID referencing the owner's mail provider domain or an address that needed scrubbing.
+	if (scrub(inner) !== inner) return null;
+	const domain = inner.split("@").pop() ?? "";
+	if (domain.includes(".") && ownSites.has(siteOf(domain))) return null;
+	return parsed;
+}
+
+function safeDate(raw: string | undefined): Date {
+	if (!raw) return new Date();
+	const parsed = new Date(raw);
+	return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function stubMessage(reason: string): ArrayBuffer {
+	const rebuilt = buildMime(
+		{ from: "unknown@invalid", to: "unknown@invalid", subject: "[attached message removed]", text: reason },
+		`<${crypto.randomUUID()}@invalid>`,
+		new Date(),
+	);
+	return new TextEncoder().encode(rebuilt).buffer as ArrayBuffer;
+}
+
+export type ScrubMessageOptions = {
+	ownSites?: Set<string>;
+	removeBanner?: (html: string) => Promise<string>;
+	depth?: number;
+};
+
 /**
- * Scrubs an attached `.eml` (`message/rfc822`) on an outbound reply: strips signed links and
- * replaces owner/reverse addresses across headers, plain bodies, and encoded (base64 /
- * quoted-printable) inner MIME parts.
+ * Scrubs an attached `.eml` (`message/rfc822`) on an outbound reply: always parses and rebuilds
+ * via `PostalMime` + `buildMime` so transport headers (`Received`, `Delivered-To`, `Return-Path`,
+ * `Authentication-Results`, owner `Message-ID`), banners, signed links, and owner/reverse addresses
+ * across plain and encoded inner parts cannot leak.
  */
 export async function scrubAttachedMessage(
 	content: ArrayBuffer,
 	replacements: Replacement[],
 	stripLinks: (text: string) => string,
-	depth = 0,
+	options: ScrubMessageOptions = {},
 ): Promise<ArrayBuffer> {
-	const raw = bytesToBinary(new Uint8Array(content));
-	if (depth >= 2 || !ENCODED_PART.test(raw)) {
-		return rewriteAttachment(content, "message", replacements, { stripLinks });
+	const depth = options.depth ?? 0;
+	if (depth >= MAX_EML_DEPTH) {
+		return stubMessage("Nested attached message removed for privacy.");
 	}
+	const ownSites = options.ownSites ?? new Set<string>();
 	try {
 		const parsed = await PostalMime.parse(content, { attachmentEncoding: "arraybuffer" });
 		const scrub = (value: string) => {
@@ -116,31 +164,45 @@ export async function scrubAttachedMessage(
 			return out;
 		};
 		const rawFrom = parsed.from?.address ? scrub(parsed.from.address) : "";
-		const fromEmail = extractEmail(rawFrom) ?? (rawFrom || "unknown@invalid");
-		const fromName = parsed.from?.name ? scrub(parsed.from.name) : "";
+		const fromEmail = extractEmail(rawFrom) ?? "unknown@invalid";
+		const fromName = parsed.from?.name ? sanitizeDisplayName(scrub(parsed.from.name)) : "";
 		const rawTo = parsed.to?.[0]?.address ? scrub(parsed.to[0].address) : "";
-		const toEmail = extractEmail(rawTo) ?? (rawTo || "unknown@invalid");
+		const toEmail = extractEmail(rawTo) ?? "unknown@invalid";
 		const replyToRaw = parsed.replyTo?.[0]?.address ? scrub(parsed.replyTo[0].address) : undefined;
 		const replyTo = replyToRaw ? (extractEmail(replyToRaw) ?? undefined) : undefined;
 		const headers: Record<string, string> = {};
-		const inReplyTo = parseMessageIds(parsed.inReplyTo)[0];
-		const references = parseMessageIds(parsed.references).slice(-10);
+		const inReplyTo = safeMessageId(parsed.inReplyTo, ownSites, scrub);
+		const references = parseMessageIds(parsed.references)
+			.slice(-10)
+			.map((id) => safeMessageId(id, ownSites, scrub))
+			.filter((id): id is string => !!id);
 		if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
 		if (references.length) headers.References = references.join(" ");
+		let html = parsed.html ? scrub(parsed.html) : undefined;
+		if (html && options.removeBanner) html = await options.removeBanner(html);
+		const text = parsed.text ? scrub(parsed.text) : undefined;
 		const attachments = await Promise.all(
 			parsed.attachments.map(async (attachment, index) => {
 				const cleaned = cleanAttachment(attachment, index);
 				const nestedKind = carriesAddresses(cleaned.type, cleaned.filename);
+				const scrubbedFilename = cleanAttachment({ filename: scrub(cleaned.filename), mimeType: cleaned.type }, index).filename;
+				let scrubbedCid = cleaned.contentId ? scrub(cleaned.contentId) : undefined;
+				if (scrubbedCid) {
+					const cidDomain = scrubbedCid.split("@").pop() ?? "";
+					if (cidDomain.includes(".") && ownSites.has(siteOf(cidDomain))) {
+						scrubbedCid = `${crypto.randomUUID()}@invalid`;
+					}
+				}
 				const data =
 					nestedKind === "message"
-						? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripLinks, depth + 1)
+						? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripLinks, { ...options, depth: depth + 1 })
 						: nestedKind === "calendar"
 							? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", replacements, { stripLinks })
 							: (attachment.content as ArrayBuffer);
 				return {
-					disposition: (attachment.disposition === "inline" || !!attachment.related) && cleaned.contentId ? ("inline" as const) : ("attachment" as const),
-					...(cleaned.contentId ? { contentId: cleaned.contentId } : {}),
-					filename: cleaned.filename,
+					disposition: (attachment.disposition === "inline" || !!attachment.related) && scrubbedCid ? ("inline" as const) : ("attachment" as const),
+					...(scrubbedCid ? { contentId: scrubbedCid } : {}),
+					filename: scrubbedFilename,
 					type: cleaned.type,
 					content: data,
 				};
@@ -152,16 +214,16 @@ export async function scrubAttachedMessage(
 				to: toEmail,
 				...(replyTo ? { replyTo } : {}),
 				subject: cleanSubjectLine(scrub(parsed.subject ?? "")) || "(no subject)",
-				...(parsed.html ? { html: scrub(parsed.html) } : {}),
-				...(parsed.text ? { text: scrub(parsed.text) } : parsed.html ? {} : { text: "" }),
+				...(html ? { html } : {}),
+				...(text ? { text } : html ? {} : { text: "" }),
 				headers,
 				attachments,
 			},
-			parseMessageIds(parsed.messageId)[0] ?? `<${crypto.randomUUID()}@invalid>`,
-			parsed.date ? new Date(parsed.date) : new Date(),
+			safeMessageId(parsed.messageId, ownSites, scrub) ?? `<${crypto.randomUUID()}@invalid>`,
+			safeDate(parsed.date),
 		);
 		return new TextEncoder().encode(rebuilt).buffer as ArrayBuffer;
 	} catch {
-		return rewriteAttachment(content, "message", replacements, { stripLinks });
+		return stubMessage("Unreadable attached message removed for privacy.");
 	}
 }
