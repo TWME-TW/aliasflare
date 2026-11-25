@@ -114,7 +114,7 @@ function checkEnv(env: Env): void {
 		if (value(name) && !validOrigin(value(name))) throw new ConfigError(`${name} must be an https:// URL without a user name or password`);
 	}
 	if (value("OUTBOUND_PROVIDER") && !isOutboundProvider(value("OUTBOUND_PROVIDER").toLowerCase())) {
-		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend or smtp2go");
+		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend, smtp2go or brevo");
 	}
 	if (value("WORKERS_PLAN") && !isWorkersPlan(value("WORKERS_PLAN").toLowerCase())) throw new ConfigError("WORKERS_PLAN must be free or paid");
 	const worker = value("WORKER_NAME").toLowerCase();

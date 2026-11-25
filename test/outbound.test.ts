@@ -92,6 +92,43 @@ describe("replies through another provider", () => {
 	});
 });
 
+describe("replies through Brevo", () => {
+	beforeEach(async () => {
+		await db.prepare("INSERT INTO config (key, value) VALUES ('outboundProvider', 'brevo'), ('outboundApiKey', 'xkeysib-test')").run();
+	});
+
+	it("go out as the alias, without the standard headers Brevo refuses", async () => {
+		stubProvider(() => Response.json({ messageId: "<m@brevo>" }, { status: 201 }));
+		const reverse = await reverseAliasOfBob();
+		const { msg, rejected } = inbound(reverse, "owner@gmail.test", `${PASS}\r\nFrom: owner@gmail.test\r\nIn-Reply-To: <p@x>`, "Thanks");
+		await deliver(msg);
+		expect(rejected()).toBeNull();
+		expect(calls[0]!.url).toBe("https://api.brevo.com/v3/smtp/email");
+		expect(calls[0]!.headers["api-key"]).toBe("xkeysib-test");
+		expect(calls[0]!.body).toMatchObject({ sender: { email: "shop@a.test" }, to: [{ email: "bob@store.test" }], subject: "Hi" });
+		expect(calls[0]!.body.headers).toBeUndefined();
+	});
+
+	it("bounces a reply with a file type Brevo does not send", async () => {
+		stubProvider(() => Response.json({ messageId: "<m@brevo>" }, { status: 201 }));
+		const reverse = await reverseAliasOfBob();
+		const head = `${PASS}\r\nFrom: owner@gmail.test\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=B`;
+		const body = `--B\r\nContent-Type: text/plain\r\n\r\nThanks\r\n--B\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=tool.exe\r\n\r\nMZ\r\n--B--`;
+		const raw = `${head}\r\nTo: ${reverse}\r\nSubject: Hi\r\n\r\n${body}\r\n`;
+		let rejected: string | null = null;
+		await deliver({
+			to: reverse,
+			from: "owner@gmail.test",
+			headers: new Headers({ "Authentication-Results": "mx.cloudflare.net; spf=pass; dmarc=pass header.from=gmail.test", From: "owner@gmail.test" }),
+			raw: new Response(raw).body,
+			rawSize: raw.length,
+			setReject: (reason: string) => void (rejected = reason),
+		} as unknown as ForwardableEmailMessage);
+		expect(rejected).toMatch(/tool\.exe/);
+		expect(calls).toHaveLength(0);
+	});
+});
+
 describe("the Workers Free plan", () => {
 	it("is assumed unless the Paid plan is chosen", async () => {
 		expect((await loadConfig(env)).workersPlan).toBe("free");

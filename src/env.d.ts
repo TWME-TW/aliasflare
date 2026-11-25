@@ -13,9 +13,9 @@ interface Env {
 	CLOUDFLARE_API_TOKEN?: string;
 	/** Name of this Worker, when it is not "aliasflare". */
 	WORKER_NAME?: string;
-	/** "cloudflare" (Email Sending, Workers Paid), "resend" or "smtp2go": what sends mail to other people. */
+	/** "cloudflare" (Email Sending, Workers Paid), "resend", "smtp2go" or "brevo": what sends mail to other people. */
 	OUTBOUND_PROVIDER?: string;
-	/** API key of the Resend or SMTP2GO account. */
+	/** API key of the Resend, SMTP2GO or Brevo account. */
 	OUTBOUND_API_KEY?: string;
 	/** "free" or "paid": the Workers plan, which sets how much one request may do. */
 	WORKERS_PLAN?: string;

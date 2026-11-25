@@ -706,6 +706,7 @@ ${values.workersPlan === "free" && values.outboundProvider === "cloudflare" ? ht
 ${OUTBOUND_PROVIDERS.map((provider) => html`<option value="${provider}" ${values.outboundProvider === provider ? "selected" : ""}>${t(`conn.provider.${provider}`)}</option>`)}
 </select>
 <p class="help">${t("conn.providerHelp")}</p>${fixedNote("outboundProvider")}
+${values.outboundProvider === "brevo" ? html`<p class="notice">${t("conn.brevoLimits")}</p>` : ""}
 ${secretField("outboundApiKey", t("conn.providerKey"), hasOutboundKey, t("conn.providerKeyHelp"))}
 <p><button class="primary">${t("conn.saveButton")}</button></p>
 </section>

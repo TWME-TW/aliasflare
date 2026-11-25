@@ -56,7 +56,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 
 ## Requirements
 
-- A Cloudflare account. The **Workers Free** plan works: forwards to your own mailbox use Cloudflare Email Sending, which delivers to verified destination addresses on any plan. Mail to other people (replies through reverse aliases, senders' mailto unsubscribe) needs either **Workers Paid** for Email Sending or a free account with **Resend** (3,000 a month, 100 a day) or **SMTP2GO** (1,000 a month), with each alias domain verified there.
+- A Cloudflare account. The **Workers Free** plan works: forwards to your own mailbox use Cloudflare Email Sending, which delivers to verified destination addresses on any plan. Mail to other people (replies through reverse aliases, senders' mailto unsubscribe) needs either **Workers Paid** for Email Sending or a free account with **Resend** (3,000 a month, 100 a day) **SMTP2GO** (1,000 a month) or **Brevo** (300 a day), with each alias domain verified there.
 - One or more **alias domains** on Cloudflare. Each one must be a **zone apex** (`a.com`, not `mail.a.com`), because Email Routing has catch-all rules only on the apex, and it should receive no other mail: Email Routing takes over its MX records.
 
 ## Setup
@@ -119,7 +119,7 @@ On **Connection → Mailflare**, enter the Mailflare URL, a **personal** API key
 
 ### 8. Workers plan and sending provider
 
-On **Connection → Sending mail**, choose your Workers plan (Free is assumed) and what sends replies: Cloudflare Email Sending, Resend or SMTP2GO, with the provider's API key. On the Free plan, with 10 ms of CPU and 50 subrequests per request:
+On **Connection → Sending mail**, choose your Workers plan (Free is assumed) and what sends replies: Cloudflare Email Sending, Resend, SMTP2GO or Brevo, with the provider's API key. On the Free plan, with 10 ms of CPU and 50 subrequests per request:
 
 - messages larger than 512 KB are forwarded unchanged with Email Routing's own forward (no tracker removal, and replies to them do not go through the alias);
 - replies larger than 512 KB are refused with a bounce that says why;
@@ -128,7 +128,7 @@ On **Connection → Sending mail**, choose your Workers plan (Free is assumed) a
 
 ### Environment overrides
 
-These variables or secrets win over the dashboard: `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`, `MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `OUTBOUND_PROVIDER` (`cloudflare`, `resend` or `smtp2go`), `OUTBOUND_API_KEY`, `WORKERS_PLAN` (`free` or `paid`).
+These variables or secrets win over the dashboard: `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`, `MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `OUTBOUND_PROVIDER` (`cloudflare`, `resend`, `smtp2go` or `brevo`), `OUTBOUND_API_KEY`, `WORKERS_PLAN` (`free` or `paid`).
 
 ## Security model
 

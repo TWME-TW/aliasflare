@@ -47,7 +47,7 @@ SimpleLogin 風格的**電子郵件別名與反向別名**，只需要一個 Clo
 
 ## 需求
 
-- Cloudflare 帳號。**Workers 免費方案**即可：轉寄到你自己信箱使用 Cloudflare Email Sending，任何方案都能寄到已驗證的目的地址。寄給其他人的信（透過反向別名的回信、寄件者的 mailto 退訂）需要 **Workers 付費方案**的 Email Sending，或免費的 **Resend**（每月 3,000 封、每天 100 封）或 **SMTP2GO**（每月 1,000 封）帳號，並在該服務驗證每個別名網域。
+- Cloudflare 帳號。**Workers 免費方案**即可：轉寄到你自己信箱使用 Cloudflare Email Sending，任何方案都能寄到已驗證的目的地址。寄給其他人的信（透過反向別名的回信、寄件者的 mailto 退訂）需要 **Workers 付費方案**的 Email Sending，或免費的 **Resend**（每月 3,000 封、每天 100 封）、**SMTP2GO**（每月 1,000 封）或 **Brevo**（每天 300 封）帳號，並在該服務驗證每個別名網域。
 - 一個或多個在 Cloudflare 上的**別名網域**。每個都必須是**區域的頂層網域**（`a.com`，不是 `mail.a.com`），因為 Email Routing 只有頂層網域有 catch-all；而且不應該接收其他信件，因為 Email Routing 會接管它的 MX 記錄。
 
 ## 安裝
@@ -110,7 +110,7 @@ npx wrangler deploy
 
 ### 8. Workers 方案與寄送服務
 
-在 **連線 → 寄送郵件** 選擇 Workers 方案（預設為免費）與回信寄送方式：Cloudflare Email Sending、Resend 或 SMTP2GO，並填入該服務的 API 金鑰。免費方案每個請求只有 10 毫秒 CPU 與 50 個子請求，因此：
+在 **連線 → 寄送郵件** 選擇 Workers 方案（預設為免費）與回信寄送方式：Cloudflare Email Sending、Resend、SMTP2GO 或 Brevo，並填入該服務的 API 金鑰。免費方案每個請求只有 10 毫秒 CPU 與 50 個子請求，因此：
 
 - 大於 512 KB 的信會用 Email Routing 本身的轉寄原封不動送出（不移除追蹤器，回覆這些信也不會經過別名）；
 - 大於 512 KB 的回信會被退回並說明原因；
@@ -119,7 +119,7 @@ npx wrangler deploy
 
 ### 環境變數覆寫
 
-以下變數或 secret 會優先於管理介面中的值：`PUBLIC_URL`、`SIGNING_SECRET`、`SETUP_CODE`、`CLOUDFLARE_API_TOKEN`、`WORKER_NAME`、`MAILFLARE_URL`、`MAILFLARE_API_KEY`、`WEBHOOK_SECRET`、`OUTBOUND_PROVIDER`（`cloudflare`、`resend` 或 `smtp2go`）、`OUTBOUND_API_KEY`、`WORKERS_PLAN`（`free` 或 `paid`）。
+以下變數或 secret 會優先於管理介面中的值：`PUBLIC_URL`、`SIGNING_SECRET`、`SETUP_CODE`、`CLOUDFLARE_API_TOKEN`、`WORKER_NAME`、`MAILFLARE_URL`、`MAILFLARE_API_KEY`、`WEBHOOK_SECRET`、`OUTBOUND_PROVIDER`（`cloudflare`、`resend`、`smtp2go` 或 `brevo`）、`OUTBOUND_API_KEY`、`WORKERS_PLAN`（`free` 或 `paid`）。
 
 ## 安全模型
 

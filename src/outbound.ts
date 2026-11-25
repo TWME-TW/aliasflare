@@ -2,14 +2,14 @@
  * Mail to other people: replies through a reverse alias and the sender's own mailto
  * unsubscribe. Cloudflare Email Sending sends it on the Workers Paid plan; on the Free plan
  * it only delivers to verified destination addresses, so a free service with an HTTP API
- * (Resend or SMTP2GO) can send it instead. Forwards to the owner's own mailbox always use
+ * (Resend, SMTP2GO or Brevo) can send it instead. Forwards to the owner's own mailbox always use
  * Email Sending: that mailbox is a verified destination, so they work on either plan.
  */
 import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
 import { readTextLimited } from "./streams";
 
-export const OUTBOUND_PROVIDERS = ["cloudflare", "resend", "smtp2go"] as const;
+export const OUTBOUND_PROVIDERS = ["cloudflare", "resend", "smtp2go", "brevo"] as const;
 export type OutboundProvider = (typeof OUTBOUND_PROVIDERS)[number];
 
 export function isOutboundProvider(value: unknown): value is OutboundProvider {
@@ -17,7 +17,19 @@ export function isOutboundProvider(value: unknown): value is OutboundProvider {
 }
 
 /** Attachments each provider takes in one message. */
-export const OUTBOUND_ATTACHMENT_LIMITS: Record<OutboundProvider, number> = { cloudflare: 32, resend: 50, smtp2go: 50 };
+export const OUTBOUND_ATTACHMENT_LIMITS: Record<OutboundProvider, number> = { cloudflare: 32, resend: 50, smtp2go: 50, brevo: 50 };
+
+/** File types Brevo accepts as attachments; it refuses the whole message for any other. */
+const BREVO_EXTENSIONS = new Set(
+	"xlsx xls ods docx docm doc csv pdf txt gif jpg jpeg png tif tiff rtf bmp cgm css shtml html htm zip xml ppt pptx tar ez ics mobi msg pub eps odt mp3 m4a m4v wma ogg flac wav aif aifc aiff mp4 mov avi mkv mpeg mpg wmv pkpass xlsm".split(" "),
+);
+
+/** Why the provider cannot send these attachments, or null when it can. */
+export function unsendableAttachments(provider: OutboundProvider, filenames: string[]): string | null {
+	if (provider !== "brevo") return null;
+	const refused = filenames.filter((name) => !BREVO_EXTENSIONS.has(name.split(".").pop()?.toLowerCase() ?? ""));
+	return refused.length ? `Brevo does not send these file types: ${refused.slice(0, 5).join(", ")}` : null;
+}
 
 export type OutboundAttachment = {
 	disposition: "attachment" | "inline";
@@ -123,6 +135,37 @@ async function viaSmtp2go(apiKey: string, message: OutboundMessage): Promise<str
 	return typeof data.email_id === "string" ? data.email_id : undefined;
 }
 
+function brevoAddress(from: OutboundMessage["from"]): { email: string; name?: string } {
+	if (typeof from === "string") return { email: from };
+	const name = from.name.replace(/[\r\n]/g, "").trim().slice(0, 70);
+	return name ? { email: from.email, name } : { email: from.email };
+}
+
+async function viaBrevo(apiKey: string, message: OutboundMessage): Promise<string | undefined> {
+	// Brevo takes only custom headers: standard ones such as In-Reply-To and References are
+	// not supported, so threading rests on the subject. It has no inline parts either, so
+	// inline images arrive as attachments.
+	const custom = Object.fromEntries(Object.entries(message.headers ?? {}).filter(([name]) => /^X-/i.test(name)));
+	const { json } = await post(
+		"https://api.brevo.com/v3/smtp/email",
+		{ "api-key": apiKey },
+		{
+			sender: brevoAddress(message.from),
+			to: [{ email: message.to }],
+			subject: message.subject,
+			...(message.replyTo ? { replyTo: { email: message.replyTo } } : {}),
+			// One body per message: HTML when there is one, else the plain text.
+			...(message.html ? { htmlContent: message.html } : { textContent: message.text || " " }),
+			...(Object.keys(custom).length ? { headers: custom } : {}),
+			...(message.attachments?.length
+				? { attachment: message.attachments.map((attachment) => ({ name: attachment.filename, content: bytesToBase64(new Uint8Array(attachment.content)) })) }
+				: {}),
+		},
+	);
+	const id = (json as { messageId?: unknown } | null)?.messageId;
+	return typeof id === "string" ? id : undefined;
+}
+
 /** Sends mail to someone other than the owner, with the provider chosen on the Connection page. */
 export async function sendOutbound(env: Env, config: AppConfig, message: OutboundMessage): Promise<{ messageId?: string }> {
 	if (config.outboundProvider === "cloudflare") {
@@ -147,6 +190,7 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 		return { messageId: (result as { messageId?: string } | undefined)?.messageId };
 	}
 	if (!config.outboundApiKey) throw new OutboundError(`No API key is set for ${config.outboundProvider}`);
-	const messageId = config.outboundProvider === "resend" ? await viaResend(config.outboundApiKey, message) : await viaSmtp2go(config.outboundApiKey, message);
+	const send = { resend: viaResend, smtp2go: viaSmtp2go, brevo: viaBrevo }[config.outboundProvider];
+	const messageId = await send(config.outboundApiKey, message);
 	return { messageId };
 }

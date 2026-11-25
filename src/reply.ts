@@ -21,7 +21,7 @@ import { loadSettings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES } from "./forward";
 import { readLimited } from "./streams";
-import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound } from "./outbound";
+import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
 
 /** Mailflare's limit per message. */
 const MAX_ATTACHMENTS = 10;
@@ -260,6 +260,12 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	if (email.attachments.length > limit) {
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `${email.attachments.length} attachments; at most ${limit}` });
 		message.setReject(`Too many attachments: at most ${limit} per message`);
+		return;
+	}
+	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, email.attachments.map((attachment, index) => attachment.filename || `attachment-${index + 1}`));
+	if (refused) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: refused });
+		message.setReject(refused);
 		return;
 	}
 	const subject = cleanSubjectLine(email.subject) || "(no subject)";
