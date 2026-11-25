@@ -475,6 +475,14 @@ export const en = {
 	"forwardMethod.direct": "Unchanged (receive only)",
 	"settings.forwardMethodHelp": "Through a reverse alias, mail comes from an address that hides the sender's, so your replies go out as the alias; trackers are removed and the banner can be shown. Unchanged, Email Routing passes the message on as it is: nothing is ever sent from your account and no sending service is needed, but replying writes to the sender directly from your own address. Mail received through Mailflare is always rewritten.",
 	"settings.forwardMethodDirectNote": "Receive only: when you reply to forwarded mail, the sender sees your real address. Blocking, the blocklist, promotions filtering and redirecting a sender still work.",
+	"theme.label": "Theme",
+	"theme.help": "Applies to this browser only.",
+	"theme.system": "System",
+	"theme.light": "Light",
+	"theme.dark": "Dark",
+	"activity.searchPlaceholder": "Search alias, status or detail",
+	"activity.results": "{count} entries",
+	"activity.noResults": "No matching activity.",
 };
 
 export type MessageKey = keyof typeof en;

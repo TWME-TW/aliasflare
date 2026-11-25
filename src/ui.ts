@@ -4,7 +4,7 @@ import type { AliasRow, BlocklistRow, ContactRow } from "./db";
 import { FORWARD_MODES } from "./db";
 import { contactReverseAddress, reverseDomainFor } from "./domains";
 import { MAX_NOTE_LENGTH, SENDER_FORMATS } from "./format";
-import { LOCALE_LIST, LOCALES, textDirection, type MessageKey, type Translate } from "./i18n";
+import { LOCALE_LIST, LOCALES, textDirection, THEMES, type MessageKey, type Theme, type Translate } from "./i18n";
 import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
@@ -26,7 +26,12 @@ export const STYLE = raw(`
 	--primary:#0b57d0; --primary-text:#fff; --primary-hover:#0a4fbe; --nav-active:#d3e3fd; --nav-active-text:#041e49;
 	--danger:#b3261e; --danger-soft:#fce8e6; --ok:#146c2e; --ok-soft:#e6f4ea; --warn-soft:#fef7e0; --focus:rgba(11,87,208,.25);
 	--radius:24px; --font: Geist, "Google Sans", Roboto, system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans TC", "Noto Sans SC", "Noto Sans JP", "Noto Sans KR", "Noto Sans Arabic", "Noto Sans Devanagari", sans-serif; }
-@media (prefers-color-scheme: dark) { :root {
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark;
+	--bg:#202124; --card:#292a2d; --text:#e8eaed; --muted:#9aa0a6; --line:#3c4043; --soft:#303134; --hover:#35363a;
+	--primary:#8ab4f8; --primary-text:#202124; --primary-hover:#aecbfa; --nav-active:#004a77; --nav-active-text:#c2e7ff;
+	--danger:#f2b8b5; --danger-soft:#3c1f1e; --ok:#81c995; --ok-soft:#1e3324; --warn-soft:#3a3220; --focus:rgba(138,180,248,.3); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
 	--bg:#202124; --card:#292a2d; --text:#e8eaed; --muted:#9aa0a6; --line:#3c4043; --soft:#303134; --hover:#35363a;
 	--primary:#8ab4f8; --primary-text:#202124; --primary-hover:#aecbfa; --nav-active:#004a77; --nav-active-text:#c2e7ff;
 	--danger:#f2b8b5; --danger-soft:#3c1f1e; --ok:#81c995; --ok-soft:#1e3324; --warn-soft:#3a3220; --focus:rgba(138,180,248,.3); } }
@@ -67,7 +72,7 @@ th { color:var(--muted); font-weight:500; font-size:13px; }
 
 /* Forms */
 label { display:block; font-weight:500; margin:18px 0 6px; }
-input[type=text], input[type=email], input[type=password], input[type=url], select {
+input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], select {
 	width:100%; max-width:480px; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:12px;
 	background:var(--card); color:inherit; font:inherit; }
 input:focus, select:focus, button:focus-visible, a:focus-visible { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--focus); }
@@ -102,7 +107,8 @@ button.copy { min-height:28px; padding:0 8px; }
 .perm-level { font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; padding:1px 8px; border-radius:6px; background:var(--ok-soft); color:var(--ok); }
 .notice { padding:12px 18px; border-radius:16px; margin:0; background:var(--nav-active); color:var(--nav-active-text); }
 .notice.bad { background:#fce8e6; color:#b3261e; }
-@media (prefers-color-scheme: dark) { .notice.bad { background:#601410; color:#f2b8b5; } }
+:root[data-theme="dark"] .notice.bad { background:#601410; color:#f2b8b5; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .notice.bad { background:#601410; color:#f2b8b5; } }
 .error { color:var(--danger); margin:10px 0 0; }
 ol.steps { padding-inline-start:20px; margin:8px 0 0; } ol.steps li { margin:6px 0; }
 ul.results { list-style:none; padding:0; margin:12px 0; display:grid; gap:8px; } ul.results .muted { word-break:break-word; }
@@ -129,7 +135,7 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	.mobile-only { display:flex !important; }
 	section { padding:18px; border-radius:20px; }
 	main.single, main.center { margin-top:3vh; }
-	input[type=text], input[type=email], input[type=password], input[type=url], select { max-width:none; font-size:16px; }
+	input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], select { max-width:none; font-size:16px; }
 	table.rt thead { display:none; }
 	table.rt, table.rt tbody, table.rt tr, table.rt td { display:block; width:100%; }
 	table.rt tr { border:1px solid var(--line); border-radius:16px; margin:10px 0; padding:4px 14px; }
@@ -143,13 +149,16 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 }
 .mobile-only { display:none; }
 .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
-.toolbar input[type=search], .toolbar input[type=text] { flex:1 1 220px; width:auto; }
-.toolbar select { width:auto; }
+.toolbar input[type=search], .toolbar input[type=text] { flex:1 1 240px; width:auto; max-width:none; min-height:44px; }
+.toolbar select { width:auto; min-height:44px; }
+.toolbar button { min-height:44px; }
 .bulk { padding:10px 12px; border-radius:16px; background:var(--bg); }
-.create { margin:12px 0; padding:10px 14px; border-radius:16px; background:var(--bg); }
+.create { margin:12px 0; padding:14px 16px; border-radius:16px; background:var(--bg); }
 .create h2 { margin:0; }
 .create-random { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.create-extra { display:grid; gap:10px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
+.create-extra { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); align-items:end; }
+.create-extra label { display:flex; flex-direction:column; gap:6px; margin:0; }
+.create-extra input { max-width:none; }
 .create-form { display:grid; gap:10px; margin-top:10px; }
 .create-address { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .create-address input { flex:1 1 200px; width:auto; }
@@ -163,7 +172,11 @@ form.note input { width:100%; min-width:12ch; }
 .toast { position:fixed; inset-inline:0; bottom:24px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); z-index:10;
 	padding:12px 20px; border-radius:12px; background:#323232; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
 .toast.bad { background:var(--danger); color:#fff; }
-@media (prefers-color-scheme: dark) { .toast { background:#e8eaed; color:#202124; } .toast.bad { background:#f2b8b5; color:#601410; } }
+:root[data-theme="dark"] .toast { background:#e8eaed; color:#202124; }
+:root[data-theme="dark"] .toast.bad { background:#f2b8b5; color:#601410; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .toast { background:#e8eaed; color:#202124; } :root:not([data-theme="light"]) .toast.bad { background:#f2b8b5; color:#601410; } }
+.theme-btn { padding:0 12px; }
+@media (max-width: 600px) { .theme-btn .theme-text { display:none; } }
 
 .lang-label { margin:0; display:flex; }
 .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
@@ -199,6 +212,9 @@ const ICONS = {
 	import: `<path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/>`,
 	signOut: `<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>`,
 	globe: `<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/>`,
+	sun: `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-15.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`,
+	moon: `<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>`,
+	monitor: `<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>`,
 } as const;
 
 function icon(name: keyof typeof ICONS): Html {
@@ -228,19 +244,39 @@ ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${
 </form>`;
 }
 
+function themeToggle(t: Translate, path = "/"): Html {
+	const current: Theme = t.theme ?? "system";
+	const next: Theme = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length]!;
+	const iconName = current === "dark" ? "moon" : current === "light" ? "sun" : "monitor";
+	const label = t(`theme.${current}`);
+	const full = `${t("theme.label")}: ${label}`;
+	return html`<form class="inline" method="post" action="/theme" data-theme-toggle>
+<input type="hidden" name="theme" value="${next}" />
+<input type="hidden" name="next" value="${path}" />
+<button class="ghost theme-btn" title="${full}" aria-label="${full}" data-label-prefix="${t("theme.label")}" data-label-system="${t("theme.system")}" data-label-light="${t("theme.light")}" data-label-dark="${t("theme.dark")}">${icon(iconName)}<span class="theme-text">${label}</span></button>
+</form>`;
+}
+
 export function page(title: string, body: Html, options: PageOptions): Html {
 	const { t } = options;
+	const theme: Theme = t.theme ?? "system";
 	const link = (href: string, key: MessageKey, name: keyof typeof ICONS) =>
 		html`<a href="${href}" ${options.current === href ? html`aria-current="page"` : ""}>${icon(name)}<span>${t(key)}</span></a>`;
 	const brand = html`<a class="brand" href="/">${LOGO}<span>aliasflare</span></a>`;
+	const themeMeta =
+		theme === "light"
+			? html`<meta name="theme-color" content="#f6f8fc" />`
+			: theme === "dark"
+				? html`<meta name="theme-color" content="#202124" />`
+				: html`<meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#202124" media="(prefers-color-scheme: dark)" />`;
 	return html`<!doctype html>
-<html lang="${t.locale}" dir="${textDirection(t.locale)}">
+<html lang="${t.locale}" dir="${textDirection(t.locale)}"${theme !== "system" ? html` data-theme="${theme}"` : ""}>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="robots" content="noindex" />
-<meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)" />
-<meta name="theme-color" content="#202124" media="(prefers-color-scheme: dark)" />
+${themeMeta}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <title>${title} · aliasflare</title>
 <link rel="stylesheet" href="/assets/app.css?v=${STYLE_VERSION}" />
@@ -248,6 +284,7 @@ export function page(title: string, body: Html, options: PageOptions): Html {
 <body>
 ${options.nav
 	? html`<header class="topbar">${brand}<span class="spacer"></span>
+${themeToggle(t, options.path)}
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="aliasflare">
@@ -257,7 +294,7 @@ ${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activ
 <div class="content">${body}</div>
 <div class="toast" role="status" aria-live="polite" data-toast hidden></div>
 </div>`
-	: html`<header class="topbar">${brand}</header>${body}<footer class="page">${languageMenu(t, options.path)}</footer>`}
+	: html`<header class="topbar">${brand}<span class="spacer"></span>${themeToggle(t, options.path)}</header>${body}<footer class="page">${languageMenu(t, options.path)}</footer>`}
 <script src="/assets/app.js?v=${APP_SCRIPT_VERSION}"></script>
 ${options.script ? html`<script src="/assets/passkey.js?v=${PASSKEY_SCRIPT_VERSION}"></script>` : ""}
 </body>
@@ -365,9 +402,10 @@ function statusPill(t: Translate, status: string): Html {
 	return html`<span class="pill ${tone}">${translated(t, `status.${status}`, status)}</span>`;
 }
 
-/** Rows per page the alias list offers. */
+/** Rows per page the alias and activity lists offer. */
 export const ALIAS_PAGE_SIZES = [25, 50, 100, 200] as const;
 export const DEFAULT_ALIAS_PAGE_SIZE = 100;
+export const DEFAULT_ACTIVITY_PAGE_SIZE = 50;
 
 export type AliasListState = { query: string; filter: "all" | "active" | "disabled" | "pinned" | "deleted"; page: number; perPage: number; total: number };
 
@@ -394,8 +432,8 @@ ${settings.aliasDomains.map((domain) => html`<option value="${domain}">${domain}
 ${RANDOM_ALIAS_FORMATS.map((format) => html`<button name="kind" value="${format}" formnovalidate>${t(`new.random.${format}`)}</button>`)}
 </div>
 <div class="create-extra">
-<label>${t("new.note")} <input type="text" name="note" maxlength="500" /></label>
-<label>${t("new.destination")} <input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
+<label><span>${t("new.note")}</span><input type="text" name="note" maxlength="500" /></label>
+<label><span>${t("new.destination")}</span><input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
 </div>
 </form>
 </section>`;
@@ -532,24 +570,51 @@ ${items.map(
 </tbody></table>`;
 }
 
-/** Every forward and event, newest first, a page at a time. */
-export function activityListPage(t: Translate, input: { items: ActivityItem[]; page: number; lastPage: number }): Html {
+/** Every forward and event, newest first, searchable and paged. */
+export function activityListPage(
+	t: Translate,
+	input: { items: ActivityItem[]; page: number; lastPage: number; query?: string; perPage?: number; total?: number },
+): Html {
 	const { items, page: current, lastPage } = input;
-	const at = (n: number) => (n > 1 ? `/activity?page=${n}` : "/activity");
+	const query = input.query ?? "";
+	const perPage = input.perPage ?? DEFAULT_ACTIVITY_PAGE_SIZE;
+	const total = input.total ?? items.length;
+	const at = (changes: { page?: number; query?: string; perPage?: number }) => {
+		const nextQuery = changes.query ?? query;
+		const nextPer = changes.perPage ?? perPage;
+		const nextPage = changes.page ?? current;
+		const params = new URLSearchParams();
+		if (nextQuery) params.set("q", nextQuery);
+		if (nextPer !== DEFAULT_ACTIVITY_PAGE_SIZE) params.set("per", String(nextPer));
+		if (nextPage > 1) params.set("page", String(nextPage));
+		const search = params.toString();
+		return search ? `/activity?${search}` : "/activity";
+	};
 	return page(
 		t("nav.activity"),
 		html`<main><section>
 <h2>${t("nav.activity")}</h2>
-${activityTable(t, items)}
+<form class="toolbar" method="get" action="/activity" role="search">
+<input type="search" name="q" value="${query}" placeholder="${t("activity.searchPlaceholder")}" aria-label="${t("dash.search")}" />
+<select name="per" aria-label="${t("dash.perPageLabel")}" data-autosubmit>
+${ALIAS_PAGE_SIZES.map((size) => html`<option value="${size}" ${perPage === size ? "selected" : ""}>${t("dash.perPage", { count: String(size) })}</option>`)}
+</select>
+<button>${t("dash.searchButton")}</button>
+</form>
+<p class="muted">${t("activity.results", { count: String(total) })}${query ? html` · <a href="${at({ query: "", page: 1 })}">${t("dash.clear")}</a>` : ""}</p>
+${items.length === 0
+	? html`<p class="muted">${query ? t("activity.noResults") : t("dash.nothingYet")}</p>
+${current > 1 ? html`<nav class="pager" aria-label="${t("dash.pages")}"><a href="${at({ page: Math.max(1, lastPage) })}">← ${t("dash.prev")}</a></nav>` : ""}`
+	: html`${activityTable(t, items)}
 ${lastPage > 1
 	? html`<nav class="pager" aria-label="${t("dash.pages")}">
-${current > 1 ? html`<a href="${at(current - 1)}">← ${t("dash.prev")}</a>` : ""}
+${current > 1 ? html`<a href="${at({ page: current - 1 })}">← ${t("dash.prev")}</a>` : ""}
 <span class="muted">${current} / ${lastPage}</span>
-${current < lastPage ? html`<a href="${at(current + 1)}">${t("dash.next")} →</a>` : ""}
+${current < lastPage ? html`<a href="${at({ page: current + 1 })}">${t("dash.next")} →</a>` : ""}
 </nav>`
-	: ""}
+	: ""}`}
 </section></main>`,
-		{ t, nav: true, current: "/activity", path: "/activity" },
+		{ t, nav: true, current: "/activity", path: at({}) },
 	);
 }
 
@@ -562,6 +627,12 @@ ${noticeBox(notice)}
 <form class="sections" method="post" action="/settings" data-autosave data-msg-failed="${t("link.error")}">
 <section id="language-settings">
 <h2>${t("nav.language")}</h2>
+<label for="uiTheme">${t("theme.label")}</label>
+<select id="uiTheme" name="uiTheme">
+${THEMES.map((mode) => html`<option value="${mode}" ${(t.theme ?? "system") === mode ? "selected" : ""}>${t(`theme.${mode}`)}</option>`)}
+</select>
+<p class="help">${t("theme.help")}</p>
+
 <label for="uiLocale">${t("set.uiLanguage")}</label>
 <select id="uiLocale" name="uiLocale">
 ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${t.locale === locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
@@ -628,8 +699,8 @@ ${settings.aliasDomains.map((domain) => {
 <td data-label="${t("settings.unsubColDomain")}"><code>${domain}</code></td>
 <td data-label="${t("settings.unsubscribe")}"><select name="unsubscribeBehavior:${domain}" aria-label="${t("settings.unsubscribe")} (${domain})"><option value="">${t("settings.unsubUseGeneral")}</option>
 ${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<option value="${behavior}" ${rule?.behavior === behavior ? "selected" : ""}>${t(`unsub.${behavior}`)}</option>`)}</select></td>
-<td data-label="${t("settings.unsubFallback")}"><select name="unsubscribeFallback:${domain}" aria-label="${t("settings.unsubFallback")} (${domain})">
-${UNSUBSCRIBE_FALLBACKS.map((fallback) => html`<option value="${fallback}" ${(rule?.fallback ?? settings.unsubscribeFallback) === fallback ? "selected" : ""}>${t(`unsubFallback.${fallback}`)}</option>`)}</select></td>
+<td data-label="${t("settings.unsubFallback")}"><select name="unsubscribeFallback:${domain}" aria-label="${t("settings.unsubFallback")} (${domain})"><option value="">${t("settings.unsubUseGeneral")}</option>
+${UNSUBSCRIBE_FALLBACKS.map((fallback) => html`<option value="${fallback}" ${rule?.fallback === fallback ? "selected" : ""}>${t(`unsubFallback.${fallback}`)}</option>`)}</select></td>
 <td data-label="${t("settings.unsubRedirect")}"><input name="unsubscribeRedirect:${domain}" type="email" value="${rule?.redirect ?? ""}" placeholder="${settings.unsubscribeRedirect || t("settings.unsubUseGeneral")}" aria-label="${t("settings.unsubRedirect")} (${domain})" autocapitalize="none" spellcheck="false" /></td>
 </tr>`;
 })}
@@ -1078,7 +1149,7 @@ function importedHistory(t: Translate, alias: AliasRow): Html | string {
 		["hist.mailboxes", list(details.mailboxes ?? details.recipients)],
 		["hist.labels", list(details.labels)],
 		["hist.pgp", typeof details.pgp === "string" ? details.pgp : ""],
-		["hist.sourceId", details.id === undefined ? "" : String(details.id)],
+		["hist.sourceId", details.id == null ? "" : String(details.id)],
 	];
 	const source = IMPORT_SOURCE_NAMES[alias.imported_from] ?? alias.imported_from;
 	return html`<section>

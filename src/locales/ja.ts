@@ -452,6 +452,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "変更なし（受信のみ）",
 	"settings.forwardMethodHelp": "リバースエイリアス経由の場合、メールは送信者のアドレスを隠したエイリアスから届き、返信はエイリアスとして送信されます。トラッキング要素は削除され、バナーを表示できます。変更なしの場合、Email Routing はメッセージをそのまま転送します。アカウントから送信されることはなく、送信サービスも不要ですが、返信は自分のアドレスから送信者に直接届きます。Mailflare 経由で受信したメールは常に書き換えられます。",
 	"settings.forwardMethodDirectNote": "受信のみ：転送されたメールに返信すると、送信者には実際のアドレスが表示されます。ブロック、ブロックリスト、プロモーションのフィルタリング、送信者のリダイレクトは引き続き機能します。",
+	"theme.label": "テーマ",
+	"theme.help": "このブラウザーにのみ適用されます。",
+	"theme.system": "システム",
+	"theme.light": "ライト",
+	"theme.dark": "ダーク",
+	"activity.searchPlaceholder": "エイリアス、状態、詳細を検索",
+	"activity.results": "{count} 件",
+	"activity.noResults": "一致するアクティビティはありません。",
 };
 
 export default dictionary;

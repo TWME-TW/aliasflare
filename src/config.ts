@@ -121,11 +121,13 @@ function checkEnv(env: Env): void {
 		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend, smtp2go, brevo, postmark, mailgun, ses, smtp or custom");
 	}
 	if (value("OUTBOUND_OPTIONS")) {
+		let parsed: unknown;
 		try {
-			JSON.parse(value("OUTBOUND_OPTIONS"));
+			parsed = JSON.parse(value("OUTBOUND_OPTIONS"));
 		} catch {
 			throw new ConfigError("OUTBOUND_OPTIONS must be a JSON object");
 		}
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new ConfigError("OUTBOUND_OPTIONS must be a JSON object");
 	}
 	if (value("WORKERS_PLAN") && !isWorkersPlan(value("WORKERS_PLAN").toLowerCase())) throw new ConfigError("WORKERS_PLAN must be free or paid");
 	// The setup code is all that stands between anyone and the first passkey.

@@ -473,6 +473,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Bila mabadiliko (kupokea pekee)",
 	"settings.forwardMethodHelp": "Kupitia jina bandia la kinyume, barua inakuja kutoka anwani inayoficha mtumaji, hivyo majibu yako hutoka kama jina bandia; vifuatiliaji huondolewa na bango linaweza kuonyeshwa. Bila mabadiliko, Email Routing hupitisha ujumbe kama ulivyo: hakuna kinachotumwa kutoka akaunti yako na huduma ya kutuma haihitajiki, lakini unapojibu, unaandika moja kwa moja kwa mtumaji kutoka anwani yako mwenyewe. Barua zilizopokelewa kupitia Mailflare huandikwa upya kila wakati.",
 	"settings.forwardMethodDirectNote": "Kupokea pekee: unapojibu barua iliyosambazwa, mtumaji anaona anwani yako halisi. Kuzuia, orodha ya kuzuia, kuchuja matangazo na kuelekeza upya mtumaji bado vinafanya kazi.",
+	"theme.label": "Mandhari",
+	"theme.help": "Inatumika kwenye kivinjari hiki pekee.",
+	"theme.system": "Mfumo",
+	"theme.light": "Angavu",
+	"theme.dark": "Giza",
+	"activity.searchPlaceholder": "Tafuta jina mbadala, hali au maelezo",
+	"activity.results": "Rekodi {count}",
+	"activity.noResults": "Hakuna shughuli inayolingana.",
 };
 
 export default dictionary;

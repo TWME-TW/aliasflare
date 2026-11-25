@@ -458,6 +458,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Bez zmian (tylko odbiór)",
 	"settings.forwardMethodHelp": "Przez alias zwrotny poczta przychodzi z adresu ukrywającego nadawcę, więc twoje odpowiedzi wychodzą jako alias; elementy śledzące są usuwane, a baner może być pokazany. Bez zmian Email Routing przekazuje wiadomość dalej bez modyfikacji: z twojego konta nic nie jest wysyłane i nie jest potrzebna usługa wysyłkowa, ale odpowiedź trafia bezpośrednio do nadawcy z twojego adresu. Poczta odebrana przez Mailflare jest zawsze przepisywana.",
 	"settings.forwardMethodDirectNote": "Tylko odbiór: gdy odpowiadasz na przekazaną wiadomość, nadawca widzi twój prawdziwy adres. Blokowanie, lista zablokowanych, filtrowanie promocji i przekierowanie nadawcy nadal działają.",
+	"theme.label": "Motyw",
+	"theme.help": "Dotyczy tylko tej przeglądarki.",
+	"theme.system": "Systemowy",
+	"theme.light": "Jasny",
+	"theme.dark": "Ciemny",
+	"activity.searchPlaceholder": "Szukaj aliasu, statusu lub szczegółów",
+	"activity.results": "{count} wpisów",
+	"activity.noResults": "Brak pasującej aktywności.",
 };
 
 export default dictionary;

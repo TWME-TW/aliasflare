@@ -126,12 +126,85 @@ export const APP_SCRIPT = `(() => {
 
   // Import forms carry the domains chosen in the shared box above them.
   const domainSource = document.querySelector("[data-domains-source]");
-  for (const form of document.querySelectorAll("form[data-import]")) {
+  const importForms = [...document.querySelectorAll("form[data-import]")];
+  for (const form of importForms) {
     form.addEventListener("submit", () => {
       const hidden = form.querySelector("[data-domains]");
       if (hidden && domainSource) hidden.value = domainSource.value;
       const button = form.querySelector("button");
       if (button) button.disabled = true;
+    });
+  }
+  if (importForms.length) {
+    window.addEventListener("pageshow", () => {
+      for (const form of importForms) {
+        const button = form.querySelector("button");
+        if (button) button.disabled = false;
+      }
+    });
+  }
+
+  // Theme switcher: applies immediately in the DOM and persists to the af_theme cookie.
+  const THEME_ORDER = ["system", "light", "dark"];
+  const THEME_ICONS = {
+    system: '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2m-7.07-15.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    dark: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  };
+  const applyTheme = (mode) => {
+    const theme = THEME_ORDER.includes(mode) ? mode : "system";
+    if (theme === "system") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.dataset.theme = theme;
+    for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.remove();
+    if (theme === "system") {
+      for (const [color, media] of [["#f6f8fc", "(prefers-color-scheme: light)"], ["#202124", "(prefers-color-scheme: dark)"]]) {
+        const meta = document.createElement("meta");
+        meta.name = "theme-color";
+        meta.content = color;
+        meta.media = media;
+        document.head.appendChild(meta);
+      }
+    } else {
+      const meta = document.createElement("meta");
+      meta.name = "theme-color";
+      meta.content = theme === "dark" ? "#202124" : "#f6f8fc";
+      document.head.appendChild(meta);
+    }
+    const select = document.getElementById("uiTheme");
+    if (select && select.value !== theme) select.value = theme;
+    const next = THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length];
+    for (const form of document.querySelectorAll("form[data-theme-toggle]")) {
+      const input = form.querySelector('input[name="theme"]');
+      if (input) input.value = next;
+      const button = form.querySelector("button");
+      if (!button) continue;
+      const label = button.dataset["label" + theme[0].toUpperCase() + theme.slice(1)] || theme;
+      const prefix = button.dataset.labelPrefix || "";
+      const full = prefix ? prefix + ": " + label : label;
+      button.title = full;
+      button.setAttribute("aria-label", full);
+      const svg = button.querySelector("svg");
+      if (svg && THEME_ICONS[theme]) svg.innerHTML = THEME_ICONS[theme];
+      const text = button.querySelector(".theme-text");
+      if (text) text.textContent = label;
+    }
+  };
+  for (const form of document.querySelectorAll("form[data-theme-toggle]")) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const body = new URLSearchParams(new FormData(form));
+      const next = body.get("theme") || "system";
+      applyTheme(next);
+      try {
+        await fetch(form.action, {
+          method: "POST",
+          body,
+          headers: { "X-Theme": "1", Accept: "application/json" },
+          credentials: "same-origin",
+        });
+      } catch {
+        // The visual change stays applied; the next interaction will persist it.
+      }
     });
   }
 
@@ -201,6 +274,7 @@ export const APP_SCRIPT = `(() => {
       }
     });
   }
+  const autosaveForms = [];
   for (const form of document.querySelectorAll("form[data-autosave]")) {
     let latest = 0;
     // Saves run one after another, so an older change can never land after a newer one.
@@ -224,6 +298,7 @@ export const APP_SCRIPT = `(() => {
         });
         const result = await response.json().catch(() => null);
         if (id !== latest) return; // a newer change is already on its way
+        if (result && result.theme) applyTheme(result.theme);
         if (result && result.reload) { location.reload(); return; }
         const ok = !!(response.ok && result && result.ok);
         if (!ok) lastSent = null; // a failed save may be tried again unchanged
@@ -233,15 +308,19 @@ export const APP_SCRIPT = `(() => {
         if (id === latest) show(form.dataset.msgFailed, false);
       }
     };
-    // A note being typed is saved before the page is left.
-    window.addEventListener("pagehide", () => {
-      const body = new URLSearchParams(new FormData(form)).toString();
-      if (body !== lastSent && form.querySelector("input[type=text]:focus")) {
-        navigator.sendBeacon?.(form.action, new URLSearchParams(body));
-      }
-    });
+    autosaveForms.push({ form, getLastSent: () => lastSent });
     form.addEventListener("change", save);
     form.addEventListener("submit", (event) => { event.preventDefault(); save(); });
+  }
+  if (autosaveForms.length) {
+    // One pagehide listener flushes any note currently being typed before the page is left.
+    window.addEventListener("pagehide", () => {
+      for (const { form, getLastSent } of autosaveForms) {
+        if (!form.querySelector("input[type=text]:focus")) continue;
+        const body = new URLSearchParams(new FormData(form)).toString();
+        if (body !== getLastSent()) navigator.sendBeacon?.(form.action, new URLSearchParams(body));
+      }
+    });
   }
   for (const input of document.querySelectorAll("input[data-select]")) {
     input.addEventListener("focus", () => input.select());

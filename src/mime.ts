@@ -22,10 +22,24 @@ function base64Lines(bytes: Uint8Array): string {
 	return lines.join(CRLF);
 }
 
-/** The value as is when it is plain ASCII, otherwise RFC 2047 words of at most 45 bytes each. */
+/** Folds a long ASCII header value on spaces so no line exceeds RFC 5322's 998-byte limit. */
+function foldAscii(value: string, max = 900): string {
+	if (value.length <= max) return value;
+	const lines: string[] = [];
+	let current = "";
+	for (const token of value.split(" ")) {
+		if (!current) current = token;
+		else if (current.length + 1 + token.length <= max) current += ` ${token}`;
+		else lines.push(current), (current = token);
+	}
+	if (current) lines.push(current);
+	return lines.join(`${CRLF} `);
+}
+
+/** The value as is when it is plain ASCII (folded if long), otherwise RFC 2047 words of at most 45 bytes each. */
 export function encodeWords(value: string): string {
 	const clean = oneLine(value);
-	if (/^[\x20-\x7e]*$/.test(clean)) return clean;
+	if (/^[\x20-\x7e]*$/.test(clean)) return foldAscii(clean);
 	const words: string[] = [];
 	let chunk = "";
 	for (const char of clean) {
@@ -44,11 +58,22 @@ export function formatAddress(from: OutboundMessage["from"]): string {
 	return /^[\x20-\x7e]*$/.test(name) ? `"${name}" <${oneLine(from.email)}>` : `${encodeWords(name)} <${oneLine(from.email)}>`;
 }
 
+/** RFC 2231 attr-char percent-encoding from UTF-8 bytes (never throws URIError on lone surrogates). */
+function rfc2231Encode(value: string): string {
+	const bytes = encoder.encode(value);
+	let out = "";
+	for (const byte of bytes) {
+		const ch = String.fromCharCode(byte);
+		out += /^[A-Za-z0-9!#$&+\-.^_`|~]$/.test(ch) ? ch : `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
+	}
+	return out;
+}
+
 /** A parameter value: quoted ASCII, or RFC 2231 UTF-8 for anything else. */
 function parameter(name: string, value: string): string {
 	const clean = oneLine(value).replace(/["\\]/g, "_");
 	if (/^[\x20-\x7e]*$/.test(clean)) return `${name}="${clean}"`;
-	return `${name}*=UTF-8''${encodeURIComponent(clean).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
+	return `${name}*=UTF-8''${rfc2231Encode(clean)}`;
 }
 
 const boundary = () => `=_af_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -99,7 +124,10 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
 		"MIME-Version: 1.0",
 		...Object.entries(message.headers ?? {})
 			.filter(([name]) => /^[A-Za-z0-9-]{1,76}$/.test(name) && !RESERVED.test(name))
-			.map(([name, value]) => `${name}: ${encodeWords(value)}`),
+			.map(([name, value]) => {
+				const structured = /^(in-reply-to|references)$/i.test(name);
+				return `${name}: ${structured ? foldAscii(oneLine(value).replace(/[^\x20-\x7e]+/g, "")) : encodeWords(value)}`;
+			}),
 		...root.headers,
 	];
 	return `${headers.join(CRLF)}${CRLF}${CRLF}${root.body}${CRLF}`;

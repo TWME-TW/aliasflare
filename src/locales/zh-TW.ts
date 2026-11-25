@@ -452,6 +452,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "原封不動（只收不寄）",
 	"settings.forwardMethodHelp": "透過反向別名時，信會從隱藏寄件者地址的反向別名寄來，你的回信會以別名寄出；也會移除追蹤器，並可顯示提示列。原封不動時，Email Routing 會照原樣轉交信件：你的帳號永遠不會寄出任何信，也不需要寄送服務，但回信會直接從你自己的地址寄給寄件者。透過 Mailflare 接收的信一律會改寫。",
 	"settings.forwardMethodDirectNote": "只收不寄：回覆轉寄來的信時，寄件者會看到你的真實地址。封鎖、封鎖名單、阻擋促銷信與改寄寄件者仍然有效。",
+	"theme.label": "外觀主題",
+	"theme.help": "只套用在此瀏覽器。",
+	"theme.system": "跟隨系統",
+	"theme.light": "淺色",
+	"theme.dark": "深色",
+	"activity.searchPlaceholder": "搜尋別名、狀態或說明",
+	"activity.results": "{count} 筆紀錄",
+	"activity.noResults": "找不到符合的活動紀錄。",
 };
 
 export default dictionary;

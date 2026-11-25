@@ -14,6 +14,7 @@ import { Hono, type Context } from "hono";
 import { presentedKey, verifyApiKey } from "./apikeys";
 import type { AppEnv } from "./auth";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias, getAliasView, listAliasViews, updateAlias, type AliasView } from "./compat/aliases";
+import { recordApiLockout } from "./compat/api";
 import { FORWARD_MODES, setForwardMode, type ForwardMode } from "./db";
 import { normalizeEmail } from "./format";
 import { clientKey } from "./ratelimit";
@@ -139,7 +140,7 @@ async function callTool(db: D1Database, settings: Settings, name: string, args: 
 			const note = text(args.note, MAX_NOTE)?.trim() || null;
 			const localPart = text(args.local_part, 64);
 			const alias = localPart?.trim()
-				? await createAlias(db, settings, { localPart: cleanPrefix(localPart), domain, note })
+				? await createAlias(db, settings, { localPart: cleanPrefix(localPart), domain, note, allowRestore: false })
 				: await createRandomAlias(db, settings, { domain, note });
 			return { data: { alias: view(alias) } };
 		}
@@ -174,6 +175,11 @@ const rpcError = (c: C, id: unknown, code: number, message: string, status = 200
 
 export const mcp = new Hono<AppEnv>();
 
+mcp.use("*", async (c, next) => {
+	c.header("Cache-Control", "no-store");
+	await next();
+});
+
 // Streamable HTTP: a stateless server has no stream to offer on GET and no session to DELETE.
 mcp.on(["GET", "DELETE"], "/", (c) => c.body(null, 405, { Allow: "POST" }));
 
@@ -189,7 +195,10 @@ mcp.post("/", async (c) => {
 	const valid = key ? await verifyApiKey(c.env.DB, key, "mcp") : null;
 	if (!valid) {
 		const ip = clientKey(c.req.header("CF-Connecting-IP"));
-		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) return c.json({ error: "Too many attempts" }, 429);
+		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
+			await recordApiLockout(ip);
+			return c.json({ error: "Too many attempts" }, 429);
+		}
 		return c.json({ error: "An MCP API key is needed: Authorization: Bearer <key>" }, 401, { "WWW-Authenticate": 'Bearer realm="aliasflare"' });
 	}
 
@@ -204,7 +213,8 @@ mcp.post("/", async (c) => {
 	if (!message || typeof message !== "object" || Array.isArray(message)) return rpcError(c, null, -32600, "One JSON-RPC message per request.", 400);
 	const { id, method, params } = message as { id?: unknown; method?: unknown; params?: unknown };
 	// A notification or a response from the client: accepted, nothing to answer.
-	if (id === undefined || typeof method !== "string") return c.body(null, 202);
+	if (id === undefined) return c.body(null, 202);
+	if (typeof method !== "string") return rpcError(c, id, -32600, "Invalid Request", 400);
 	const args = (params && typeof params === "object" && !Array.isArray(params) ? params : {}) as Json;
 
 	const result = (value: unknown) => c.json({ jsonrpc: "2.0", id, result: value });

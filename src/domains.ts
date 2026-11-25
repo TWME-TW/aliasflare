@@ -13,8 +13,9 @@ export function reverseDomainFor(aliasDomain: string): string {
 
 /** The alias domain a reverse-alias domain belongs to: r.a.com → a.com. Null for any other domain. */
 export function aliasDomainOfReverse(domain: string): string | null {
+	const lower = domain.toLowerCase();
 	const prefix = `${REVERSE_LABEL}.`;
-	return domain.startsWith(prefix) && domain.slice(prefix.length).includes(".") ? domain.slice(prefix.length) : null;
+	return lower.startsWith(prefix) && lower.slice(prefix.length).includes(".") ? lower.slice(prefix.length) : null;
 }
 
 /** The reverse alias that stands in for a contact of an alias. */

@@ -458,6 +458,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Tidak diubah (khusus terima)",
 	"settings.forwardMethodHelp": "Melalui alias balik, surat datang dari alamat yang menyembunyikan pengirim, sehingga balasan Anda keluar sebagai alias; pelacak dihapus dan banner dapat ditampilkan. Jika tidak diubah, Email Routing meneruskan pesan apa adanya: tidak ada yang dikirim dari akun Anda dan tidak perlu layanan pengiriman, tetapi saat membalas, Anda menulis langsung ke pengirim dari alamat Anda sendiri. Surat yang diterima melalui Mailflare selalu ditulis ulang.",
 	"settings.forwardMethodDirectNote": "Khusus terima: saat Anda membalas surat yang diteruskan, pengirim melihat alamat asli Anda. Pemblokiran, daftar blokir, penyaringan promosi, dan pengalihan pengirim tetap berfungsi.",
+	"theme.label": "Tema",
+	"theme.help": "Hanya berlaku di peramban ini.",
+	"theme.system": "Sistem",
+	"theme.light": "Terang",
+	"theme.dark": "Gelap",
+	"activity.searchPlaceholder": "Cari alias, status, atau detail",
+	"activity.results": "{count} entri",
+	"activity.noResults": "Tidak ada aktivitas yang cocok.",
 };
 
 export default dictionary;

@@ -38,7 +38,7 @@ import {
 	type ImportedAlias,
 	type Selection,
 } from "./importer";
-import { isLocale, isNoticeKey, LANG_COOKIE, negotiateLocale, translator, type MessageKey } from "./i18n";
+import { isLocale, isNoticeKey, isTheme, LANG_COOKIE, negotiateLocale, THEME_COOKIE, translator, type MessageKey } from "./i18n";
 import {
 	authenticationOptions,
 	checkSetupCode,
@@ -68,10 +68,11 @@ import {
 	setupPage,
 	ALIAS_PAGE_SIZES,
 	activityListPage,
+	DEFAULT_ACTIVITY_PAGE_SIZE,
 	DEFAULT_ALIAS_PAGE_SIZE,
 	type ActivityItem,
 } from "./ui";
-import { readTextLimited } from "./streams";
+import { readLimited, readTextLimited } from "./streams";
 import { clientKey } from "./ratelimit";
 import { cleanUp } from "./cleanup";
 import { claimLink, describeAction, performAction, releaseLink, resolveLink, safeHttpsUrl } from "./unsubscribe";
@@ -106,7 +107,7 @@ const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/a
 const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
 
 app.use("*", async (c, next) => {
-	if (STATIC_PATHS.has(c.req.path)) return next();
+	if ((c.req.method === "GET" || c.req.method === "HEAD") && STATIC_PATHS.has(c.req.path)) return next();
 	// The client APIs are open to anyone with the URL: their limits come before any D1 read.
 	if (c.req.path.startsWith("/api/") || c.req.path === "/mcp") {
 		const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
@@ -120,7 +121,14 @@ app.use("*", async (c, next) => {
 		return c.text(`aliasflare cannot start: ${error.message}. Fix the Worker's variables or secrets and deploy again.`, 500);
 	}
 	const chosen = getCookie(c, LANG_COOKIE);
-	c.set("t", translator(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language"))));
+	const chosenTheme = getCookie(c, THEME_COOKIE);
+	c.set(
+		"t",
+		translator(
+			isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language")),
+			isTheme(chosenTheme) ? chosenTheme : "system",
+		),
+	);
 	await next();
 });
 
@@ -219,11 +227,30 @@ export function safeLocalPath(value: string | undefined | null): string {
 // A POST from this site only: another site cannot switch the dashboard's language.
 app.post("/lang", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
-	const form = await c.req.parseBody();
-	if (isLocale(form.locale)) {
-		setCookie(c, LANG_COOKIE, form.locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
+	const raw = await readTextLimited(c.req.raw, 4096);
+	if (raw === null) return c.text("Payload too large", 413);
+	const params = new URLSearchParams(raw);
+	const locale = params.get("locale");
+	if (isLocale(locale)) {
+		setCookie(c, LANG_COOKIE, locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 	}
-	return c.redirect(safeLocalPath(typeof form.next === "string" ? form.next : undefined), 303);
+	return c.redirect(safeLocalPath(params.get("next")), 303);
+});
+
+// Light / dark / system theme preference stored in a browser cookie (same-origin POST only).
+app.post("/theme", async (c) => {
+	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
+	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
+	const raw = await readTextLimited(c.req.raw, 4096);
+	if (raw === null) return c.text("Payload too large", 413);
+	const params = new URLSearchParams(raw);
+	const theme = params.get("theme");
+	if (isTheme(theme)) {
+		setCookie(c, THEME_COOKIE, theme, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+	}
+	if (c.req.header("X-Theme") === "1") return c.json({ ok: true, theme: isTheme(theme) ? theme : c.get("t").theme ?? "system" });
+	return c.redirect(safeLocalPath(params.get("next")), 303);
 });
 
 // SimpleLogin and addy.io client APIs (off until enabled in Settings).
@@ -241,14 +268,15 @@ app.post("/webhook", async (c) => {
 	if (!(await verifyWebhookSignature(config.webhookSecret, body, c.req.header("X-Email-Platform-Signature") ?? null))) {
 		return c.json({ error: "Invalid signature" }, 401);
 	}
-	let payload: { type?: string; data?: InboundEvent };
+	let payload: unknown;
 	try {
 		payload = JSON.parse(body);
 	} catch {
 		return c.json({ error: "Invalid JSON" }, 400);
 	}
-	if (payload.type !== "message.inbound" || !payload.data) return c.json({ result: "ignored" });
-	const outcome = await handleInbound(c.env, config, payload.data, publicOrigin(c));
+	const event = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as { type?: string; data?: InboundEvent }) : null;
+	if (!event || event.type !== "message.inbound" || !event.data) return c.json({ result: "ignored" });
+	const outcome = await handleInbound(c.env, config, event.data, publicOrigin(c));
 	return c.json({ result: outcome.result }, outcome.status as 200);
 });
 
@@ -326,14 +354,14 @@ app.post("/setup/verify", async (c) => {
 	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
 	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
 	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
-	const body = await readJson<{ response?: RegistrationResponseJSON; name?: string }>(c);
+	const body = await readJson<{ response?: RegistrationResponseJSON; name?: unknown }>(c);
 	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
 	const passkey = await completeRegistration(
 		c.env.DB,
 		relyingParty(c.req.url),
 		takeChallengeCookie(c),
 		body.response,
-		body.name ?? "",
+		typeof body.name === "string" ? body.name : "",
 		"setup_register",
 	).catch(() => null);
 	if (!passkey) return jsonError(c, "err.registerFailed", 400);
@@ -393,16 +421,31 @@ app.use("*", async (c, next) => {
 
 /** Entries of recent activity on the alias list; the rest are on the activity page. */
 /** Alias domains one Cloudflare setup run may handle on the Workers Free plan. */
-const FREE_PLAN_SETUP_DOMAINS = 3;
+const FREE_PLAN_SETUP_DOMAINS = 2;
 const DASHBOARD_ACTIVITY = 10;
-const ACTIVITY_PER_PAGE = 50;
 
 /**
- * Forwards and other events, newest first. One compound query whose two halves each read an
- * index in time order (forwards_updated_idx, events_created_idx), so a page never sorts the
- * whole history.
+ * Forwards and other events, newest first. Without a search term, both halves read an index
+ * in time order (forwards_updated_idx, events_created_idx), so a page never sorts the whole history.
  */
-async function activityPage(db: D1Database, limit: number, offset: number): Promise<ActivityItem[]> {
+async function activityPage(db: D1Database, limit: number, offset: number, query = ""): Promise<ActivityItem[]> {
+	if (!query) {
+		const { results } = await db
+			.prepare(
+				`SELECT 'forward' AS kind, status, alias_address AS alias,
+					CASE WHEN error IS NOT NULL THEN error
+						WHEN trackers_removed > 0 THEN COALESCE(subject, '') || ' · ' || trackers_removed || ' tracker(s)'
+						ELSE subject END AS detail,
+					updated_at AS at FROM forwards
+				UNION ALL
+				SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
+				ORDER BY at DESC LIMIT ? OFFSET ?`,
+			)
+			.bind(limit, offset)
+			.all<ActivityItem>();
+		return results;
+	}
+	const like = `%${query.toLowerCase().replace(/[!%_]/g, (char) => `!${char}`)}%`;
 	const { results } = await db
 		.prepare(
 			`SELECT 'forward' AS kind, status, alias_address AS alias,
@@ -410,24 +453,43 @@ async function activityPage(db: D1Database, limit: number, offset: number): Prom
 					WHEN trackers_removed > 0 THEN COALESCE(subject, '') || ' · ' || trackers_removed || ' tracker(s)'
 					ELSE subject END AS detail,
 				updated_at AS at FROM forwards
+				WHERE 'forward' LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR alias_address LIKE ? ESCAPE '!' OR COALESCE(subject, '') LIKE ? ESCAPE '!' OR COALESCE(error, '') LIKE ? ESCAPE '!'
 			UNION ALL
 			SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
+				WHERE kind LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR COALESCE(alias_address, '') LIKE ? ESCAPE '!' OR COALESCE(detail, '') LIKE ? ESCAPE '!'
 			ORDER BY at DESC LIMIT ? OFFSET ?`,
 		)
-		.bind(limit, offset)
+		.bind(like, like, like, like, like, like, like, like, like, limit, offset)
 		.all<ActivityItem>();
 	return results;
 }
 
+async function activityTotal(db: D1Database, query = ""): Promise<number> {
+	if (!query) {
+		const row = await db.prepare("SELECT (SELECT COUNT(*) FROM forwards) + (SELECT COUNT(*) FROM events) AS total").first<{ total: number }>();
+		return row?.total ?? 0;
+	}
+	const like = `%${query.toLowerCase().replace(/[!%_]/g, (char) => `!${char}`)}%`;
+	const row = await db
+		.prepare(
+			`SELECT
+				(SELECT COUNT(*) FROM forwards WHERE 'forward' LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR alias_address LIKE ? ESCAPE '!' OR COALESCE(subject, '') LIKE ? ESCAPE '!' OR COALESCE(error, '') LIKE ? ESCAPE '!')
+				+ (SELECT COUNT(*) FROM events WHERE kind LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR COALESCE(alias_address, '') LIKE ? ESCAPE '!' OR COALESCE(detail, '') LIKE ? ESCAPE '!') AS total`,
+		)
+		.bind(like, like, like, like, like, like, like, like, like)
+		.first<{ total: number }>();
+	return row?.total ?? 0;
+}
+
 app.get("/activity", async (c) => {
 	const db = c.env.DB;
+	const query = (c.req.query("q") ?? "").trim().slice(0, 100);
 	const page = pageParam(c.req.query("page"), 1);
-	const [items, counted] = await Promise.all([
-		activityPage(db, ACTIVITY_PER_PAGE, (page - 1) * ACTIVITY_PER_PAGE),
-		db.prepare("SELECT (SELECT COUNT(*) FROM forwards) + (SELECT COUNT(*) FROM events) AS total").first<{ total: number }>(),
-	]);
-	const lastPage = Math.max(1, Math.ceil((counted?.total ?? 0) / ACTIVITY_PER_PAGE));
-	return c.html(activityListPage(c.get("t"), { items, page, lastPage }));
+	const requestedSize = Number(c.req.query("per"));
+	const perPage = (ALIAS_PAGE_SIZES as readonly number[]).includes(requestedSize) ? requestedSize : DEFAULT_ACTIVITY_PAGE_SIZE;
+	const [items, total] = await Promise.all([activityPage(db, perPage, (page - 1) * perPage, query), activityTotal(db, query)]);
+	const lastPage = Math.max(1, Math.ceil(total / perPage));
+	return c.html(activityListPage(c.get("t"), { items, page, lastPage, query, perPage, total }));
 });
 
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
@@ -493,13 +555,18 @@ app.post("/settings", async (c) => {
 	// The language only changes once everything else is valid, so an error is not lost to a reload.
 	const uiLocale = form.uiLocale;
 	const localeChanged = isLocale(uiLocale) && uiLocale !== c.get("t").locale;
+	const uiTheme = form.uiTheme;
+	const themeChanged = isTheme(uiTheme) && uiTheme !== (c.get("t").theme ?? "system");
 	const reply = (key: MessageKey, ok: boolean, params?: Record<string, string>) => {
+		if (ok && themeChanged) {
+			setCookie(c, THEME_COOKIE, uiTheme, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+		}
 		if (ok && localeChanged) {
 			setCookie(c, LANG_COOKIE, uiLocale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
-			c.set("t", translator(uiLocale));
+			c.set("t", translator(uiLocale, ok && themeChanged ? uiTheme : c.get("t").theme ?? "system"));
 		}
 		return c.req.header("X-Autosave") === "1"
-			? c.json({ ok, message: c.get("t")(key, params), reload: ok && localeChanged }, ok ? 200 : 400)
+			? c.json({ ok, message: c.get("t")(key, params), reload: ok && localeChanged, ...(ok && themeChanged ? { theme: uiTheme } : {}) }, ok ? 200 : 400)
 			: redirectWithNotice(c, "/settings", key, params);
 	};
 	const destination = typeof form.defaultDestination === "string" ? form.defaultDestination.trim() : "";
@@ -516,21 +583,32 @@ app.post("/settings", async (c) => {
 	if (aliasDomains.length > MAX_ALIAS_DOMAINS) return reply("notice.tooManyDomains", false, { count: String(MAX_ALIAS_DOMAINS) });
 	if (destination && !extractEmail(destination)) return reply("notice.badDestination", false);
 	if (destination && isOwnAddress(extractEmail(destination)!, aliasDomains)) return reply("notice.destinationOnReverse", false);
-	// Unsubscribe: the general rule, then one per alias domain that has its own.
+	// Unsubscribe: the general rule, then one per alias domain that overrides any field.
 	const field = (name: string) => (typeof form[name] === "string" ? (form[name] as string).trim() : "");
 	const unsubscribeDomains: Record<string, { behavior: string; fallback: string; redirect: string }> = {};
 	for (const domain of aliasDomains) {
 		const behavior = field(`unsubscribeBehavior:${domain}`);
-		if (behavior) unsubscribeDomains[domain] = { behavior, fallback: field(`unsubscribeFallback:${domain}`), redirect: field(`unsubscribeRedirect:${domain}`) };
+		const fallback = field(`unsubscribeFallback:${domain}`);
+		const redirect = field(`unsubscribeRedirect:${domain}`);
+		if (behavior || fallback || redirect) unsubscribeDomains[domain] = { behavior, fallback, redirect };
 	}
-	const rules = [{ behavior: field("unsubscribeBehavior"), fallback: field("unsubscribeFallback"), redirect: field("unsubscribeRedirect") }, ...Object.values(unsubscribeDomains)];
+	const generalBehavior = field("unsubscribeBehavior");
+	const generalFallback = field("unsubscribeFallback");
+	const generalRedirect = field("unsubscribeRedirect");
+	const rules = [
+		{ behavior: generalBehavior, fallback: generalFallback, redirect: generalRedirect },
+		...Object.values(unsubscribeDomains).map((rule) => ({
+			behavior: rule.behavior || generalBehavior,
+			fallback: rule.fallback || generalFallback,
+			redirect: rule.redirect,
+		})),
+	];
 	for (const rule of rules) {
 		if (!rule.redirect) continue;
 		const address = extractEmail(rule.redirect);
 		if (!address) return reply("notice.badDestination", false);
 		if (isOwnAddress(address, aliasDomains)) return reply("notice.destinationOnReverse", false);
 	}
-	const generalRedirect = field("unsubscribeRedirect");
 	if (rules.some((rule) => (rule.behavior === "redirect_contact" || rule.fallback === "redirect_contact") && !rule.redirect && !generalRedirect)) {
 		return reply("notice.unsubRedirectMissing", false);
 	}
@@ -658,15 +736,19 @@ app.post("/connection", async (c) => {
 		if (Number(raw("smtpPort")) === 25) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		if (raw("sesRegion").trim() && !SES_REGION.test(raw("sesRegion").trim().toLowerCase())) return redirectWithNotice(c, "/connection", "notice.badSes");
 		if (options.customUrl) {
-			// The key and messages go to this URL: a public https host, not this Worker.
-			if (!safeHttpsUrl(options.customUrl, [new URL(c.req.url).hostname, ...[c.get("config").publicUrl, c.get("config").siteOrigin].filter(Boolean).map((url) => new URL(url).hostname)])) {
+			// The key and messages go to this URL: a public https host, not this Worker or Mailflare.
+			const blocked = [
+				new URL(c.req.url).hostname,
+				...[c.get("config").publicUrl, c.get("config").siteOrigin, c.get("config").mailflareUrl].filter(Boolean).map((url) => new URL(url).hostname),
+			];
+			if (!safeHttpsUrl(options.customUrl, blocked)) {
 				return redirectWithNotice(c, "/connection", "notice.badCustom");
 			}
 			try {
 				// A sample message must give valid JSON, so a mistake shows now and not on the first reply.
 				const sample = customValues({ from: { name: "A", email: "a@example.com" }, to: "b@example.com", subject: "s", text: "t", html: "<p>h</p>" }, "key", "<id@example.com>", () => "raw");
 				for (const [, value] of parseHeaderLines(options.customHeaders)) fillTemplate(value, sample, "text");
-				const json = /content-type:\s*(?!application\/json)/i.test(options.customHeaders) ? null : fillTemplate(options.customBody, sample, "json");
+				const json = /^content-type:\s*(?!application\/json)/im.test(options.customHeaders) ? null : fillTemplate(options.customBody, sample, "json");
 				if (json !== null) JSON.parse(json);
 			} catch {
 				return redirectWithNotice(c, "/connection", "notice.badCustom");
@@ -727,10 +809,19 @@ app.post("/import/:source", async (c) => {
 	const sourceName = c.req.param("source");
 	if (!Object.hasOwn(IMPORT_SOURCES, sourceName)) return c.notFound();
 	const source = IMPORT_SOURCES[sourceName as keyof typeof IMPORT_SOURCES];
-	// A CSV file is at most 5 MB: a larger upload is turned away before it is read.
+	// A CSV file is at most 5 MB: enforce the cap on both declared length and actual stream bytes.
 	if (Number(c.req.header("Content-Length") ?? 0) > MAX_IMPORT_UPLOAD) return c.text(t("imp.err.format"), 413);
+	const rawBytes = await readLimited(c.req.raw.body, MAX_IMPORT_UPLOAD);
+	if (rawBytes === null) return c.text(t("imp.err.format"), 413);
 	const settings = await loadSettings(c.env.DB);
-	const form = await c.req.parseBody();
+	const bounded = new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers, body: rawBytes.buffer as ArrayBuffer });
+	const form: Record<string, string | File> = {};
+	try {
+		const data = await bounded.formData();
+		for (const [k, v] of data.entries()) form[k] = v;
+	} catch {
+		return c.text(t("imp.err.format"), 400);
+	}
 	const domains = (typeof form.domains === "string" ? form.domains : "")
 		.split(/[\s,]+/)
 		.map((domain) => domain.trim().toLowerCase().replace(/\.$/, ""))
@@ -830,11 +921,15 @@ app.post("/passkeys/options", async (c) => {
 });
 
 app.post("/passkeys/verify", async (c) => {
-	const body = await readJson<{ response?: RegistrationResponseJSON; name?: string }>(c);
+	const body = await readJson<{ response?: RegistrationResponseJSON; name?: unknown }>(c);
 	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
-	const passkey = await completeRegistration(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response, body.name ?? "").catch(
-		() => null,
-	);
+	const passkey = await completeRegistration(
+		c.env.DB,
+		relyingParty(c.req.url),
+		takeChallengeCookie(c),
+		body.response,
+		typeof body.name === "string" ? body.name : "",
+	).catch(() => null);
 	if (!passkey) return jsonError(c, "err.registerFailed", 400);
 	return c.json({ ok: true });
 });
@@ -1072,7 +1167,7 @@ export default {
 			message.setReject("Message too large");
 			return;
 		}
-		// A failure the next attempt may fix: throwing makes the sending server try again later.
-		if (outcome.status >= 500) throw new Error(`Forwarding failed: ${outcome.result}`);
+		// A failure or in-progress race the next attempt may fix: throwing makes the sending server try again later.
+		if (outcome.status === 409 || outcome.status >= 500) throw new Error(`Forwarding failed: ${outcome.result}`);
 	},
 } satisfies ExportedHandler<Env>;

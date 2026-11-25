@@ -96,7 +96,9 @@ export function reverseAddress(reverseLocal: string, reverseDomain: string): str
 
 /** The contact's reverse_local in an address on the reverse-alias domain (also the older bare form). */
 export function reverseLocalOf(address: string): string | null {
-	const local = address.slice(0, address.lastIndexOf("@")).toLowerCase();
+	const at = address.lastIndexOf("@");
+	if (at <= 0) return null;
+	const local = address.slice(0, at).toLowerCase();
 	if (local.startsWith(`${REVERSE_BASE}+`)) return local.slice(REVERSE_BASE.length + 1) || null;
 	return local && local !== REVERSE_BASE ? local : null;
 }
@@ -111,6 +113,38 @@ export function normalizeEmail(value: string): string {
  */
 export const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
 
+const PRIVATE_SUFFIXES = /(^|\.)(localhost|local|internal|intranet|lan|home|corp|arpa|test|invalid|example)$/;
+
+/** True when a hostname is a public domain (no IP literals, no single-label or private names, none of `blockedHosts`). */
+export function isPublicHost(hostname: string, blockedHosts: string[] = []): boolean {
+	const host = hostname.trim().toLowerCase().replace(/\.$/, "");
+	if (!host || host.startsWith("[") || /^[\d.]+$/.test(host)) return false;
+	if (!DOMAIN_PATTERN.test(host) || PRIVATE_SUFFIXES.test(host)) return false;
+	if (blockedHosts.some((blocked) => blocked && (host === blocked.toLowerCase() || host.endsWith(`.${blocked.toLowerCase()}`)))) return false;
+	return true;
+}
+
+/**
+ * The URL when it is a public https address this Worker may call: no IP literals, no
+ * internal or single-label names, no other port, no credentials, and none of this
+ * service's own hosts.
+ */
+export function safeHttpsUrl(value: string, blockedHosts: string[] = []): URL | null {
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		return null;
+	}
+	if (url.protocol !== "https:" || url.username || url.password || url.port !== "") return null;
+	return isPublicHost(url.hostname, blockedHosts) ? url : null;
+}
+
+/** Strips control characters, quotes, backslashes and angle brackets from a stored display name. */
+export function cleanDisplayName(value: string | null | undefined, max = 100): string | null {
+	return (value ?? "").replace(/[\u0000-\u001f\u007f"<>\\]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max) || null;
+}
+
 /**
  * A plain address: a dot-atom local part (no quoted local part, so nothing like
  * `"<ceo@victim.com>"@attacker.com`) at a dotted host name.
@@ -121,7 +155,9 @@ const BARE_ADDRESS =
 /** The address, lower-cased, when the whole value is one plain address; otherwise null. */
 export function parseBareEmail(value: string | null | undefined): string | null {
 	const candidate = value?.trim() ?? "";
-	return candidate.length <= 254 && BARE_ADDRESS.test(candidate) ? normalizeEmail(candidate) : null;
+	if (candidate.length > 254 || !BARE_ADDRESS.test(candidate)) return null;
+	const normalized = normalizeEmail(candidate);
+	return DOMAIN_PATTERN.test(domainOf(normalized)) ? normalized : null;
 }
 
 /**
@@ -165,11 +201,14 @@ export type Replacement = { from: string; to: string };
  * the real correspondent address, and the user's own address with the alias. This keeps
  * the quoted "On …, X <reverse alias> wrote:" line from leaking either side.
  */
-export function replaceAddresses(body: string, replacements: Replacement[]): string {
+export function replaceAddresses(body: string, replacements: Replacement[], options: { encodedPlus?: boolean } = {}): string {
 	let out = body;
 	for (const { from, to } of replacements) {
 		if (!from) continue;
-		const pattern = new RegExp(`(?<![A-Za-z0-9._%+-])${escapeRegExp(from)}(?![A-Za-z0-9.-]*[A-Za-z0-9])`, "gi");
+		const escaped = options.encodedPlus
+			? escapeRegExp(from).replaceAll("\\+", "(?:\\+|%2b|&#0*43;|&#x0*2b;|&plus;)")
+			: escapeRegExp(from);
+		const pattern = new RegExp(`(?<![A-Za-z0-9._%+-])${escaped}(?![A-Za-z0-9.-]*[A-Za-z0-9])`, "gi");
 		// A function, so "$&" or "$`" in an address is inserted as text, not as a pattern.
 		out = out.replace(pattern, () => to);
 	}
@@ -182,10 +221,10 @@ export function findAddressesOnDomain(text: string, domain: string): string[] {
 	return [...new Set((text.match(pattern) ?? []).map(normalizeEmail))];
 }
 
-/** Message-IDs from an In-Reply-To or References header value: no control characters, at most 250 characters each. */
+/** Message-IDs from an In-Reply-To or References header value: printable ASCII, no angle brackets, at most 250 characters each. */
 export function parseMessageIds(value: string | null | undefined): string[] {
 	if (!value) return [];
-	return (value.match(/<[^<>\s\u0000-\u001f\u007f]{1,250}>/g) ?? []);
+	return (value.match(/<[\x21-\x3b\x3d\x3f-\x7e]{1,250}>/g) ?? []);
 }
 
 const EXTENSIONS: Record<string, string> = {
@@ -210,7 +249,7 @@ const EXTENSIONS: Record<string, string> = {
 export function cleanAttachment(attachment: { filename?: string | null; mimeType?: string | null; contentId?: string | null }, index: number) {
 	const typed = (attachment.mimeType ?? "").trim().toLowerCase();
 	const type = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/.test(typed) ? typed : "application/octet-stream";
-	let filename = (attachment.filename ?? "").replace(/[\u0000-\u001f\u007f/\\]+/g, " ").trim().slice(0, 200);
+	let filename = (attachment.filename ?? "").replace(/[\u0000-\u001f\u007f/\\]+/g, " ").trim().slice(0, 200).replace(/[\uD800-\uDBFF]$/, "");
 	if (!filename) filename = `attachment-${index + 1}`;
 	if (!/\.[A-Za-z0-9]{1,8}$/.test(filename) && EXTENSIONS[type]) filename = `${filename}.${EXTENSIONS[type]}`;
 	const contentId = attachment.contentId?.replace(/^<|>$/g, "").replace(/[\u0000-\u0020\u007f<>]+/g, "").slice(0, 200) || undefined;

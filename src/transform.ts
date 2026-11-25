@@ -89,18 +89,32 @@ export async function transformForward(
 		if (html) {
 			let inserted = false;
 			const block = bannerHtml(banner, trackersRemoved, options.t);
-			html = await new HTMLRewriter()
-				.on("body", {
-					element(element) {
-						element.prepend(block, { html: true });
-						inserted = true;
-					},
-				})
-				.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
-				.text();
-			// Without a <body>, the banner goes after any doctype and <html>/<head>, not before them.
+			if (typeof HTMLRewriter !== "undefined") {
+				html = await new HTMLRewriter()
+					.on("body", {
+						element(element) {
+							element.prepend(block, { html: true });
+							inserted = true;
+						},
+					})
+					.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
+					.text();
+				// Without a <body>, place the banner right after <head> via HTMLRewriter (safe against
+				// </head> inside comments or <style>).
+				if (!inserted) {
+					html = await new HTMLRewriter()
+						.on("head", {
+							element(element) {
+								element.after(block, { html: true });
+								inserted = true;
+							},
+						})
+						.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
+						.text();
+				}
+			}
 			if (!inserted) {
-				const lead = /^\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?(?:<head\b[\s\S]*?<\/head>\s*)?/i.exec(html)?.[0] ?? "";
+				const lead = /^\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?(?:<head\b[^>]*>(?:<!--[\s\S]*?-->|<style\b[^>]*>[\s\S]*?<\/style>|<script\b[^>]*>[\s\S]*?<\/script>|<title\b[^>]*>[\s\S]*?<\/title>|(?!<\/head\b)[\s\S])*?<\/head\s*>\s*)?/i.exec(html)?.[0] ?? "";
 				html = lead + block + html.slice(lead.length);
 			}
 		}

@@ -452,6 +452,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "保持原样（仅接收）",
 	"settings.forwardMethodHelp": "通过反向别名时，邮件来自隐藏发件人地址的别名，你的回复会以别名身份发出；追踪器会被移除，并可显示横幅。保持原样时，Email Routing 原样转交邮件：你的账户永远不会发出任何邮件，也不需要发送服务，但回复时会直接从你自己的地址发给发件人。通过 Mailflare 收到的邮件始终会被改写。",
 	"settings.forwardMethodDirectNote": "仅接收：回复转发来的邮件时，发件人会看到你的真实地址。屏蔽、黑名单、促销邮件过滤和转寄发件人仍然有效。",
+	"theme.label": "外观主题",
+	"theme.help": "仅应用于此浏览器。",
+	"theme.system": "跟随系统",
+	"theme.light": "浅色",
+	"theme.dark": "深色",
+	"activity.searchPlaceholder": "搜索别名、状态或说明",
+	"activity.results": "{count} 条记录",
+	"activity.noResults": "找不到匹配的活动记录。",
 };
 
 export default dictionary;

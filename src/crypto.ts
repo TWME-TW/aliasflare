@@ -71,8 +71,9 @@ export async function verifyToken(secret: string, purpose: string, token: string
 	const parts = token.split(".");
 	if (parts.length !== 3) return null;
 	const [payload, expiresText, mac] = parts as [string, string, string];
+	if (!/^(?:0|[1-9]\d*)$/.test(expiresText)) return null;
 	const expires = Number(expiresText);
-	if (!Number.isInteger(expires) || expires < Math.floor(Date.now() / 1000)) return null;
+	if (!Number.isSafeInteger(expires) || expires < Math.floor(Date.now() / 1000)) return null;
 	const expected = await hmacBase64Url(secret, `${purpose}|${payload}|${expires}`);
 	return safeEqual(expected, mac) ? payload : null;
 }

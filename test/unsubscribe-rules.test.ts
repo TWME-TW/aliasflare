@@ -57,6 +57,9 @@ describe("settings", () => {
 		expect(settings.unsubscribeDomains).toEqual({ "me.test": { behavior: "redirect_contact", fallback: "none", redirect: "" } });
 		expect(unsubscribeRuleFor(settings, "a@me.test")).toEqual({ behavior: "redirect_contact", fallback: "none", redirect: "lists@example.com" });
 		expect(unsubscribeRuleFor(settings, "a@other.test").behavior).toBe("disable_alias");
+		// A domain that overrides only the behavior keeps the general fallback.
+		const only = normalizeSettings({ aliasDomains: ["me.test"], unsubscribeFallback: "disable_alias", unsubscribeDomains: { "me.test": { behavior: "block_contact" } } });
+		expect(unsubscribeRuleFor(only, "a@me.test")).toEqual({ behavior: "block_contact", fallback: "disable_alias", redirect: "" });
 	});
 
 	it("are saved from the settings form, and a redirect needs an address", async () => {

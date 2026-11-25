@@ -458,6 +458,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Giữ nguyên (chỉ nhận)",
 	"settings.forwardMethodHelp": "Qua bí danh ngược, thư đến từ một địa chỉ che giấu người gửi, nên các thư trả lời của bạn được gửi đi dưới dạng bí danh; trình theo dõi bị gỡ bỏ và có thể hiển thị biểu ngữ. Khi giữ nguyên, Email Routing chuyển tiếp thư như cũ: không có thư nào được gửi từ tài khoản của bạn và không cần dịch vụ gửi thư, nhưng khi trả lời, bạn gửi trực tiếp đến người gửi từ địa chỉ của chính mình. Thư nhận qua Mailflare luôn được viết lại.",
 	"settings.forwardMethodDirectNote": "Chỉ nhận: khi bạn trả lời thư đã chuyển tiếp, người gửi thấy địa chỉ thật của bạn. Chặn, danh sách chặn, lọc quảng cáo và chuyển hướng người gửi vẫn hoạt động.",
+	"theme.label": "Giao diện",
+	"theme.help": "Chỉ áp dụng cho trình duyệt này.",
+	"theme.system": "Hệ thống",
+	"theme.light": "Sáng",
+	"theme.dark": "Tối",
+	"activity.searchPlaceholder": "Tìm bí danh, trạng thái hoặc chi tiết",
+	"activity.results": "{count} mục",
+	"activity.noResults": "Không có hoạt động phù hợp.",
 };
 
 export default dictionary;

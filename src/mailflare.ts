@@ -103,7 +103,7 @@ export async function getStoredMessage(config: MailflareConfig, messageId: strin
 	if (!email?.blobId) throw new MailflareError(`Message ${messageId} was not found in Mailflare`, 404);
 	if ((email.size ?? 0) > MAX_MESSAGE_BYTES) throw new MailflareError(`Message ${messageId} is larger than ${MAX_MESSAGE_BYTES} bytes`, 413);
 	// Mailbox ids look like "<mailbox>", "<mailbox>~inbox" or "<mailbox>~f~<folder>".
-	const firstMailbox = Object.keys(email.mailboxIds ?? {})[0];
+	const firstMailbox = Object.entries(email.mailboxIds ?? {}).find(([, active]) => active === true)?.[0];
 	const mailboxId = firstMailbox?.split("~")[0];
 	if (!mailboxId) throw new Error(`Message ${messageId} has no mailbox`);
 

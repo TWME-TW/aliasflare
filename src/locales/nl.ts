@@ -458,6 +458,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Ongewijzigd (alleen ontvangen)",
 	"settings.forwardMethodHelp": "Via een omgekeerde alias komt de mail van een adres dat het adres van de afzender verbergt, dus je antwoorden gaan uit als alias; trackers worden verwijderd en de banner kan worden getoond. Ongewijzigd geeft Email Routing het bericht ongewijzigd door: er wordt nooit iets vanaf je account verstuurd en er is geen verzendservice nodig, maar bij antwoorden schrijf je de afzender rechtstreeks vanaf je eigen adres. Mail die via Mailflare is ontvangen, wordt altijd herschreven.",
 	"settings.forwardMethodDirectNote": "Alleen ontvangen: als je op doorgestuurde mail antwoordt, ziet de afzender je echte adres. Blokkeren, de blokkeerlijst, het filteren van promoties en het omleiden van een afzender werken nog steeds.",
+	"theme.label": "Thema",
+	"theme.help": "Geldt alleen voor deze browser.",
+	"theme.system": "Systeem",
+	"theme.light": "Licht",
+	"theme.dark": "Donker",
+	"activity.searchPlaceholder": "Zoek op alias, status of detail",
+	"activity.results": "{count} vermeldingen",
+	"activity.noResults": "Geen overeenkomende activiteit.",
 };
 
 export default dictionary;

@@ -13,7 +13,7 @@ import { readTextLimited } from "../streams";
 import type { AppEnv } from "../auth";
 import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
-import { DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
+import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
 import {
@@ -27,6 +27,7 @@ import {
 	forgetAlias,
 	getAliasView,
 	latestContact,
+	latestContacts,
 	listAliasViews,
 	listDestinations,
 	resolveDestination,
@@ -44,6 +45,10 @@ const MAX_API_BODY_BYTES = 64 * 1024;
 /** Marks an address that kept presenting wrong keys, so its next attempts stop before D1. */
 const lockoutUrl = (ip: string) => `https://aliasflare.invalid/api-lockout/${encodeURIComponent(ip)}`;
 const lockoutCache = (): Cache | null => (typeof caches === "undefined" ? null : (caches as unknown as { default: Cache }).default);
+
+export async function recordApiLockout(ip: string): Promise<void> {
+	await lockoutCache()?.put(lockoutUrl(ip), new Response("1", { headers: { "Cache-Control": "max-age=60" } }));
+}
 type C = Context<ApiEnv>;
 
 const VERSION = { version: "0.2.0", major: 0, minor: 2, patch: 0 };
@@ -97,11 +102,10 @@ api.use("*", async (c, next) => {
 	const key = presentedKey(c.req.raw.headers);
 	// The request limits ran before this (see apiThrottled); failed keys also count against the stricter one.
 	const ip = clientKey(c.req.header("CF-Connecting-IP"));
-	const cache = lockoutCache();
 	const valid = key ? await verifyApiKey(c.env.DB, key, "apps") : null;
 	if (!valid) {
 		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
-			await cache?.put(lockoutUrl(ip), new Response("1", { headers: { "Cache-Control": "max-age=60" } }));
+			await recordApiLockout(ip);
 			return c.json({ error: "Too many attempts", message: "Too Many Attempts." }, 429);
 		}
 		return c.json({ error: "Wrong api key", message: "Unauthenticated." }, 401);
@@ -160,11 +164,11 @@ function slContact(c: C, contact: ContactRow, existed?: boolean) {
 	};
 }
 
-async function slAlias(c: C, alias: AliasView) {
+async function slAlias(c: C, alias: AliasView, preloadedContact?: ContactRow | null) {
 	const settings = c.get("settings");
 	const destination = destinationOf(alias, settings);
 	const mailbox = destination ? { id: (await destinationIds(destination)).numId, email: destination } : { id: 0, email: "" };
-	const contact = await latestContact(c.env.DB, alias.address);
+	const contact = preloadedContact !== undefined ? preloadedContact : await latestContact(c.env.DB, alias.address);
 	let latest = null;
 	if (contact) {
 		const replied = (contact.last_reply_at ?? 0) > (contact.last_forward_at ?? 0);
@@ -203,7 +207,9 @@ async function slFindAlias(c: C): Promise<AliasView> {
 
 async function slFindContact(c: C): Promise<ContactRow> {
 	const id = Number(c.req.param("id"));
-	const contact = Number.isInteger(id) ? await c.env.DB.prepare("SELECT * FROM contacts WHERE num_id = ?").bind(id).first<ContactRow>() : null;
+	const contact = Number.isInteger(id)
+		? await c.env.DB.prepare("SELECT c.* FROM contacts c JOIN aliases a ON a.address = c.alias_address WHERE c.num_id = ? AND a.deleted_at IS NULL").bind(id).first<ContactRow>()
+		: null;
 	if (!contact) throw new ClientError(404, "Contact not found");
 	return contact;
 }
@@ -307,7 +313,8 @@ async function slListAliases(c: C) {
 	const query = str(input.query) ?? c.req.query("query");
 	const filter = c.req.query("pinned") !== undefined ? { pinned: true } : c.req.query("disabled") !== undefined ? { enabled: false } : c.req.query("enabled") !== undefined ? { enabled: true } : {};
 	const { aliases } = await listAliasViews(c.env.DB, { ...filter, search: query, limit: SL_PAGE_SIZE, offset: pageId(c) * SL_PAGE_SIZE });
-	return c.json({ aliases: await Promise.all(aliases.map((alias) => slAlias(c, alias))) });
+	const latest = await latestContacts(c.env.DB, aliases.map((alias) => alias.address));
+	return c.json({ aliases: await Promise.all(aliases.map((alias) => slAlias(c, alias, latest.get(alias.address) ?? null))) });
 }
 api.get("/v2/aliases", slListAliases);
 api.post("/v2/aliases", slListAliases);
@@ -378,7 +385,7 @@ api.post("/aliases/:id/contacts", async (c) => {
 	const text = str((await body(c)).contact) ?? "";
 	const email = extractEmail(text);
 	if (!email || isOwnAddress(email, [...c.get("settings").aliasDomains, domainOf(alias.address)])) throw new ClientError(400, "Enter a valid email address.");
-	const name = text.includes("<") ? text.slice(0, text.indexOf("<")).replace(/["\\]/g, "").trim() || null : null;
+	const name = text.includes("<") ? cleanDisplayName(text.slice(0, text.indexOf("<"))) : null;
 	const before = await c.env.DB.prepare("SELECT 1 FROM contacts WHERE alias_address = ? AND email = ?").bind(alias.address, email).first();
 	const contact = await ensureContact(c.env.DB, alias.address, email, name, c.get("settings").includeSenderInReverseAlias);
 	return c.json(slContact(c, contact, !!before), before ? 200 : 201);
@@ -688,10 +695,11 @@ api.get("/v1/blocklist", async (c) => {
 	]);
 	const total = counted?.total ?? 0;
 	const lastPage = Math.max(Math.ceil(total / size), 1);
+	const from = list.results.length ? (pageNumber - 1) * size + 1 : null;
 	return c.json({
 		data: list.results.map(addyBlock),
 		links: { first: null, last: null, prev: null, next: null },
-		meta: { current_page: pageNumber, from: total ? (pageNumber - 1) * size + 1 : null, last_page: lastPage, per_page: size, to: Math.min(pageNumber * size, total) || null, total },
+		meta: { current_page: pageNumber, from, last_page: lastPage, per_page: size, to: from ? from + list.results.length - 1 : null, total },
 	});
 });
 
@@ -762,7 +770,7 @@ api.get("/v1/aliases", async (c) => {
 		next.searchParams.set("page[number]", String(n));
 		return next.toString();
 	};
-	const from = total ? (page - 1) * size + 1 : null;
+	const from = aliases.length ? (page - 1) * size + 1 : null;
 	return c.json({
 		data: await Promise.all(aliases.map((alias) => addyAlias(c, alias))),
 		links: { first: pageUrl(1), last: pageUrl(lastPage), prev: page > 1 ? pageUrl(page - 1) : null, next: page < lastPage ? pageUrl(page + 1) : null },
@@ -782,7 +790,7 @@ api.get("/v1/aliases", async (c) => {
 api.post("/v1/aliases", async (c) => {
 	const input = await body(c);
 	const settings = c.get("settings");
-	const domain = str(input.domain, 253) ?? settings.aliasDomains[0] ?? "";
+	const domain = str(input.domain, 253) || settings.aliasDomains[0] || "";
 	const format = str(input.format, 40) ?? settings.randomAliasFormat;
 	const recipientIds = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
 	const destination = (await resolveDestination(c.env.DB, settings, recipientIds[0] as string | undefined)) ?? null;

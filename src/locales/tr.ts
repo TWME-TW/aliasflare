@@ -458,6 +458,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Değiştirilmeden (yalnızca alma)",
 	"settings.forwardMethodHelp": "Ters takma ad üzerinden gelen postalar göndericinin adresini gizleyen bir adresten gelir, bu yüzden yanıtlarınız takma adla gider; izleyiciler kaldırılır ve banner gösterilebilir. Değiştirilmeden seçildiğinde Email Routing iletiyi olduğu gibi aktarır: hesabınızdan hiçbir şey gönderilmez ve bir gönderim hizmetine gerek yoktur, ancak yanıt verdiğinizde doğrudan kendi adresinizden göndericiye yazarsınız. Mailflare üzerinden alınan postalar her zaman yeniden yazılır.",
 	"settings.forwardMethodDirectNote": "Yalnızca alma: iletilmiş bir postaya yanıt verdiğinizde gönderici gerçek adresinizi görür. Engelleme, engelleme listesi, promosyon filtreleme ve bir göndericiyi yönlendirme çalışmaya devam eder.",
+	"theme.label": "Tema",
+	"theme.help": "Yalnızca bu tarayıcı için geçerlidir.",
+	"theme.system": "Sistem",
+	"theme.light": "Açık",
+	"theme.dark": "Koyu",
+	"activity.searchPlaceholder": "Takma ad, durum veya ayrıntı ara",
+	"activity.results": "{count} kayıt",
+	"activity.noResults": "Eşleşen etkinlik yok.",
 };
 
 export default dictionary;

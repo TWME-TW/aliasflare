@@ -473,6 +473,14 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Sem alterações (apenas receção)",
 	"settings.forwardMethodHelp": "Através de um alias inverso, o correio chega de um endereço que oculta o do remetente, por isso as suas respostas saem como o alias; os rastreadores são removidos e o banner pode ser apresentado. Sem alterações, o Email Routing transmite a mensagem tal como está: nada é enviado a partir da sua conta e não é necessário nenhum serviço de envio, mas ao responder escreve diretamente ao remetente a partir do seu próprio endereço. O correio recebido através do Mailflare é sempre reescrito.",
 	"settings.forwardMethodDirectNote": "Apenas receção: ao responder a um correio reenviado, o remetente vê o seu endereço real. O bloqueio, a lista de bloqueio, a filtragem de promoções e o redirecionamento de um remetente continuam a funcionar.",
+	"theme.label": "Tema",
+	"theme.help": "Aplica-se apenas a este navegador.",
+	"theme.system": "Sistema",
+	"theme.light": "Claro",
+	"theme.dark": "Escuro",
+	"activity.searchPlaceholder": "Pesquisar alias, estado ou detalhe",
+	"activity.results": "{count} registos",
+	"activity.noResults": "Nenhuma atividade correspondente.",
 };
 
 export default dictionary;
