@@ -78,6 +78,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Idan ka amsa, laƙabin juyawa da ke jikin saƙo (kamar a layin da aka ambata \"… ya rubuta:\") suna zama ainihin adireshi, kuma ainihin adireshinka yana zama laƙabi.",
 	"settings.includeSender": "Saka adireshin mai aikawa a laƙabin juyawa",
+	"settings.autoReplies": "Aika amsoshi ta atomatik",
+	"settings.autoRepliesHelp": "Amsoshin atomatik da akwatin saƙonka ke aikawa zuwa laƙabin juyawa, kamar saƙon ba ka ofis da sauran su, suna zuwa ga wanda ya aiko. Idan an kashe, ana watsar da su (kuma ana nuna su a Ayyuka), don kada masu amsa ta atomatik biyu su amsa wa juna har abada. Saƙon da aliasflare ya aika da kansa koyaushe ana watsar da shi.",
 	"settings.includeSenderHelp":
 		"Sabbin laƙabin juyawa suna kama da john_at_wick_com_x7k2p9@… maimakon jerin haruffa na bazuwar. Laƙabin juyawa na yanzu ba sa canzawa.",
 	"settings.trackers": "Cire masu bin diddigin imel",

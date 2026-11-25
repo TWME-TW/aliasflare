@@ -69,6 +69,8 @@ const dictionary: Dictionary = {
 	"settings.replacement": "反向別名替換（Reverse Alias Replacement）",
 	"settings.replacementHelp": "回信時，內文中的反向別名（例如引用的「… wrote:」那一行）會換回對方的真實地址，你的真實地址則會換成別名。",
 	"settings.includeSender": "反向別名包含寄件者地址",
+	"settings.autoReplies": "傳送自動回覆",
+	"settings.autoRepliesHelp": "您的信箱傳送到反向別名的休假或其他自動回覆，會轉給對方。關閉時，這些回覆會被捨棄（並顯示在活動紀錄中），以免兩個自動回覆程式無止境地互相回覆。aliasflare 本身寄出的郵件一律會被捨棄。",
 	"settings.includeSenderHelp": "新的反向別名會像 john_at_wick_com_x7k2p9@… 而不是隨機字串。已存在的反向別名不受影響。",
 	"settings.trackers": "移除郵件追蹤器",
 	"settings.trackersHelp": "移除轉寄信中的追蹤像素，並刪除連結中的追蹤參數（utm_*、fbclid、mc_eid 等）。部分圖片可能因此消失。",

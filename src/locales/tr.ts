@@ -71,6 +71,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Yanıtladığınızda, gövdedeki ters takma adlar (alıntılanan \"… yazdı:\" satırı gibi) gerçek adrese, gerçek adresiniz ise takma ada dönüşür.",
 	"settings.includeSender": "Gönderen adresini ters takma ada ekle",
+	"settings.autoReplies": "Otomatik yanıtlar gönder",
+	"settings.autoRepliesHelp": "Posta kutunuzun ters takma ada gönderdiği ofis dışında ve diğer otomatik yanıtlar muhatabına iletilir. Kapalıyken bunlar atılır (ve Etkinlik'te gösterilir), böylece iki otomatik yanıtlayıcı birbirine sonsuza dek yanıt veremez. aliasflare'in kendi gönderdiği ileti her zaman atılır.",
 	"settings.includeSenderHelp":
 		"Yeni ters takma adlar rastgele bir dize yerine john_at_wick_com_x7k2p9@… gibi görünür. Mevcut ters takma adlar değişmez.",
 	"settings.trackers": "E-posta izleyicilerini kaldır",

@@ -69,6 +69,8 @@ const dictionary: Dictionary = {
 	"settings.replacement": "反向别名替换（Reverse Alias Replacement）",
 	"settings.replacementHelp": "回复时，正文中的反向别名（例如引用的「… wrote:」那一行）会换回对方的真实地址，你的真实地址则会换成别名。",
 	"settings.includeSender": "反向别名包含发件人地址",
+	"settings.autoReplies": "发送自动回复",
+	"settings.autoRepliesHelp": "你的邮箱发送到反向别名的外出提醒等自动回复会转给对方。关闭时，这些回复会被丢弃（并显示在活动中），以免两个自动回复器无休止地互相回复。aliasflare 自己发出的邮件始终会被丢弃。",
 	"settings.includeSenderHelp": "新的反向别名会像 john_at_wick_com_x7k2p9@… 而不是随机字符串。已有的反向别名不受影响。",
 	"settings.trackers": "移除邮件追踪器",
 	"settings.trackersHelp": "移除转发邮件中的追踪像素，并删除链接中的追踪参数（utm_*、fbclid、mc_eid 等）。部分图片可能因此消失。",

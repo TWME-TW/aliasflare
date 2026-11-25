@@ -71,6 +71,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Saat Anda membalas, alias balik di isi email (misalnya pada baris kutipan \"… menulis:\") diganti dengan alamat asli, dan alamat asli Anda diganti dengan alias.",
 	"settings.includeSender": "Sertakan alamat pengirim dalam alias balik",
+	"settings.autoReplies": "Kirim balasan otomatis",
+	"settings.autoRepliesHelp": "Balasan otomatis seperti pemberitahuan di luar kantor dan balasan otomatis lainnya yang dikirim kotak surat Anda ke alias balik akan diteruskan ke pihak lawan bicara. Jika dimatikan, balasan tersebut dibuang (dan ditampilkan di Aktivitas), sehingga dua pembalas otomatis tidak dapat saling membalas tanpa henti. Pesan yang dikirim aliasflare sendiri selalu dibuang.",
 	"settings.includeSenderHelp":
 		"Alias balik baru berbentuk john_at_wick_com_x7k2p9@… alih-alih string acak. Alias balik yang sudah ada tidak berubah.",
 	"settings.trackers": "Hapus pelacak email",

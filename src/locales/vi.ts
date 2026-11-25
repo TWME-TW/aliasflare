@@ -71,6 +71,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Khi bạn trả lời, các bí danh ngược trong nội dung (như trong dòng trích dẫn \"… đã viết:\") sẽ thành địa chỉ thật, còn địa chỉ thật của bạn sẽ thành bí danh.",
 	"settings.includeSender": "Đưa địa chỉ người gửi vào bí danh ngược",
+	"settings.autoReplies": "Gửi trả lời tự động",
+	"settings.autoRepliesHelp": "Các trả lời tự động, chẳng hạn thư báo vắng mặt và các trả lời tự động khác mà hộp thư của bạn gửi tới bí danh ngược, sẽ được chuyển đến người liên hệ. Khi tắt, chúng sẽ bị loại bỏ (và hiển thị trong Hoạt động), để hai trình trả lời tự động không thể trả lời nhau mãi mãi. Thư do chính aliasflare gửi luôn bị loại bỏ.",
 	"settings.includeSenderHelp":
 		"Bí danh ngược mới sẽ có dạng john_at_wick_com_x7k2p9@… thay vì một chuỗi ngẫu nhiên. Các bí danh ngược hiện có không thay đổi.",
 	"settings.trackers": "Xóa trình theo dõi trong thư",

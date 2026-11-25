@@ -78,6 +78,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Unapojibu, lakabu za kinyume katika mwili wa barua (kama kwenye mstari uliorudiwa \"… aliandika:\") huwa anwani halisi, na anwani yako halisi huwa lakabu.",
 	"settings.includeSender": "Jumuisha anwani ya mtumaji kwenye lakabu ya kinyume",
+	"settings.autoReplies": "Tuma majibu ya kiotomatiki",
+	"settings.autoRepliesHelp": "Majibu ya kiotomatiki, kama vile ya kutokuwepo ofisini na mengine ambayo kisanduku chako cha barua hutuma kwa lakabu ya kinyume, hufikia mtu anayewasiliana nawe. Yakizimwa, hutupwa (na kuonyeshwa katika Shughuli), ili majibu mawili ya kiotomatiki yasiweze kujibiana bila kikomo. Ujumbe ambao aliasflare yenyewe ilituma daima hutupwa.",
 	"settings.includeSenderHelp":
 		"Lakabu mpya za kinyume huonekana kama john_at_wick_com_x7k2p9@… badala ya mfuatano nasibu. Lakabu za kinyume zilizopo hazibadiliki.",
 	"settings.trackers": "Ondoa vifuatiliaji vya barua pepe",

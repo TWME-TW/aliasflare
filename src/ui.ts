@@ -222,7 +222,13 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 .create-address button { flex:none; }
 th.pick, td.pick { width:36px; }
 td.pick input, th.pick input { width:18px; height:18px; accent-color:var(--primary); }
-.pager { display:flex; gap:16px; justify-content:center; align-items:center; margin-top:12px; }
+/* Pagers above and below a list: big buttons that keep their place, so they can be clicked again and again. */
+.pager { display:flex; gap:12px; justify-content:center; align-items:center; margin:12px 0; }
+.pager .pg { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:8.5rem; min-height:44px; padding:0 20px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--primary); font-weight:600; text-decoration:none; user-select:none; touch-action:manipulation; }
+.pager a.pg:hover { background:var(--hover); text-decoration:none; }
+.pager .pg[aria-disabled] { color:var(--muted); opacity:.45; }
+.pager .at { min-width:5.5rem; text-align:center; font-variant-numeric:tabular-nums; color:var(--muted); }
+@media (max-width: 720px) { .pager { gap:8px; } .pager .pg { min-width:0; flex:1; padding:0 12px; } }
 form.note input { width:100%; min-width:12ch; }
 form.inline-save { display:flex; gap:6px; align-items:center; }
 form.inline-save input, form.inline-save select { width:100%; min-width:12ch; }
@@ -576,8 +582,9 @@ ${ALIAS_PAGE_SIZES.map((size) => html`<option value="${size}" ${list.perPage ===
 <p class="muted">${t("dash.results", { count: String(list.total) })}${list.query || list.filter !== "all" || list.label ? html` · <a href="/">${t("dash.clear")}</a>` : ""}</p>
 ${aliases.length === 0
 	? html`<p class="muted">${list.query || list.filter !== "all" || list.label ? t("dash.noResults") : t("dash.noAliases")}</p>
-${list.page > 1 ? html`<nav class="pager" aria-label="${t("dash.pages")}"><a href="${listUrl({ page: Math.max(1, lastPage) })}">← ${t("dash.prev")}</a></nav>` : ""}`
-	: html`<form id="bulk" class="toolbar bulk" method="post" action="/aliases/bulk" data-bulk
+${list.page > 1 ? pager(t, list.page, Math.max(list.page, lastPage), (page) => listUrl({ page: page >= list.page ? list.page : Math.max(1, Math.min(page, lastPage)) })) : ""}`
+	: html`${pager(t, list.page, lastPage, (page) => listUrl({ page }))}
+<form id="bulk" class="toolbar bulk" method="post" action="/aliases/bulk" data-bulk
  data-confirm-delete="${t("bulk.confirmDelete")}" data-confirm-forget="${t("bulk.confirmForget")}" data-none-selected="${t("bulk.noneSelected")}">
 <input type="hidden" name="back" value="${listUrl({})}" />
 <span class="muted" data-selected-count data-template="${t("bulk.selected", { count: "{count}" })}">${t("bulk.selected", { count: "0" })}</span>
@@ -619,13 +626,7 @@ ${aliases.map((alias) => {
 </tr>`;
 })}
 </tbody></table>
-${lastPage > 1
-	? html`<nav class="pager" aria-label="${t("dash.pages")}">
-${list.page > 1 ? html`<a href="${listUrl({ page: list.page - 1 })}">← ${t("dash.prev")}</a>` : ""}
-<span class="muted">${list.page} / ${lastPage}</span>
-${list.page < lastPage ? html`<a href="${listUrl({ page: list.page + 1 })}">${t("dash.next")} →</a>` : ""}
-</nav>`
-	: ""}`}
+${pager(t, list.page, lastPage, (page) => listUrl({ page }))}`}
 <p class="help">${t("dash.modesHelp")}</p>
 </section>
 
@@ -684,15 +685,10 @@ ${ALIAS_PAGE_SIZES.map((size) => html`<option value="${size}" ${perPage === size
 <p class="muted">${t("activity.results", { count: String(total) })}${query ? html` · <a href="${at({ query: "", page: 1 })}">${t("dash.clear")}</a>` : ""}</p>
 ${items.length === 0
 	? html`<p class="muted">${query ? t("activity.noResults") : t("dash.nothingYet")}</p>
-${current > 1 ? html`<nav class="pager" aria-label="${t("dash.pages")}"><a href="${at({ page: Math.max(1, lastPage) })}">← ${t("dash.prev")}</a></nav>` : ""}`
-	: html`${activityTable(t, items)}
-${lastPage > 1
-	? html`<nav class="pager" aria-label="${t("dash.pages")}">
-${current > 1 ? html`<a href="${at({ page: current - 1 })}">← ${t("dash.prev")}</a>` : ""}
-<span class="muted">${current} / ${lastPage}</span>
-${current < lastPage ? html`<a href="${at({ page: current + 1 })}">${t("dash.next")} →</a>` : ""}
-</nav>`
-	: ""}`}
+${current > 1 ? pager(t, current, Math.max(current, lastPage), (page) => at({ page: page >= current ? current : Math.max(1, Math.min(page, lastPage)) })) : ""}`
+	: html`${pager(t, current, lastPage, (page) => at({ page }))}
+${activityTable(t, items)}
+${pager(t, current, lastPage, (page) => at({ page }))}`}
 </section></main>`,
 		{ t, nav: true, current: "/activity", path: at({}) },
 	);
@@ -747,6 +743,7 @@ ${SENDER_FORMATS.map(
 
 ${checkbox("reverseAliasReplacement", settings.reverseAliasReplacement, t("settings.replacement"), t("settings.replacementHelp"))}
 ${checkbox("includeSenderInReverseAlias", settings.includeSenderInReverseAlias, t("settings.includeSender"), t("settings.includeSenderHelp"))}
+${checkbox("sendAutoReplies", settings.sendAutoReplies, t("settings.autoReplies"), t("settings.autoRepliesHelp"))}
 ${checkbox("removeTrackers", settings.removeTrackers, t("settings.trackers"), t("settings.trackersHelp"))}
 ${checkbox("showBanner", settings.showBanner, t("settings.banner"), t("settings.bannerHelp"))}
 ${checkbox("createAliasesFromMail", settings.createAliasesFromMail, t("settings.createFromMail"), t("settings.createFromMailHelp"))}
@@ -1272,6 +1269,22 @@ function swatches(t: Translate, current: string, id: string): Html {
 	return html`<fieldset class="swatches"><legend class="sr">${t("labels.colour")}</legend>${colours.map(
 		(colour) => html`<label class="swatch" title="${colour}"><input type="radio" name="colour" value="${colour}" id="c-${id}-${colour.slice(1)}" ${colour === current ? "checked" : ""} /><span data-colour="${colour}"></span></label>`,
 	)}</fieldset>`;
+}
+
+/**
+ * Previous and next as big buttons with the page between them. Both buttons are always there (an
+ * unavailable one greyed out), so they stay in place for clicking again and again. Nothing for a
+ * single page.
+ */
+function pager(t: Translate, page: number, lastPage: number, href: (page: number) => string): Html {
+	if (lastPage <= 1) return html``;
+	const button = (to: number, enabled: boolean, label: Html) =>
+		enabled ? html`<a class="pg" href="${href(to)}">${label}</a>` : html`<span class="pg" aria-disabled="true">${label}</span>`;
+	return html`<nav class="pager" aria-label="${t("dash.pages")}">
+${button(page - 1, page > 1, html`<span aria-hidden="true">←</span> ${t("dash.prev")}`)}
+<span class="at">${page} / ${lastPage}</span>
+${button(page + 1, page < lastPage, html`${t("dash.next")} <span aria-hidden="true">→</span>`)}
+</nav>`;
 }
 
 function labelChips(labels: LabelRow[]): Html {

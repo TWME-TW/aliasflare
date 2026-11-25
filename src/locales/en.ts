@@ -80,6 +80,8 @@ export const en = {
 	"settings.replacementHelp":
 		"When you reply, reverse aliases in the body (such as in the quoted \"… wrote:\" line) become the real address, and your real address becomes the alias.",
 	"settings.includeSender": "Include sender address in reverse alias",
+	"settings.autoReplies": "Send automatic replies",
+	"settings.autoRepliesHelp": "Out-of-office and other automatic replies your mailbox sends to a reverse alias go on to the correspondent. Off, they are dropped (and shown in Activity), so two auto-responders cannot answer each other without end. A message aliasflare sent itself is always dropped.",
 	"settings.includeSenderHelp":
 		"New reverse aliases read like john_at_wick_com_x7k2p9@… instead of a random string. Existing reverse aliases do not change.",
 	"settings.trackers": "Remove email trackers",
