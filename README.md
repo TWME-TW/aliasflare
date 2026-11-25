@@ -150,7 +150,7 @@ On the Free plan, with 10 ms of CPU and 50 subrequests per request:
 - messages larger than 512 KB are forwarded unchanged with Email Routing's own forward (no tracker removal, and replies to them do not go through the alias);
 - replies larger than 512 KB are refused with a bounce that says why;
 - an API import may make at most 25 requests, so import a large account from a CSV export;
-- Cloudflare setup handles at most 3 domains per run.
+- Cloudflare setup handles at most 2 domains per run.
 
 ### 9. Optional: Cloudflare WAF
 

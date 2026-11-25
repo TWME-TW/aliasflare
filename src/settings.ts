@@ -127,7 +127,8 @@ function normalizeRules(raw: unknown, domains: string[]): Record<string, Unsubsc
 		if (!validBehavior && !validFallback && !validRedirect) continue;
 		rules[domain] = {
 			...(validBehavior ? { behavior: validBehavior } : {}),
-			...(validFallback ? { fallback: validFallback } : validBehavior ? { fallback: DEFAULT_SETTINGS.unsubscribeFallback } : {}),
+			// A fallback left out follows the general setting, also when the behavior is overridden.
+			...(validFallback ? { fallback: validFallback } : {}),
 			redirect: validRedirect,
 		};
 	}

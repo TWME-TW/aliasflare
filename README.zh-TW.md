@@ -141,7 +141,7 @@ npx wrangler deploy
 - 大於 512 KB 的信會用 Email Routing 本身的轉寄原封不動送出（不移除追蹤器，回覆這些信也不會經過別名）；
 - 大於 512 KB 的回信會被退回並說明原因；
 - API 匯入最多 25 個請求，大型帳號請改用 CSV 匯出檔；
-- Cloudflare 自動設定每次最多處理 3 個網域。
+- Cloudflare 自動設定每次最多處理 2 個網域。
 
 ### 9. 選用：Cloudflare WAF
 
