@@ -1,4 +1,4 @@
-import PostalMime, { type Email } from "postal-mime";
+import PostalMime, { addressParser, type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { signToken } from "./crypto";
 import { ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
@@ -8,7 +8,7 @@ import { getStoredMessage, mailflareConfig, MailflareError, MAX_MESSAGE_BYTES, t
 import { sha256Hex } from "./apikeys";
 import { isOwnAddress, isReverseDomainOf, reverseDomainFor } from "./domains";
 import { LINK_TTL_SECONDS } from "./unsubscribe";
-import { authResultClauses, firstAuthenticationResults } from "./reply";
+import { authResultClauses, firstAuthenticationResults, hasSingleFromHeader } from "./reply";
 import { loadSettings } from "./settings";
 import { readLimited } from "./streams";
 import { transformForward, type BannerInfo } from "./transform";
@@ -103,7 +103,7 @@ export function dmarcFailedAtCloudflare(authResults: string | null): boolean {
 	if (!authResults) return false;
 	const [authserv, ...results] = authResultClauses(authResults);
 	if (authserv?.split(/\s+/)[0]?.toLowerCase() !== "mx.cloudflare.net") return false;
-	return results.some((result) => /^dmarc\s*=\s*fail\b/i.test(result));
+	return results.some((result) => /^dmarc\s*=\s*(?:fail|permerror)\b/i.test(result));
 }
 
 /** The header block, or null when it does not end within 64 KiB (then nothing in it is trusted). */
@@ -240,7 +240,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const direct = settings.forwardMethod === "direct";
 		const tooLarge = config.workersPlan === "free" && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES;
 		const passThrough = input.passThrough && (direct || tooLarge) ? input.passThrough : null;
-		const stored = passThrough ? null : await input.load();
+		let stored = passThrough ? null : await input.load();
 		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", {
 			forwardEnabled: settings.autoForwardNewAliases,
 			destination: settings.defaultDestination || null,
@@ -253,9 +253,14 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 
 		if (passThrough) {
 			// The body is not read, but the headers are: the same filters run on the envelope
-			// sender and the From header as on a rewritten message.
+			// sender and every address in the From header as on a rewritten message.
 			const headers = input.headers ?? new Headers();
-			const senders = [...new Set([parseBareEmail(event.from), extractEmail(headers.get("From") ?? "")].filter((value): value is string => !!value))];
+			const envelopeSender = parseBareEmail(event.from);
+			const parsedFrom = addressParser(headers.get("From") ?? "", { flatten: true })
+				.map((entry) => parseBareEmail(entry.address))
+				.filter((value): value is string => !!value)
+				.slice(0, 20);
+			const senders = [...new Set([envelopeSender, ...parsedFrom].filter((value): value is string => !!value))];
 			if (!senders.length || senders.some((sender) => isReverseDomainOf(domainOf(sender), [...settings.aliasDomains, aliasDomain]))) return await skip("no usable sender");
 			for (const sender of senders) {
 				const blocked = await matchBlocklist(db, sender);
@@ -267,13 +272,14 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				.all<{ email: string; blocked: number; destination: string | null }>();
 			if (known.some((contact) => contact.blocked)) return await skip("sender is blocked");
 			// The From header's contact first: that is the sender the user sees.
-			const redirect = (known.find((contact) => contact.email === senders[1]) ?? known[0])?.destination;
+			const primarySender = parsedFrom[0] ?? envelopeSender!;
+			const redirect = (known.find((contact) => contact.email === primarySender) ?? known[0])?.destination;
 			const target = redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination;
 			if (alias.forward_mode === "no_promotions" && isPromotional([...headers].map(([key, value]) => ({ key, value })))) {
 				return await skip("promotional mail is blocked for this alias");
 			}
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
-			const contact = await ensureContact(db, aliasAddress, senders[senders.length - 1]!, null, settings.includeSenderInReverseAlias);
+			const contact = await ensureContact(db, aliasAddress, primarySender, null, settings.includeSenderInReverseAlias);
 			await passThrough(target);
 			const sentAt = now();
 			const why = direct
@@ -291,24 +297,28 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			return { status: 200, result: "passed through" };
 		}
 
+		const headerBlock = rawHeaderSection(stored!.raw);
 		let email: Email;
 		try {
 			email = await PostalMime.parse(stored!.raw, { attachmentEncoding: "arraybuffer" });
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
 			return await skip(`unreadable message: ${detail.slice(0, 200)}`);
+		} finally {
+			// Drop the raw buffer before transforms and sending so GC can reclaim it.
+			stored = null;
 		}
 		if (headerValue(email, LOOP_HEADER)) return await skip("already forwarded by this Worker");
 
 		// The parsed From address must itself be one plain address. One that is not (a quoted
-		// local part hiding another address, say) is not trusted: the envelope sender stands in,
-		// and the message is marked as from an unverified sender.
+		// local part hiding another address, or multiple From addresses/headers) is not trusted:
+		// the envelope sender stands in when needed, and the message is marked as unverified.
 		const headerSender = parseBareEmail(email.from?.address);
 		const malformedFrom = !!email.from?.address && !headerSender;
 		const senderEmail = headerSender ?? parseBareEmail(event.from);
 		if (!senderEmail || isReverseDomainOf(domainOf(senderEmail), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
-		const headerBlock = rawHeaderSection(stored!.raw);
-		const spoofed = malformedFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
+		const multiFrom = headerBlock !== null && !!headerSender && !hasSingleFromHeader(headerBlock);
+		const spoofed = malformedFrom || multiFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
 		await finish(db, forwardId, {
 			original_message_id: ensureAngle(email.messageId),
 			// The unsubscribe of a sender that failed DMARC is not trusted: unsubscribing blocks it instead.
@@ -322,6 +332,13 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		for (const candidate of new Set([senderEmail, envelopeSender].filter((value): value is string => !!value))) {
 			const blocked = await matchBlocklist(db, candidate);
 			if (blocked) return await skip(`blocklist: ${blocked.value}`);
+		}
+		if (envelopeSender && envelopeSender !== senderEmail) {
+			const blockedEnvelope = await db
+				.prepare("SELECT 1 FROM contacts WHERE alias_address = ? AND email = ? AND blocked = 1")
+				.bind(aliasAddress, envelopeSender)
+				.first();
+			if (blockedEnvelope) return await skip("sender is blocked");
 		}
 		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias");
 		if (email.attachments.length > MAX_ATTACHMENTS) return await skip(`${email.attachments.length} attachments (at most ${MAX_ATTACHMENTS})`);

@@ -106,9 +106,6 @@ const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/a
 /** A year, for a versioned asset URL; an unversioned one is kept briefly so a deploy shows soon. */
 const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
 
-/** Public endpoints that read D1 before auth: throttle before touching D1. */
-const PUBLIC_THROTTLED = /^\/(?:health|webhook|setup|login|unsubscribe|action)(?:\/|$)/;
-
 app.use("*", async (c, next) => {
 	if ((c.req.method === "GET" || c.req.method === "HEAD") && STATIC_PATHS.has(c.req.path)) return next();
 	const chosen = getCookie(c, LANG_COOKIE);
@@ -121,10 +118,10 @@ app.use("*", async (c, next) => {
 		),
 	);
 	// The client APIs and public endpoints are open to anyone with the URL: their limits come before any D1 read.
-	if (c.req.path.startsWith("/api/") || c.req.path === "/mcp") {
+	if (c.req.path === "/api" || c.req.path.startsWith("/api/") || c.req.path === "/mcp" || c.req.path.startsWith("/mcp/")) {
 		const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
 		if (throttled) return throttled;
-	} else if (PUBLIC_THROTTLED.test(c.req.path) && c.env.API_RATE_LIMIT) {
+	} else if (c.env.API_RATE_LIMIT) {
 		const client = clientKey(c.req.header("CF-Connecting-IP"));
 		if (!(await c.env.API_RATE_LIMIT.limit({ key: `pub:${client}` })).success) {
 			return c.text(c.get("t")("err.rateLimited"), 429);
@@ -240,7 +237,7 @@ app.post("/lang", async (c) => {
 	const params = new URLSearchParams(raw);
 	const locale = params.get("locale");
 	if (isLocale(locale)) {
-		setCookie(c, LANG_COOKIE, locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+		setCookie(c, LANG_COOKIE, locale, { path: "/", httpOnly: true, secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 	}
 	return c.redirect(safeLocalPath(params.get("next")), 303);
 });
@@ -254,7 +251,7 @@ app.post("/theme", async (c) => {
 	const params = new URLSearchParams(raw);
 	const theme = params.get("theme");
 	if (isTheme(theme)) {
-		setCookie(c, THEME_COOKIE, theme, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+		setCookie(c, THEME_COOKIE, theme, { path: "/", httpOnly: true, secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 	}
 	if (c.req.header("X-Theme") === "1") return c.json({ ok: true, theme: isTheme(theme) ? theme : c.get("t").theme ?? "system" });
 	return c.redirect(safeLocalPath(params.get("next")), 303);
@@ -343,8 +340,8 @@ app.get("/setup", async (c) => {
 // Writes a fresh setup code to the logs, for whoever started watching them after the first one.
 app.post("/setup/code", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
-	if (await hasPasskeys(c.env.DB)) return c.redirect("/login");
 	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
+	if (await hasPasskeys(c.env.DB)) return c.redirect("/login");
 	if (c.env.SETUP_CODE?.trim()) return c.redirect("/setup");
 	if (!(await issueSetupCode(c.env.DB, true)).created) return redirectWithNotice(c, "/setup", "notice.setupCodeWait");
 	return redirectWithNotice(c, "/setup", "notice.setupCodeIssued");
@@ -352,8 +349,8 @@ app.post("/setup/code", async (c) => {
 
 app.post("/setup/options", async (c) => {
 	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
-	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
 	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
+	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
 	const body = await readJson<{ code?: unknown }>(c);
 	if (typeof body?.code !== "string" || !body.code || !(await checkSetupCode(c.env, body.code))) return jsonError(c, "err.badCode", 401);
 	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url), "setup_register");
@@ -363,8 +360,8 @@ app.post("/setup/options", async (c) => {
 
 app.post("/setup/verify", async (c) => {
 	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
-	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
 	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
+	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
 	const body = await readJson<{ response?: RegistrationResponseJSON; name?: unknown }>(c);
 	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
 	const passkey = await completeRegistration(
@@ -374,7 +371,10 @@ app.post("/setup/verify", async (c) => {
 		body.response,
 		typeof body.name === "string" ? body.name : "",
 		"setup_register",
-	).catch(() => null);
+	).catch((error) => {
+		console.warn("Setup passkey registration failed:", error instanceof Error ? error.message : error);
+		return null;
+	});
 	if (!passkey) return jsonError(c, "err.registerFailed", 400);
 	await c.env.DB.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup'").run();
 	// The language picked during setup also becomes the language of forwarded-mail banners.
@@ -403,7 +403,10 @@ app.post("/login/verify", async (c) => {
 	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
 	const body = await readJson<{ response?: AuthenticationResponseJSON }>(c);
 	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
-	const passkey = await completeAuthentication(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response).catch(() => null);
+	const passkey = await completeAuthentication(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response).catch((error) => {
+		console.warn("Passkey authentication failed:", error instanceof Error ? error.message : error);
+		return null;
+	});
 	if (!passkey) return jsonError(c, "err.loginFailed", 401);
 	await startSession(c, passkey.id);
 	return c.json({ ok: true });
@@ -411,6 +414,7 @@ app.post("/login/verify", async (c) => {
 
 app.post("/logout", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
+	if (await rateLimited(c, "ui")) return c.text(c.get("t")("err.rateLimited"), 429);
 	await endSession(c);
 	return c.redirect("/login");
 });
@@ -570,10 +574,10 @@ app.post("/settings", async (c) => {
 	const themeChanged = isTheme(uiTheme) && uiTheme !== (c.get("t").theme ?? "system");
 	const reply = (key: MessageKey, ok: boolean, params?: Record<string, string>) => {
 		if (ok && themeChanged) {
-			setCookie(c, THEME_COOKIE, uiTheme, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+			setCookie(c, THEME_COOKIE, uiTheme, { path: "/", httpOnly: true, secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 		}
 		if (ok && localeChanged) {
-			setCookie(c, LANG_COOKIE, uiLocale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+			setCookie(c, LANG_COOKIE, uiLocale, { path: "/", httpOnly: true, secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 			c.set("t", translator(uiLocale, ok && themeChanged ? uiTheme : c.get("t").theme ?? "system"));
 		}
 		return c.req.header("X-Autosave") === "1"
@@ -828,7 +832,7 @@ app.post("/import/:source", async (c) => {
 	if (rawBytes === null) return c.text(t("imp.err.format"), 413);
 	const settings = await loadSettings(c.env.DB);
 	const bounded = new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers, body: rawBytes.buffer as ArrayBuffer });
-	const form: Record<string, string | File> = {};
+	const form: Record<string, string | File> = Object.create(null);
 	try {
 		const data = await bounded.formData();
 		for (const [k, v] of data.entries()) form[k] = v;
@@ -942,7 +946,10 @@ app.post("/passkeys/verify", async (c) => {
 		takeChallengeCookie(c),
 		body.response,
 		typeof body.name === "string" ? body.name : "",
-	).catch(() => null);
+	).catch((error) => {
+		console.warn("Passkey registration failed:", error instanceof Error ? error.message : error);
+		return null;
+	});
 	if (!passkey) return jsonError(c, "err.registerFailed", 400);
 	return c.json({ ok: true });
 });

@@ -169,6 +169,7 @@ export async function listDestinations(db: D1Database, settings: Settings): Prom
 export async function resolveDestination(db: D1Database, settings: Settings, id: number | string | null | undefined): Promise<string | null | undefined> {
 	// null is what apps send for "no change" as often as leaving the field out.
 	if (id === undefined || id === null) return undefined;
+	if (typeof id !== "number" && typeof id !== "string") throw new ClientError(400, "Unknown mailbox");
 	const match = (await listDestinations(db, settings)).find((d) => d.numId === Number(id) || d.uid === String(id));
 	if (!match) throw new ClientError(400, "Unknown mailbox");
 	return match.isDefault ? null : match.email;
@@ -231,6 +232,7 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 	}
 	if (!LOCAL_PART.test(localPart) || localPart.includes("..")) throw new ClientError(400, "The alias contains characters that are not allowed.");
 	const address = normalizeEmail(`${localPart}@${domain}`);
+	if (address.length > 254) throw new ClientError(400, "The alias address is too long.");
 	const name = cleanDisplayName(input.name);
 	const note = input.note?.trim().slice(0, MAX_NOTE_LENGTH) || null;
 	const existing = await db.prepare("SELECT * FROM aliases WHERE address = ?").bind(address).first<AliasRow>();
@@ -278,7 +280,13 @@ export async function createRandomAlias(
 	if (!domain) throw new ClientError(400, "No alias domain is set up. Add one under Alias domains in the aliasflare settings.");
 	for (let attempt = 0; attempt < 5; attempt += 1) {
 		try {
-			return await createAlias(db, settings, { localPart: randomLocalPart(input.format || settings.randomAliasFormat), domain, note: input.note, destination: input.destination });
+			return await createAlias(db, settings, {
+				localPart: randomLocalPart(input.format || settings.randomAliasFormat),
+				domain,
+				note: input.note,
+				destination: input.destination,
+				allowRestore: false,
+			});
 		} catch (error) {
 			if (!(error instanceof ClientError && error.status === 409)) throw error;
 		}
@@ -295,7 +303,7 @@ export async function updateAlias(
 ): Promise<void> {
 	const sets: string[] = [];
 	const params: unknown[] = [];
-	if (fields.note !== undefined) sets.push("note = ?"), params.push(fields.note?.slice(0, 500) || null);
+	if (fields.note !== undefined) sets.push("note = ?"), params.push(fields.note?.trim().slice(0, MAX_NOTE_LENGTH) || null);
 	if (fields.name !== undefined) sets.push("name = ?"), params.push(cleanDisplayName(fields.name));
 	if (fields.pinned !== undefined) sets.push("pinned = ?"), params.push(fields.pinned ? 1 : 0);
 	if (fields.enabled !== undefined) {

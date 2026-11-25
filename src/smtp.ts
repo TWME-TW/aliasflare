@@ -75,6 +75,50 @@ class Conversation {
 		await this.writer.write(encoder.encode(line));
 	}
 
+	/** Streams RFC 5322 DATA in chunks with CRLF normalization and dot-stuffing. */
+	async sendData(data: string): Promise<void> {
+		const CHUNK_TARGET = 64 * 1024;
+		let out = "";
+		let atLineStart = true;
+		let endedWithCrlf = false;
+		const flush = async () => {
+			if (!out) return;
+			await this.writer.write(encoder.encode(out));
+			out = "";
+		};
+		for (let i = 0; i < data.length; ) {
+			const nextCr = data.indexOf("\r", i);
+			const nextLf = data.indexOf("\n", i);
+			let end: number;
+			let step: number;
+			if (nextCr >= 0 && (nextLf < 0 || nextCr < nextLf)) {
+				end = nextCr;
+				step = data[nextCr + 1] === "\n" ? 2 : 1;
+			} else if (nextLf >= 0) {
+				end = nextLf;
+				step = 1;
+			} else {
+				end = data.length;
+				step = 0;
+			}
+			const line = data.slice(i, end);
+			if (atLineStart && line.startsWith(".")) out += ".";
+			out += line;
+			if (step > 0) {
+				out += "\r\n";
+				atLineStart = true;
+				endedWithCrlf = true;
+			} else {
+				atLineStart = false;
+				endedWithCrlf = false;
+			}
+			i = end + step;
+			if (out.length >= CHUNK_TARGET) await flush();
+		}
+		out += endedWithCrlf ? ".\r\n" : "\r\n.\r\n";
+		await flush();
+	}
+
 	/** Sends a command and expects one of the codes. Secrets are never put in the error. */
 	async command(line: string, expect: number[], what = line.split(" ")[0]): Promise<string> {
 		await this.send(`${line}\r\n`);
@@ -88,11 +132,13 @@ class Conversation {
 	}
 
 	async close() {
+		await this.reader.cancel().catch(() => undefined);
 		try {
 			this.reader.releaseLock();
 		} catch {
 			// Already released or locked by an active read; socket.close() aborts it.
 		}
+		await this.writer.abort().catch(() => undefined);
 		try {
 			this.writer.releaseLock();
 		} catch {
@@ -112,10 +158,17 @@ const b64 = (text: string) => bytesToBase64(encoder.encode(text));
 
 export async function sendSmtp(options: SmtpOptions, envelope: { from: string; to: string }, data: string, open: SmtpConnect = connect as unknown as SmtpConnect): Promise<void> {
 	if (options.port === 25) throw new OutboundError("Workers cannot connect to port 25: use 465 or 587");
-	if (/[\u0000-\u001f\u007f\s<>]/.test(envelope.from) || /[\u0000-\u001f\u007f\s<>]/.test(envelope.to)) throw new OutboundError("Invalid SMTP envelope address");
+	if (!Number.isInteger(options.port) || options.port <= 0 || options.port >= 65536) throw new OutboundError("Invalid SMTP port");
+	if (!envelope.from || !envelope.to || /[\u0000-\u001f\u007f\s<>]/.test(envelope.from) || /[\u0000-\u001f\u007f\s<>]/.test(envelope.to)) {
+		throw new OutboundError("Invalid SMTP envelope address");
+	}
 	const socket = open({ hostname: options.host, port: options.port }, { secureTransport: options.security === "tls" ? "on" : "starttls", allowHalfOpen: false });
 	const smtp = new Conversation(socket);
-	const timer = setTimeout(() => void smtp.close(), TIMEOUT_MS);
+	let timedOut = false;
+	const timer = setTimeout(() => {
+		timedOut = true;
+		void smtp.close();
+	}, TIMEOUT_MS);
 	try {
 		await smtp.expect([220], "greeting");
 		const helo = "EHLO aliasflare";
@@ -127,22 +180,29 @@ export async function sendSmtp(options: SmtpOptions, envelope: { from: string; t
 			features = await smtp.command(helo, [250], "EHLO");
 		}
 		if (options.username) {
-			const authLine = features.match(/^250[ -]AUTH[ =]([^\r\n]*)/im)?.[1] ?? "";
-			const mechanisms = new Set(authLine.toUpperCase().split(/\s+/).filter(Boolean));
-			if (mechanisms.has("PLAIN") || !mechanisms.has("LOGIN")) {
+			const mechanisms = new Set<string>();
+			for (const match of features.matchAll(/^250[ -]AUTH[ =]([^\r\n]*)/gim)) {
+				for (const item of (match[1] ?? "").toUpperCase().split(/\s+/)) if (item) mechanisms.add(item);
+			}
+			if (mechanisms.has("PLAIN")) {
 				await smtp.command(`AUTH PLAIN ${b64(`\0${options.username}\0${options.password}`)}`, [235], "AUTH");
-			} else {
+			} else if (mechanisms.has("LOGIN")) {
 				await smtp.command("AUTH LOGIN", [334], "AUTH");
 				await smtp.command(b64(options.username), [334], "AUTH");
 				await smtp.command(b64(options.password), [235], "AUTH");
+			} else {
+				throw new OutboundError("SMTP server does not support AUTH PLAIN or AUTH LOGIN");
 			}
 		}
 		await smtp.command(`MAIL FROM:<${envelope.from}>`, [250], "MAIL FROM");
 		await smtp.command(`RCPT TO:<${envelope.to}>`, [250, 251], "RCPT TO");
 		await smtp.command("DATA", [354]);
-		await smtp.send(dotStuff(data));
+		await smtp.sendData(data);
 		await smtp.expect([250], "DATA");
 		await smtp.command("QUIT", [221]).catch(() => undefined);
+	} catch (error) {
+		if (timedOut) throw new OutboundError("SMTP connection timed out");
+		throw error;
 	} finally {
 		clearTimeout(timer);
 		await smtp.close();

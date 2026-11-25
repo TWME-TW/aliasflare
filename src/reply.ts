@@ -94,19 +94,27 @@ export function dmarcPassedByCloudflare(value: string | null, fromDomain?: strin
 }
 
 /**
+ * True when the raw header block has exactly one From header holding a single address
+ * (no list or group). Unlike singleSender, Sender headers are allowed to differ (e.g. lists).
+ */
+export function hasSingleFromHeader(rawHeaders: string): boolean {
+	const unfolded = rawHeaders.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/);
+	const fromHeaders = unfolded.filter((line) => /^from\s*:/i.test(line));
+	if (fromHeaders.length !== 1) return false;
+	const value = fromHeaders[0]!.replace(/^from\s*:/i, "").replace(/"(?:[^"\\]|\\.)*"/g, '""');
+	return (value.match(/@/g) ?? []).length === 1 && !/[,;:]/.test(value.replace(/<[^<>]*>/g, ""));
+}
+
+/**
  * The one sender address of a message, or null unless it has exactly one From header
  * holding exactly one plain mailbox (no group, no quoted local part) and any Sender
  * header names the same address.
  */
 export function singleSender(rawHeaders: string, parsedFrom: string | undefined): string | null {
-	const unfolded = rawHeaders.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/);
-	const fromHeaders = unfolded.filter((line) => /^from\s*:/i.test(line));
-	if (fromHeaders.length !== 1) return null;
+	if (!hasSingleFromHeader(rawHeaders)) return null;
 	if (!parsedFrom || /["<>()\s,;:\\]/.test(parsedFrom) || !/^[^@]+@[^@]+\.[^@]+$/.test(parsedFrom)) return null;
 	const from = parsedFrom.toLowerCase();
-	// More than one address (a list or a group) shows up as more than one "@" outside quotes.
-	const value = fromHeaders[0]!.replace(/^from\s*:/i, "").replace(/"(?:[^"\\]|\\.)*"/g, '""');
-	if ((value.match(/@/g) ?? []).length !== 1 || /[,;:]/.test(value.replace(/<[^<>]*>/g, ""))) return null;
+	const unfolded = rawHeaders.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/);
 	// Every Sender header, not just the first, has to name the same address.
 	const senders = unfolded.filter((line) => /^sender\s*:/i.test(line));
 	if (senders.length > 1) return null;
@@ -127,8 +135,9 @@ export function stripSignedLinks(body: string): string {
 	return body.replace(SIGNED_LINK, "[link removed]").replace(SIGNED_TOKEN, "[link removed]");
 }
 
-/** The ways a "+" is written in mail bodies: in mailto: links (%2B) and as HTML entities. */
+/** The ways a "+" or "@" is written in mail bodies: in mailto: links (%2B/%40) and as HTML entities. */
 const ENCODED_PLUS_PATTERN = /%2b|&#0*43;|&#x0*2b;|&plus;/gi;
+const ENCODED_AT_PATTERN = /%40|&#0*64;|&#x0*40;|&commat;/gi;
 
 /**
  * Message-IDs to send on in In-Reply-To and References. A forwarded copy's ID becomes the
@@ -136,8 +145,8 @@ const ENCODED_PLUS_PATTERN = /%2b|&#0*43;|&#x0*2b;|&plus;/gi;
  * owner's earlier replies) is dropped: it would show the correspondent where the owner's
  * real mailbox is.
  */
-function threadIds(ids: string[], toOriginal: Map<string, string>, destination: string): string[] {
-	const ownSite = siteOf(domainOf(destination));
+function threadIds(ids: string[], toOriginal: Map<string, string>, owners: string[]): string[] {
+	const ownSites = new Set(owners.map((owner) => siteOf(domainOf(owner))).filter(Boolean));
 	return ids.flatMap((id) => {
 		const original = toOriginal.get(id);
 		if (original) {
@@ -145,7 +154,7 @@ function threadIds(ids: string[], toOriginal: Map<string, string>, destination: 
 			return safe ? [safe] : [];
 		}
 		const domain = id.slice(1, -1).split("@").pop() ?? "";
-		return domain.includes(".") && siteOf(domain) === ownSite ? [] : [id];
+		return domain.includes(".") && ownSites.has(siteOf(domain)) ? [] : [id];
 	});
 }
 
@@ -207,7 +216,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	// A reply always has to be rewritten (it goes out as the alias), so on the Free plan, with
 	// 10 ms of CPU, a large one is refused with a clear reason rather than cut off midway.
 	const sizeLimit = config.workersPlan === "free" ? FREE_PLAN_REWRITE_BYTES : MAX_MESSAGE_BYTES;
-	const raw = message.rawSize > sizeLimit ? null : await readLimited(message.raw, sizeLimit);
+	let raw = message.rawSize > sizeLimit ? null : await readLimited(message.raw, sizeLimit);
 	if (!raw) {
 		await message.raw.cancel().catch(() => undefined);
 		const why = config.workersPlan === "free" ? `at most ${sizeLimit / 1024} KB on the Workers Free plan` : `at most ${sizeLimit} bytes`;
@@ -225,6 +234,9 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail });
 		message.setReject("This message could not be read");
 		return;
+	} finally {
+		// Drop the raw buffer before transforms and MIME serialization so GC can reclaim it.
+		raw = null;
 	}
 	const headerFrom = headers === null ? null : singleSender(headers, email.from?.address);
 
@@ -258,8 +270,9 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	const replacements: Replacement[] = [];
 	if (settings.reverseAliasReplacement) {
 		const body = `${html ?? ""}\n${text ?? ""}`;
-		// mailto: links may write the "+" of a reverse alias as %2B.
-		const reverseLocals = findAddressesOnDomain(body.replace(ENCODED_PLUS_PATTERN, "+"), reverseDomain)
+		// mailto: links and HTML bodies may encode "+" as %2B and "@" as %40 / &#64;.
+		const normalizedBody = body.replace(ENCODED_PLUS_PATTERN, "+").replace(ENCODED_AT_PATTERN, "@");
+		const reverseLocals = findAddressesOnDomain(normalizedBody, reverseDomain)
 			.map(reverseLocalOf)
 			.filter((local): local is string => !!local);
 		// Only this alias's own correspondents: a reverse alias of another alias stays as it is.
@@ -278,10 +291,13 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		if (text) text = replaceAddresses(text, replacements, { encodedPlus: true });
 	}
 
-	const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
+	const rawInReplyTo = parseMessageIds(email.inReplyTo);
+	const rawReferences = parseMessageIds(email.references);
+	// Map recent references before dropping own-site IDs so surviving earlier IDs are never left unmapped.
+	const parentIds = [...rawInReplyTo, ...rawReferences.slice(-80)];
 	const toOriginal = await mapForwardedToOriginal(db, contact.alias_address, parentIds);
-	const inReplyTo = threadIds(parseMessageIds(email.inReplyTo), toOriginal, destination)[0];
-	const references = threadIds(parseMessageIds(email.references), toOriginal, destination).slice(-MAX_REFERENCES);
+	const inReplyTo = threadIds(rawInReplyTo, toOriginal, owners)[0];
+	const references = threadIds(rawReferences, toOriginal, owners).slice(-MAX_REFERENCES);
 
 	// An alias Mailflare receives also sends through Mailflare, so the reply is kept in its
 	// mailbox there. Every other alias sends with the provider chosen on the Connection page.

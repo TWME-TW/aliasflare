@@ -248,7 +248,7 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 			}
 			if (!Array.isArray(body?.contacts) || body.contacts.length === 0) break;
 			for (const raw of body.contacts.filter(isRecord)) {
-				const display = text(raw.contact, 300);
+				const display = text(raw.contact, 1000);
 				const email = extractEmail(display);
 				if (!email) continue;
 				const rawName = display?.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]?.trim() ?? null;
@@ -463,11 +463,23 @@ export async function importAliases(
 		.prepare("SELECT DISTINCT destination FROM aliases WHERE destination IS NOT NULL AND imported_from IS NULL AND deleted_at IS NULL")
 		.all<{ destination: string }>();
 	for (const row of used) known.add(row.destination.toLowerCase());
-	const allOwnDomains = [...new Set([...settings.aliasDomains, ...list.map((alias) => domainOf(alias.email))])];
+	const existing = new Set<string>();
+	// One query for every address, not one per chunk: on the Workers Free plan a request may
+	// make only 50 D1 queries in all.
+	const { results: storedAliases } = await db.prepare("SELECT address FROM aliases").all<{ address: string }>();
+	const wanted = new Set(list.map((alias) => alias.email));
+	for (const row of storedAliases) if (wanted.has(row.address)) existing.add(row.address);
+	const allOwnDomains = [
+		...new Set([
+			...settings.aliasDomains,
+			...storedAliases.map((row) => domainOf(row.address)),
+			...list.map((alias) => domainOf(alias.email)),
+		]),
+	];
 	const newDestinations = new Set<string>();
 	const destinationFor = (alias: ImportedAlias): string | null => {
 		const destination = alias.destination?.toLowerCase();
-		// All domains in this import batch count too, so an import before domains are added cannot set up a loop.
+		// All domains in this import batch and existing aliases count too, so an import cannot set up a loop.
 		if (!destination || destination === alias.email || isOwnAddress(destination, allOwnDomains)) return null;
 		if (destination === settings.defaultDestination.toLowerCase()) return null;
 		if (known.has(destination)) return destination;
@@ -475,12 +487,6 @@ export async function importAliases(
 		newDestinations.add(destination);
 		return destination;
 	};
-	const existing = new Set<string>();
-	// One query for every address, not one per chunk: on the Workers Free plan a request may
-	// make only 50 D1 queries in all.
-	const { results: storedAliases } = await db.prepare("SELECT address FROM aliases").all<{ address: string }>();
-	const wanted = new Set(list.map((alias) => alias.email));
-	for (const row of storedAliases) if (wanted.has(row.address)) existing.add(row.address);
 
 	// Replies need a Mailflare mailbox; borrow the one of another alias on the same domain until
 	// the alias receives its first message (the webhook corrects it then).
@@ -559,7 +565,7 @@ export async function importAliases(
 						`INSERT INTO contacts (id, alias_address, email, name, reverse_local, blocked, last_reply_at, num_id, created_at)
 						 VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM contacts), ?)
 						 ON CONFLICT (alias_address, email) DO UPDATE SET
-						   name = COALESCE(contacts.name, excluded.name),
+						   name = COALESCE(NULLIF(contacts.name, ''), excluded.name),
 						   blocked = MAX(contacts.blocked, excluded.blocked),
 						   last_reply_at = NULLIF(MAX(COALESCE(contacts.last_reply_at, 0), COALESCE(excluded.last_reply_at, 0)), 0),
 						   created_at = MIN(contacts.created_at, excluded.created_at)`,
@@ -579,7 +585,18 @@ export async function importAliases(
 	}
 	// A batch is one query; scale up dynamically so large imports with many contacts stay well below Workers' subrequest limit.
 	const batchSize = Math.max(options.batchSize ?? 100, Math.ceil(statements.length / 400));
-	for (let i = 0; i < statements.length; i += batchSize) await db.batch(statements.slice(i, i + batchSize));
+	let created = 0;
+	let updated = 0;
+	for (let i = 0; i < statements.length; i += batchSize) {
+		const results = await db.batch(statements.slice(i, i + batchSize));
+		results.forEach((result, offset) => {
+			const idx = i + offset;
+			if (idx >= list.length) return;
+			const changes = result.meta.changes ?? 0;
+			if (existing.has(list[idx]!.email)) updated += changes > 0 ? 1 : 0;
+			else created += changes > 0 ? 1 : 0;
+		});
+	}
 	// The imported history (the other service's last forward, reply or send, and the contacts'
 	// own) counts toward when each alias was last used.
 	await db
@@ -593,8 +610,8 @@ export async function importAliases(
 
 	return {
 		found,
-		created: list.filter((alias) => !existing.has(alias.email)).length,
-		updated: list.filter((alias) => existing.has(alias.email)).length,
+		created,
+		updated,
 		contacts,
 		skippedDomains: selection.skippedDomains,
 		newDestinations: [...newDestinations].sort(),

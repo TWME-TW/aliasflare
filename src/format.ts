@@ -130,7 +130,14 @@ export function isPublicHost(hostname: string, blockedHosts: string[] = []): boo
 	const host = hostname.trim().toLowerCase().replace(/\.$/, "");
 	if (!host || host.startsWith("[") || /^[\d.]+$/.test(host)) return false;
 	if (!DOMAIN_PATTERN.test(host) || PRIVATE_SUFFIXES.test(host)) return false;
-	if (blockedHosts.some((blocked) => blocked && (host === blocked.toLowerCase() || host.endsWith(`.${blocked.toLowerCase()}`)))) return false;
+	if (
+		blockedHosts.some((entry) => {
+			const blocked = entry.trim().toLowerCase().replace(/\.$/, "");
+			return !!blocked && (host === blocked || host.endsWith(`.${blocked}`));
+		})
+	) {
+		return false;
+	}
 	return true;
 }
 
@@ -220,7 +227,7 @@ export function replaceAddresses(body: string, replacements: Replacement[], opti
 					.replaceAll("\\+", "(?:\\+|%2b|&#0*43;|&#x0*2b;|&plus;)")
 					.replaceAll("@", "(?:@|%40|&#0*64;|&#x0*40;|&commat;)")
 			: escapeRegExp(from);
-		const prefix = options.encodedPlus ? "(?:(?<![A-Za-z0-9._%+-])|(?<=mailto%3a))" : "(?<![A-Za-z0-9._%+-])";
+		const prefix = options.encodedPlus ? "(?:(?<![A-Za-z0-9._%+-])|(?<=%[0-9a-f]{2}))" : "(?<![A-Za-z0-9._%+-])";
 		const pattern = new RegExp(`${prefix}${escaped}(?![A-Za-z0-9.-]*[A-Za-z0-9])`, "gi");
 		// A function, so "$&" or "$`" in an address is inserted as text, not as a pattern.
 		out = out.replace(pattern, () => to);
@@ -230,8 +237,10 @@ export function replaceAddresses(body: string, replacements: Replacement[], opti
 
 /** Every address on `domain` that appears in the text, lower-cased and de-duplicated. */
 export function findAddressesOnDomain(text: string, domain: string): string[] {
-	const pattern = new RegExp(`[A-Za-z0-9._%+-]+@${escapeRegExp(domain)}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`, "gi");
-	return [...new Set((text.match(pattern) ?? []).map(normalizeEmail))];
+	// Remaining %XX escapes (such as mailto%3A or %3C) act as delimiters, not local-part characters.
+	const cleaned = text.replace(/%[0-9a-f]{2}/gi, " ");
+	const pattern = new RegExp(`[A-Za-z0-9._+-]+@${escapeRegExp(domain)}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`, "gi");
+	return [...new Set((cleaned.match(pattern) ?? []).map(normalizeEmail))];
 }
 
 /** Message-IDs from an In-Reply-To or References header value: printable ASCII, no angle brackets, at most 250 characters each. */
@@ -265,7 +274,7 @@ export function cleanAttachment(attachment: { filename?: string | null; mimeType
 	let filename = (attachment.filename ?? "").replace(/[\u0000-\u001f\u007f/\\]+/g, " ").trim().slice(0, 200).replace(/[\uD800-\uDBFF]$/, "");
 	if (!filename) filename = `attachment-${index + 1}`;
 	if (!/\.[A-Za-z0-9]{1,8}$/.test(filename) && EXTENSIONS[type]) filename = `${filename}.${EXTENSIONS[type]}`;
-	const contentId = attachment.contentId?.replace(/^<|>$/g, "").replace(/[\u0000-\u0020\u007f<>]+/g, "").slice(0, 200) || undefined;
+	const contentId = attachment.contentId?.replace(/^<|>$/g, "").replace(/[^\x21-\x7e]+/g, "").replace(/[<>]+/g, "").slice(0, 200) || undefined;
 	return { filename, type, contentId };
 }
 

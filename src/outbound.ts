@@ -8,7 +8,7 @@
  */
 import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
-import { hostnameOf, isPublicHost, safeHttpsUrl } from "./format";
+import { extractEmail, hostnameOf, isPublicHost, safeHttpsUrl } from "./format";
 import { buildMime, formatAddress, newMessageId } from "./mime";
 import { sendSmtp, type SmtpSecurity } from "./smtp";
 import { readTextLimited } from "./streams";
@@ -122,12 +122,12 @@ function mailbox(from: OutboundMessage["from"]): string {
 	return name ? `"${name}" <${from.email}>` : from.email;
 }
 
-async function post(url: string, headers: Record<string, string>, body: unknown): Promise<{ status: number; json: unknown }> {
-	return request(url, { "Content-Type": "application/json", Accept: "application/json", ...headers }, JSON.stringify(body));
+async function post(url: string, headers: Record<string, string>, body: unknown, secret = ""): Promise<{ status: number; json: unknown }> {
+	return request(url, { "Content-Type": "application/json", Accept: "application/json", ...headers }, JSON.stringify(body), secret);
 }
 
 /** POSTs a body as it is; a status of 300 or more is an error, with the start of the answer. */
-async function request(url: string, headers: Record<string, string>, body: string | FormData): Promise<{ status: number; json: unknown }> {
+async function request(url: string, headers: Record<string, string>, body: string | FormData, secret = ""): Promise<{ status: number; json: unknown }> {
 	const response = await fetch(url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers, body });
 	const text = (await readTextLimited(response, 64 * 1024).catch(() => null)) ?? "";
 	let json: unknown = null;
@@ -136,7 +136,10 @@ async function request(url: string, headers: Record<string, string>, body: strin
 	} catch {
 		// Reported with the status below.
 	}
-	if (response.status >= 300) throw new OutboundError(`${new URL(url).hostname} answered ${response.status}: ${text.slice(0, 300)}`);
+	if (response.status >= 300) {
+		const safeText = secret.length >= 6 ? text.replaceAll(secret, "[redacted]") : text;
+		throw new OutboundError(`${new URL(url).hostname} answered ${response.status}: ${safeText.slice(0, 300)}`);
+	}
 	return { status: response.status, json };
 }
 
@@ -163,6 +166,7 @@ async function viaResend(apiKey: string, message: OutboundMessage): Promise<stri
 					}
 				: {}),
 		},
+		apiKey,
 	);
 	const id = (json as { id?: unknown } | null)?.id;
 	return typeof id === "string" ? id : undefined;
@@ -187,6 +191,7 @@ async function viaSmtp2go(apiKey: string, message: OutboundMessage): Promise<str
 			// SMTP2GO matches inline parts to cid: references by file name.
 			...(inline.length ? { inlines: inline.map((attachment) => ({ filename: attachment.contentId, ...encode(attachment) })) } : {}),
 		},
+		apiKey,
 	);
 	// SMTP2GO answers 200 even when the message was refused; the counts say what happened.
 	const data = (json as { data?: { succeeded?: number; failed?: number; failures?: unknown; email_id?: unknown } } | null)?.data;
@@ -222,6 +227,7 @@ async function viaBrevo(apiKey: string, message: OutboundMessage): Promise<strin
 				? { attachment: message.attachments.map((attachment) => ({ name: attachment.filename, content: bytesToBase64(new Uint8Array(attachment.content)) })) }
 				: {}),
 		},
+		apiKey,
 	);
 	const id = (json as { messageId?: unknown } | null)?.messageId;
 	return typeof id === "string" ? id : undefined;
@@ -251,6 +257,7 @@ async function viaPostmark(apiKey: string, message: OutboundMessage): Promise<st
 					}
 				: {}),
 		},
+		apiKey,
 	);
 	const id = (json as { MessageID?: unknown; ErrorCode?: unknown } | null)?.MessageID;
 	if ((json as { ErrorCode?: unknown } | null)?.ErrorCode) throw new OutboundError(`Postmark did not send the message: ${JSON.stringify(json).slice(0, 300)}`);
@@ -259,7 +266,8 @@ async function viaPostmark(apiKey: string, message: OutboundMessage): Promise<st
 
 async function viaMailgun(apiKey: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
 	// Mailgun sends for one domain per URL: the alias's own, verified there.
-	const address = typeof message.from === "string" ? message.from : message.from.email;
+	const rawFrom = typeof message.from === "string" ? message.from : message.from.email;
+	const address = extractEmail(rawFrom) ?? rawFrom;
 	const domain = address.split("@").pop() ?? "";
 	const form = new FormData();
 	form.append("from", mailbox(message.from));
@@ -276,7 +284,7 @@ async function viaMailgun(apiKey: string, options: OutboundOptions, message: Out
 	}
 	const host = options.mailgunRegion === "eu" ? "api.eu.mailgun.net" : "api.mailgun.net";
 	const auth = bytesToBase64(new TextEncoder().encode(`api:${apiKey}`));
-	const { json } = await request(`https://${host}/v3/${encodeURIComponent(domain)}/messages`, { Authorization: `Basic ${auth}`, Accept: "application/json" }, form);
+	const { json } = await request(`https://${host}/v3/${encodeURIComponent(domain)}/messages`, { Authorization: `Basic ${auth}`, Accept: "application/json" }, form, apiKey);
 	const id = (json as { id?: unknown } | null)?.id;
 	return typeof id === "string" ? id : undefined;
 }
@@ -312,13 +320,13 @@ async function viaSes(secret: string, options: OutboundOptions, message: Outboun
 	const raw = buildMime(message, newMessageId(message.from));
 	const body = JSON.stringify({ FromEmailAddress: from, Destination: { ToAddresses: [message.to] }, Content: { Raw: { Data: bytesToBase64(new TextEncoder().encode(raw)) } } });
 	const headers = await signSes({ region: options.sesRegion, accessKeyId: options.sesAccessKeyId, secret, body, date: new Date() });
-	const { json } = await request(`https://email.${options.sesRegion}.amazonaws.com/v2/email/outbound-emails`, headers, body);
+	const { json } = await request(`https://email.${options.sesRegion}.amazonaws.com/v2/email/outbound-emails`, headers, body, secret);
 	const id = (json as { MessageId?: unknown } | null)?.MessageId;
 	return typeof id === "string" ? id : undefined;
 }
 
-async function viaSmtp(password: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
-	if (!options.smtpHost || !isPublicHost(options.smtpHost)) throw new OutboundError("No valid public SMTP server is set");
+async function viaSmtp(password: string, options: OutboundOptions, message: OutboundMessage, blockedHosts: string[] = []): Promise<string | undefined> {
+	if (!options.smtpHost || !isPublicHost(options.smtpHost, blockedHosts)) throw new OutboundError("No valid public SMTP server is set");
 	const messageId = newMessageId(message.from);
 	const from = typeof message.from === "string" ? message.from : message.from.email;
 	await sendSmtp(
@@ -361,9 +369,11 @@ export function fillTemplate(template: string, values: Record<string, () => unkn
 	return template.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_match, name: string) => {
 		if (!Object.hasOwn(values, name)) throw new OutboundError(`Unknown placeholder {{${name}}}`);
 		const value = values[name]!();
-		return as === "json" ? JSON.stringify(value) : String(value ?? "").replace(/[\r\n]+/g, " ");
+		return as === "json" ? JSON.stringify(value) : String(value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/[^\x20-\xff]+/g, "");
 	});
 }
+
+const FORBIDDEN_HEADER_NAMES = new Set(["__proto__", "constructor", "prototype"]);
 
 /** "Name: value" lines as headers; blank lines are skipped. */
 export function parseHeaderLines(lines: string): [string, string][] {
@@ -372,7 +382,9 @@ export function parseHeaderLines(lines: string): [string, string][] {
 		if (!line.trim()) continue;
 		const at = line.indexOf(":");
 		const name = at > 0 ? line.slice(0, at).trim() : "";
-		if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(name)) throw new OutboundError(`Not a header line: ${line.slice(0, 60)}`);
+		if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(name) || FORBIDDEN_HEADER_NAMES.has(name.toLowerCase())) {
+			throw new OutboundError(`Not a header line: ${line.slice(0, 60)}`);
+		}
 		out.push([name, line.slice(at + 1).trim()]);
 	}
 	return out;
@@ -383,7 +395,7 @@ async function viaCustom(apiKey: string, options: OutboundOptions, message: Outb
 	if (!safeUrl) throw new OutboundError("No valid public https URL is set for the custom request");
 	const messageId = newMessageId(message.from);
 	const values = customValues(message, apiKey, messageId, () => buildMime(message, messageId));
-	const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
+	const headers: Record<string, string> = Object.assign(Object.create(null), { "Content-Type": "application/json", Accept: "application/json" });
 	for (const [name, value] of parseHeaderLines(options.customHeaders)) {
 		const lower = name.toLowerCase();
 		for (const existing of Object.keys(headers)) {
@@ -391,7 +403,7 @@ async function viaCustom(apiKey: string, options: OutboundOptions, message: Outb
 		}
 		headers[name] = fillTemplate(value, values, "text");
 	}
-	const { json } = await request(safeUrl.href, headers, fillTemplate(options.customBody, values, "json"));
+	const { json } = await request(safeUrl.href, headers, fillTemplate(options.customBody, values, "json"), apiKey);
 	if (!options.customIdPath) return undefined;
 	let found: unknown = json;
 	for (const key of options.customIdPath.split(".")) found = found && typeof found === "object" && Object.hasOwn(found, key) ? (found as Record<string, unknown>)[key] : undefined;
@@ -435,7 +447,7 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 				: provider === "ses"
 					? await viaSes(key, options, message)
 					: provider === "smtp"
-						? await viaSmtp(key, options, message)
+						? await viaSmtp(key, options, message, blockedHosts)
 						: provider === "custom"
 							? await viaCustom(key, options, message, blockedHosts)
 							: await { resend: viaResend, smtp2go: viaSmtp2go, brevo: viaBrevo }[provider](key, message);

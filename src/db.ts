@@ -149,7 +149,7 @@ export async function getContactByReverseLocal(db: D1Database, reverseLocal: str
  * 100 bound parameters per statement, and mail can carry any number of addresses or IDs.
  */
 export function boundedList(values: string[], limit = 80): string[] {
-	return [...new Set(values)].slice(0, limit);
+	return [...new Set(values)].slice(0, Math.max(0, Math.min(limit, 90)));
 }
 
 /**
@@ -206,7 +206,13 @@ export async function ensureContact(
 			.prepare("SELECT * FROM contacts WHERE alias_address = ? AND email = ?")
 			.bind(aliasAddress, email)
 			.first<ContactRow>();
-		if (raced) return raced;
+		if (raced) {
+			if (name && name !== raced.name) {
+				await db.prepare("UPDATE contacts SET name = ? WHERE id = ?").bind(name, raced.id).run();
+				raced.name = name;
+			}
+			return raced;
+		}
 	}
 	throw new Error("Could not allocate a unique reverse alias");
 }
@@ -230,7 +236,7 @@ export async function mapForwardedToOriginal(db: D1Database, aliasAddress: strin
 	// Only this alias's own forwards, so one alias's threads never reveal another's.
 	const { results } = await db
 		.prepare(
-			`SELECT forwarded_message_id, original_message_id FROM forwards WHERE alias_address = ? AND forwarded_message_id IN (${placeholders}) AND original_message_id IS NOT NULL`,
+			`SELECT forwarded_message_id, original_message_id FROM forwards WHERE alias_address = ? AND forwarded_message_id IN (${placeholders}) AND original_message_id IS NOT NULL ORDER BY created_at ASC`,
 		)
 		.bind(aliasAddress, ...ids)
 		.all<{ forwarded_message_id: string; original_message_id: string }>();
@@ -246,7 +252,7 @@ export async function mapOriginalToForwarded(db: D1Database, aliasAddress: strin
 	const placeholders = ids.map(() => "?").join(", ");
 	const { results } = await db
 		.prepare(
-			`SELECT original_message_id, forwarded_message_id FROM forwards WHERE alias_address = ? AND original_message_id IN (${placeholders}) AND forwarded_message_id IS NOT NULL`,
+			`SELECT original_message_id, forwarded_message_id FROM forwards WHERE alias_address = ? AND original_message_id IN (${placeholders}) AND forwarded_message_id IS NOT NULL ORDER BY created_at ASC`,
 		)
 		.bind(aliasAddress, ...ids)
 		.all<{ forwarded_message_id: string; original_message_id: string }>();

@@ -100,7 +100,27 @@ export async function issueSetupCode(db: D1Database, replace = false): Promise<{
 	// A new code at most once a minute, so nobody can keep replacing the one the owner is typing.
 	if (existing && existing.expires_at - SETUP_CODE_TTL_SECONDS > now() - SETUP_CODE_COOLDOWN_SECONDS) return { created: false, expiresAt: existing.expires_at };
 	const code = randomToken(10).toUpperCase();
-	const expiresAt = now() + SETUP_CODE_TTL_SECONDS;
+	const currentTime = now();
+	const expiresAt = currentTime + SETUP_CODE_TTL_SECONDS;
+	if (!replace) {
+		const inserted = await db
+			.prepare(
+				`INSERT INTO auth_challenges (id, purpose, challenge, expires_at)
+				 SELECT ?, 'setup', ?, ?
+				 WHERE NOT EXISTS (SELECT 1 FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ?)`,
+			)
+			.bind(newId("ch"), code, expiresAt, currentTime)
+			.run();
+		if ((inserted.meta.changes ?? 0) === 0) {
+			const raced = await db
+				.prepare("SELECT expires_at FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? LIMIT 1")
+				.bind(currentTime)
+				.first<{ expires_at: number }>();
+			return { created: false, expiresAt: raced?.expires_at ?? expiresAt };
+		}
+		console.log(`[aliasflare] Setup code: ${code} (valid for 60 minutes)`);
+		return { created: true, expiresAt };
+	}
 	await db.batch([
 		db.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup'"),
 		db.prepare("INSERT INTO auth_challenges (id, purpose, challenge, expires_at) VALUES (?, 'setup', ?, ?)").bind(newId("ch"), code, expiresAt),
@@ -209,7 +229,7 @@ export async function completeAuthentication(
 	});
 	if (!verification.verified) return null;
 	await db
-		.prepare("UPDATE passkeys SET counter = ?, last_used_at = ? WHERE id = ?")
+		.prepare("UPDATE passkeys SET counter = MAX(counter, ?), last_used_at = ? WHERE id = ?")
 		.bind(verification.authenticationInfo.newCounter, now(), row.id)
 		.run();
 	return row;

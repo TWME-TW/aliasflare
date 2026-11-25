@@ -58,7 +58,9 @@ export function formatAddress(from: OutboundMessage["from"]): string {
 	const name = oneLine(from.name).replace(/["\\]/g, "");
 	const email = bareAddress(from.email);
 	if (!name) return `<${email}>`;
-	return /^[\x20-\x7e]*$/.test(name) && name.split(" ").every((token) => token.length <= 900) ? `"${name}" <${email}>` : `${encodeWords(name)} <${email}>`;
+	return /^[\x20-\x7e]*$/.test(name) && name.length + email.length + 6 <= 900 && name.split(" ").every((token) => token.length <= 900)
+		? `"${name}" <${email}>`
+		: `${encodeWords(name)} <${email}>`;
 }
 
 /** RFC 2231 attr-char percent-encoding from UTF-8 bytes (never throws URIError on lone surrogates). */
@@ -125,7 +127,7 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
 			`Content-Type: ${/^[\w.+-]+\/[\w.+-]+$/.test(file.type) ? file.type : "application/octet-stream"}; ${parameter("name", file.filename)}`,
 			"Content-Transfer-Encoding: base64",
 			`Content-Disposition: ${disposition}; ${parameter("filename", file.filename)}`,
-			...(disposition === "inline" ? [`Content-ID: <${oneLine(file.contentId ?? "").replace(/[<>]/g, "")}>`] : []),
+			...(disposition === "inline" ? [`Content-ID: <${oneLine(file.contentId ?? "").replace(/[^\x21-\x7e]+/g, "").replace(/[<>]/g, "")}>`] : []),
 		],
 		body: base64Lines(new Uint8Array(file.content)),
 	});

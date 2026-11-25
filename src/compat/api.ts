@@ -47,7 +47,7 @@ const lockoutUrl = (ip: string) => `https://aliasflare.invalid/api-lockout/${enc
 const lockoutCache = (): Cache | null => (typeof caches === "undefined" ? null : (caches as unknown as { default: Cache }).default);
 
 export async function recordApiLockout(ip: string): Promise<void> {
-	await lockoutCache()?.put(lockoutUrl(ip), new Response("1", { headers: { "Cache-Control": "max-age=60" } }));
+	await lockoutCache()?.put(lockoutUrl(ip), new Response("1", { headers: { "Cache-Control": "max-age=60" } })).catch(() => undefined);
 }
 type C = Context<ApiEnv>;
 
@@ -87,7 +87,7 @@ export async function apiThrottled(env: Env, ip: string | undefined): Promise<Re
 	}
 	// An address over the failed-key limit is turned away here, before any key is looked up.
 	const cache = lockoutCache();
-	if (cache && (await cache.match(lockoutUrl(client)))) return Response.json({ error: "Too many attempts", message: "Too Many Attempts." }, { status: 429 });
+	if (cache && (await cache.match(lockoutUrl(client)).catch(() => undefined))) return Response.json({ error: "Too many attempts", message: "Too Many Attempts." }, { status: 429 });
 	return null;
 }
 
@@ -325,7 +325,10 @@ async function slListAliases(c: C) {
 	const pinned = queryFlag(c.req.query("pinned"));
 	const disabled = queryFlag(c.req.query("disabled"));
 	const enabled = queryFlag(c.req.query("enabled"));
-	const filter = pinned === true ? { pinned: true } : disabled === true ? { enabled: false } : enabled === true ? { enabled: true } : {};
+	const filter = {
+		...(pinned === true ? { pinned: true } : {}),
+		...(disabled === true ? { enabled: false } : enabled === true ? { enabled: true } : {}),
+	};
 	const { aliases } = await listAliasViews(c.env.DB, { ...filter, search: query, limit: SL_PAGE_SIZE, offset: pageId(c) * SL_PAGE_SIZE });
 	const latest = await latestContacts(c.env.DB, aliases.map((alias) => alias.address));
 	return c.json({ aliases: await Promise.all(aliases.map((alias) => slAlias(c, alias, latest.get(alias.address) ?? null))) });
@@ -707,19 +710,18 @@ api.get("/v1/blocklist", async (c) => {
 	if (search) where.push("value LIKE ? ESCAPE '!'"), params.push(`%${search.replace(/[!%_]/g, "!$&")}%`);
 	if (type === "email" || type === "domain") where.push("kind = ?"), params.push(type === "email" ? "address" : "domain");
 	const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-	const [list, counted] = await Promise.all([
-		c.env.DB.prepare(`SELECT * FROM blocklist ${clause} ORDER BY ${column} ${sort.startsWith("-") ? "DESC" : "ASC"} LIMIT ? OFFSET ?`)
-			.bind(...params, size, (pageNumber - 1) * size)
-			.all<BlocklistRow>(),
-		c.env.DB.prepare(`SELECT COUNT(*) AS total FROM blocklist ${clause}`).bind(...params).first<{ total: number }>(),
+	const [list, counted] = await c.env.DB.batch([
+		c.env.DB.prepare(`SELECT * FROM blocklist ${clause} ORDER BY ${column} ${sort.startsWith("-") ? "DESC" : "ASC"} LIMIT ? OFFSET ?`).bind(...params, size, (pageNumber - 1) * size),
+		c.env.DB.prepare(`SELECT COUNT(*) AS total FROM blocklist ${clause}`).bind(...params),
 	]);
-	const total = counted?.total ?? 0;
+	const rows = (list?.results ?? []) as BlocklistRow[];
+	const total = Number((counted?.results?.[0] as { total?: number } | undefined)?.total ?? 0);
 	const lastPage = Math.max(Math.ceil(total / size), 1);
-	const from = list.results.length ? (pageNumber - 1) * size + 1 : null;
+	const from = rows.length ? (pageNumber - 1) * size + 1 : null;
 	return c.json({
-		data: list.results.map(addyBlock),
+		data: rows.map(addyBlock),
 		links: { first: null, last: null, prev: null, next: null },
-		meta: { current_page: pageNumber, from, last_page: lastPage, per_page: size, to: from ? from + list.results.length - 1 : null, total },
+		meta: { current_page: pageNumber, from, last_page: lastPage, per_page: size, to: from ? from + rows.length - 1 : null, total },
 	});
 });
 
@@ -871,6 +873,7 @@ api.post("/v1/alias-recipients", async (c) => {
 	const input = await body(c);
 	const alias = await addyFind(c, str(input.alias_id, 64) ?? "");
 	const ids = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
+	if (ids.length && typeof ids[0] !== "string") throw new ClientError(400, "Unknown mailbox");
 	const destination = ids.length ? await resolveDestination(c.env.DB, c.get("settings"), ids[0] as string) : null;
 	await updateAlias(c.env.DB, alias.address, { destination: destination ?? null });
 	return c.json({ data: await addyAlias(c, await addyFind(c, alias.uid)) });

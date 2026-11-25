@@ -150,6 +150,7 @@ export async function transformForward(
 				html = await new HTMLRewriter()
 					.on("body", {
 						element(element) {
+							if (inserted) return;
 							element.prepend(block, { html: true });
 							inserted = true;
 						},
@@ -162,6 +163,7 @@ export async function transformForward(
 					html = await new HTMLRewriter()
 						.on("head", {
 							element(element) {
+								if (inserted) return;
 								element.after(block, { html: true });
 								inserted = true;
 							},

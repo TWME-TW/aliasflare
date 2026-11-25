@@ -20,8 +20,10 @@
  */
 import { reverseDomainFor } from "./domains";
 import { REVERSE_BASE } from "./format";
+import { readTextLimited } from "./streams";
 
 const API = "https://api.cloudflare.com/client/v4";
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 type CfEnvelope<T> = { success: boolean; errors?: { code: number; message: string }[]; result: T };
 
@@ -42,11 +44,15 @@ async function cf<T>(token: string, path: string, init: RequestInit = {}): Promi
 		signal: AbortSignal.timeout(15_000),
 		headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
 	});
+	const raw = await readTextLimited(response, MAX_RESPONSE_BYTES);
+	if (raw === null) throw new CloudflareError("Cloudflare API response was too large", [], response.status);
 	let body: CfEnvelope<T> | null = null;
-	try {
-		body = (await response.json()) as CfEnvelope<T>;
-	} catch {
-		// Not JSON; reported below.
+	if (raw) {
+		try {
+			body = JSON.parse(raw) as CfEnvelope<T>;
+		} catch {
+			// Not JSON; reported below.
+		}
 	}
 	if (!response.ok || !body?.success) {
 		const errors = body?.errors ?? [];
@@ -73,16 +79,17 @@ export function zoneCandidates(domain: string): string[] {
 
 async function findZone(token: string, domain: string): Promise<{ id: string; name: string } | null> {
 	for (const name of zoneCandidates(domain)) {
-		const zones = await cf<{ id: string; name: string }[]>(token, `/zones?name=${encodeURIComponent(name)}`);
+		const zones = await cf<{ id: string; name: string }[]>(token, `/zones?name=${encodeURIComponent(name)}&status=active`);
 		if (zones[0]) return zones[0];
 	}
 	return null;
 }
 
 async function findRule(token: string, zoneId: string, address: string): Promise<Rule | null> {
+	const target = address.toLowerCase();
 	for (let page = 1; page <= 10; page += 1) {
 		const rules = await cf<Rule[]>(token, `/zones/${encodeURIComponent(zoneId)}/email/routing/rules?page=${page}&per_page=50`);
-		const match = rules.find((rule) => rule.matchers.some((m) => m.type === "literal" && m.value?.toLowerCase() === address));
+		const match = rules.find((rule) => rule.matchers.some((m) => m.type === "literal" && m.value?.toLowerCase() === target));
 		if (match) return match;
 		if (rules.length < 50) return null;
 	}
@@ -92,6 +99,9 @@ async function findRule(token: string, zoneId: string, address: string): Promise
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 // Only "already exists / enabled / configured" counts as done, not any message with "exist" in it.
 const alreadyDone = (error: unknown) => /\balready (exists?|enabled|configured|added|in use)\b|\bduplicate\b/i.test(message(error));
+// Conflicting DNS records (e.g. existing MX/TXT/SPF/CNAME records) must be reported, not treated as done.
+const alreadyRoutingEnabled = (error: unknown) =>
+	alreadyDone(error) && !/\b(?:mx|txt|cname|spf|dns)?\s*records?\b|\bconflict/i.test(message(error));
 const toWorker = (actions: Action[], workerName: string) => actions.some((action) => action.type === "worker" && action.value?.includes(workerName));
 
 /** Enables Email Routing for a domain: the zone apex, or a subdomain of it. */
@@ -102,7 +112,7 @@ async function enableRouting(token: string, zone: { id: string; name: string }, 
 			...(zone.name === domain ? {} : { body: JSON.stringify({ name: domain }) }),
 		});
 	} catch (error) {
-		if (!alreadyDone(error)) throw error;
+		if (!alreadyRoutingEnabled(error)) throw error;
 	}
 }
 
@@ -116,7 +126,8 @@ async function enableSending(token: string, zoneId: string, domain: string): Pro
 }
 
 export async function setUpDomain(input: { token: string; domain: string; workerName: string; replaceCatchAll?: boolean }): Promise<DomainSetup> {
-	const { token, domain, workerName } = input;
+	const { token, workerName } = input;
+	const domain = input.domain.trim().toLowerCase();
 	const reverseDomain = reverseDomainFor(domain);
 	const steps: SetupStep[] = [];
 	const attempt = async (step: SetupStepName, run: () => Promise<string>) => {
