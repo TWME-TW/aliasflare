@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "Sunan da ka zaɓa",
 	"dash.perPage": "{count} a kowane shafi",
 	"dash.perPageLabel": "Layuka a kowane shafi",
+	"dash.colLastUsed": "An yi amfani da shi ta ƙarshe",
+	"dash.neverUsed": "Ba a taɓa ba",
 };
 
 export default dictionary;

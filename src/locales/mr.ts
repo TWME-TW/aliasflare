@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "तुम्ही निवडलेले नाव",
 	"dash.perPage": "प्रति पृष्ठ {count}",
 	"dash.perPageLabel": "प्रति पृष्ठ ओळी",
+	"dash.colLastUsed": "शेवटचा वापर",
+	"dash.neverUsed": "कधीच नाही",
 };
 
 export default dictionary;

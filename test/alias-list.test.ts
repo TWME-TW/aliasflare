@@ -52,6 +52,13 @@ describe("alias list", () => {
 		expect([...unknown.matchAll(/data-copy="/g)]).toHaveLength(34);
 	});
 
+	it("shows how long ago each alias was last used, or that it never was", async () => {
+		const page = await dashboard();
+		const row = (address: string) => page.slice(page.indexOf(`data-copy="${address}"`)).split("</tr>")[0]!;
+		expect(row("old-busy@me.test")).toMatch(/<time datetime="1970-01-01T00:33:20.000Z" title="[^"]+">\d+ years ago<\/time>/);
+		expect(row("new@me.test")).toContain(">Never</span>");
+	});
+
 	it("has a copy button for each alias, shown only by the page script", async () => {
 		const page = await dashboard();
 		expect(page).toMatch(/<button type="button" class="ghost copy" data-copy="new@me.test"[^>]*hidden>/);

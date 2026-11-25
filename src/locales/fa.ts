@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "نامی که خودتان انتخاب می‌کنید",
 	"dash.perPage": "{count} در هر صفحه",
 	"dash.perPageLabel": "ردیف در هر صفحه",
+	"dash.colLastUsed": "آخرین استفاده",
+	"dash.neverUsed": "هرگز",
 };
 
 export default dictionary;

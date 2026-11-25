@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "Назва на ваш вибір",
 	"dash.perPage": "{count} на сторінці",
 	"dash.perPageLabel": "Рядків на сторінці",
+	"dash.colLastUsed": "Останнє використання",
+	"dash.neverUsed": "Ніколи",
 };
 
 export default dictionary;

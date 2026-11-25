@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "직접 정한 이름",
 	"dash.perPage": "페이지당 {count}개",
 	"dash.perPageLabel": "페이지당 행 수",
+	"dash.colLastUsed": "마지막 사용",
+	"dash.neverUsed": "사용 안 함",
 };
 
 export default dictionary;

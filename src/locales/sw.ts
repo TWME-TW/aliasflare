@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "Jina unalochagua mwenyewe",
 	"dash.perPage": "{count} kwa ukurasa",
 	"dash.perPageLabel": "Safu kwa ukurasa",
+	"dash.colLastUsed": "Imetumika mara ya mwisho",
+	"dash.neverUsed": "Haijawahi",
 };
 
 export default dictionary;

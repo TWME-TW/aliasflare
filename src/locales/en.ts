@@ -381,6 +381,8 @@ export const en = {
 	"new.kind.custom": "A name you choose",
 	"dash.perPage": "{count} per page",
 	"dash.perPageLabel": "Rows per page",
+	"dash.colLastUsed": "Last used",
+	"dash.neverUsed": "Never",
 };
 
 export type MessageKey = keyof typeof en;

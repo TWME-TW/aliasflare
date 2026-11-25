@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "Kendin seçtiğin bir ad",
 	"dash.perPage": "Sayfa başına {count}",
 	"dash.perPageLabel": "Sayfa başına satır",
+	"dash.colLastUsed": "Son kullanım",
+	"dash.neverUsed": "Hiç",
 };
 
 export default dictionary;

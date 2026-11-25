@@ -373,6 +373,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "તમે પસંદ કરેલું નામ",
 	"dash.perPage": "પ્રતિ પૃષ્ઠ {count}",
 	"dash.perPageLabel": "પ્રતિ પૃષ્ઠ પંક્તિઓ",
+	"dash.colLastUsed": "છેલ્લે વપરાયેલ",
+	"dash.neverUsed": "ક્યારેય નહીં",
 };
 
 export default dictionary;

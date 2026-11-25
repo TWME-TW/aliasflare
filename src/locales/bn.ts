@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "আপনার পছন্দের একটি নাম",
 	"dash.perPage": "প্রতি পৃষ্ঠায় {count}",
 	"dash.perPageLabel": "প্রতি পৃষ্ঠায় সারি",
+	"dash.colLastUsed": "সর্বশেষ ব্যবহার",
+	"dash.neverUsed": "কখনো না",
 };
 
 export default dictionary;

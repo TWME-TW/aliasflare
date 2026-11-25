@@ -381,8 +381,10 @@ app.use("*", async (c, next) => {
 
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
 export type AliasFilter = (typeof ALIAS_FILTERS)[number];
-/** When an alias was created or last forwarded or replied through, for "newest or most recently used first". */
-const LAST_USED = `MAX(aliases.created_at, COALESCE((SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address), 0))`;
+/** When mail last went through an alias, either way; 0 or NULL if never. */
+const USED_AT = `(SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address)`;
+/** When an alias was created or last used, for "newest or most recently used first". */
+const LAST_USED = `MAX(aliases.created_at, COALESCE(${USED_AT}, 0))`;
 
 app.get("/", async (c) => {
 	const db = c.env.DB;
@@ -408,7 +410,7 @@ app.get("/", async (c) => {
 	const [{ results: aliases }, counted] = await Promise.all([
 		db
 			.prepare(
-				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts FROM aliases ${clause}
+				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts, ${USED_AT} AS used_at FROM aliases ${clause}
 				 ORDER BY pinned DESC, ${LAST_USED} DESC, num_id DESC LIMIT ? OFFSET ?`,
 			)
 			.bind(...params, perPage, (pageNumber - 1) * perPage)

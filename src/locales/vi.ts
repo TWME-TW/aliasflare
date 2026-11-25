@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "Tên do bạn chọn",
 	"dash.perPage": "{count} mục mỗi trang",
 	"dash.perPageLabel": "Số dòng mỗi trang",
+	"dash.colLastUsed": "Lần dùng cuối",
+	"dash.neverUsed": "Chưa dùng",
 };
 
 export default dictionary;

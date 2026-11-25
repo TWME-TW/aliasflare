@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "ایک نام جو آپ خود چنیں",
 	"dash.perPage": "فی صفحہ {count}",
 	"dash.perPageLabel": "فی صفحہ قطاریں",
+	"dash.colLastUsed": "آخری استعمال",
+	"dash.neverUsed": "کبھی نہیں",
 };
 
 export default dictionary;

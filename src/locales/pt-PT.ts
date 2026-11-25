@@ -379,6 +379,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "Um nome à sua escolha",
 	"dash.perPage": "{count} por página",
 	"dash.perPageLabel": "Linhas por página",
+	"dash.colLastUsed": "Última utilização",
+	"dash.neverUsed": "Nunca",
 };
 
 export default dictionary;

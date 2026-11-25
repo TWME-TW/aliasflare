@@ -364,6 +364,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "మీరు ఎంచుకునే పేరు",
 	"dash.perPage": "ప్రతి పేజీకి {count}",
 	"dash.perPageLabel": "పేజీకి వరుసలు",
+	"dash.colLastUsed": "చివరిగా ఉపయోగించినది",
+	"dash.neverUsed": "ఎప్పుడూ లేదు",
 };
 
 export default dictionary;

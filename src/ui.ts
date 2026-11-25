@@ -311,6 +311,22 @@ function noticeBox(notice?: string): Html | string {
 
 export type ActivityItem = { kind: string; status: string; alias: string | null; detail: string | null; at: number };
 
+/** How long ago, like "3 hours ago", in the page's language. */
+function ago(timestamp: number, locale: string, now = Date.now() / 1000): string {
+	const seconds = Math.round(timestamp - now);
+	const units: [Intl.RelativeTimeFormatUnit, number][] = [
+		["year", 365 * 86400],
+		["month", 30 * 86400],
+		["week", 7 * 86400],
+		["day", 86400],
+		["hour", 3600],
+		["minute", 60],
+	];
+	const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+	for (const [unit, size] of units) if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
+	return format.format(0, "second");
+}
+
 function when(timestamp: number | null, locale: string): string {
 	if (!timestamp) return "—";
 	return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(timestamp * 1000)) + " UTC";
@@ -362,7 +378,7 @@ export function dashboardPage(
 	t: Translate,
 	input: {
 		settings: Settings;
-		aliases: (AliasRow & { contacts: number })[];
+		aliases: (AliasRow & { contacts: number; used_at?: number | null })[];
 		list: AliasListState;
 		activity: ActivityItem[];
 		missing: MessageKey[];
@@ -434,7 +450,7 @@ ${actions.map(([value, label]) => html`<option value="${value}" ${value === "not
 <button class="primary">${t("bulk.apply")}</button>
 </form>
 <table class="rt">
-<thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th></tr></thead>
+<thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th><th>${t("dash.colLastUsed")}</th></tr></thead>
 <tbody>
 ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
@@ -452,6 +468,7 @@ ${aliases.map((alias) => {
 <select name="mode" aria-label="${t("dash.colMode")}">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select>
 <button>${t("common.set")}</button></form></td>
 <td data-label="${t("dash.colContacts")}">${alias.contacts}</td>
+<td data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${new Date(alias.used_at * 1000).toISOString()}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
 </tr>`;
 })}
 </tbody></table>

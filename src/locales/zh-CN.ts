@@ -358,6 +358,8 @@ const dictionary: Dictionary = {
 	"new.kind.custom": "自选名称",
 	"dash.perPage": "每页 {count} 条",
 	"dash.perPageLabel": "每页行数",
+	"dash.colLastUsed": "最后使用",
+	"dash.neverUsed": "从未",
 };
 
 export default dictionary;
