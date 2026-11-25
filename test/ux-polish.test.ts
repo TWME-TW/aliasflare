@@ -283,3 +283,14 @@ describe("moving between pages", () => {
 		expect(html).toContain(`<span class="dot" data-colour="${LABEL_COLOURS[0]}">`);
 	});
 });
+
+describe("no jump when a page opens", () => {
+	it("holds the first paint until the page script has put the page in place", async () => {
+		const { html } = await getHtml("/?per=25");
+		expect(html).toContain('<link rel="expect" href="#page-end" blocking="render" />');
+		// The mark comes after the page script, so the script runs before anything is shown.
+		expect(html.indexOf('<span id="page-end" hidden></span>')).toBeGreaterThan(html.indexOf('<script src="/assets/app.js'));
+		const css = await (await app.fetch(new Request(`${ORIGIN}/assets/app.css`), env)).text();
+		expect(css).toContain("color-mix(in oklab, var(--primary) 35%, var(--bg))");
+	});
+});

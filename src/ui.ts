@@ -310,7 +310,7 @@ table.aliases td.c-mode select { width:auto; min-width:0; }
 /* Moving between pages: the menu marks the page at once (see the page script). Only when the next
    page has not arrived after a moment does a thin bar sweep along the top; it shows activity, not
    a share done, so it never seems to stop part way. */
-html[data-navigating] body::before { content:""; position:fixed; top:0; left:0; width:30%; height:3px; z-index:50; border-radius:0 3px 3px 0; background:var(--primary); opacity:0; animation:nav-sweep 1.1s ease-in-out .3s infinite, nav-show 0s .3s forwards; }
+html[data-navigating] body::before { content:""; position:fixed; top:0; left:0; width:30%; height:3px; z-index:50; border-radius:0 3px 3px 0; background:color-mix(in oklab, var(--primary) 35%, var(--bg)); opacity:0; animation:nav-sweep 1.1s ease-in-out .3s infinite, nav-show 0s .3s forwards; }
 @keyframes nav-sweep { from { transform:translateX(-100%); } to { transform:translateX(340%); } }
 @keyframes nav-show { to { opacity:1; } }
 @media (prefers-reduced-motion: reduce) { html[data-navigating] body::before { width:100%; animation:nav-show 0s .3s forwards; } }
@@ -432,6 +432,7 @@ ${themeMeta}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <title>${title} · aliasflare</title>
 <link rel="stylesheet" href="/assets/app.css?v=${STYLE_VERSION}" />
+<link rel="expect" href="#page-end" blocking="render" />
 </head>
 <body>
 ${options.nav
@@ -449,6 +450,9 @@ ${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activ
 	: html`<header class="topbar">${brand}<span class="spacer"></span>${themeToggle(t, options.path)}</header>${body}<footer class="page">${languageMenu(t, options.path)}</footer>`}
 <script src="/assets/app.js?v=${APP_SCRIPT_VERSION}"></script>
 ${options.script ? html`<script src="/assets/passkey.js?v=${PASSKEY_SCRIPT_VERSION}"></script>` : ""}
+<!-- The first paint waits for this mark (rel=expect above), so the page script has already put the
+     page in place (a pager where it was, local times, copy buttons): nothing jumps once shown. -->
+<span id="page-end" hidden></span>
 </body>
 </html>`;
 }
