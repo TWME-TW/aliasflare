@@ -88,9 +88,9 @@ describe("labels in the dashboard", () => {
 		await post(cookie, "/aliases/shop%40a.test/labels", { labels: [id] });
 		expect(await get(cookie, "/aliases/shop%40a.test")).toMatch(/value="lb_[0-9a-f]+" checked/);
 
-		await post(cookie, "/aliases/bulk", { action: `label:${id}`, ids: ["news@a.test", "shop@a.test"], back: "/" });
+		await post(cookie, "/aliases/bulk", { action: "label", labels: [id], ids: ["news@a.test", "shop@a.test"], back: "/" });
 		expect(await db.prepare("SELECT COUNT(*) AS n FROM alias_labels WHERE label_id = ?").bind(id).first()).toEqual({ n: 2 });
-		await post(cookie, "/aliases/bulk", { action: `unlabel:${id}`, ids: ["news@a.test"], back: "/" });
+		await post(cookie, "/aliases/bulk", { action: "unlabel", labels: id, ids: ["news@a.test"], back: "/" });
 
 		const page = await get(cookie, `/?label=${id}`);
 		expect(page).toContain("shop@a.test");
@@ -367,7 +367,7 @@ describe("review fixes", () => {
 		await db.batch(many.map((address, i) => db.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at) VALUES (?, ?, ?, 'all', 1, 1, 1)").bind(address, 100 + i, `b${i}`)));
 		const label = (await call("/v1/labels", "POST", { name: "Many" })).json.data.id;
 		const cookie = await signIn(db);
-		await post(cookie, "/aliases/bulk", { action: `label:${label}`, ids: many, back: "/" });
+		await post(cookie, "/aliases/bulk", { action: "label", labels: label, ids: many, back: "/" });
 		expect(await db.prepare("SELECT COUNT(*) AS n FROM alias_labels").first()).toEqual({ n: 150 });
 	});
 });

@@ -22,14 +22,16 @@ describe("parseAliasCsv", () => {
 		]);
 	});
 
-	it("reads addy.io's export with its counts and dates, and skips deleted aliases", () => {
+	it("reads addy.io's export with its counts and dates, and keeps deleted aliases as deleted", () => {
 		const rows = parseAliasCsv(
 			"id,local_part,domain,email,active,description,from_name,emails_forwarded,emails_blocked,emails_replied,emails_sent,last_forwarded,created_at,deleted_at\n" +
 				"1,news,me.com,news@me.com,1,Newsletters,News Me,12,3,2,1,2026-02-03 04:05:06,2025-01-01 00:00:00,\n" +
 				"2,gone,me.com,gone@me.com,0,,,0,0,0,0,,2025-01-01 00:00:00,2026-01-01 00:00:00\n",
 		);
-		expect(rows).toHaveLength(1);
+		expect(rows).toHaveLength(2);
+		expect(rows[1]).toMatchObject({ email: "gone@me.com", deletedAt: Date.UTC(2026, 0, 1) / 1000 });
 		expect(rows[0]).toMatchObject({
+			deletedAt: null,
 			email: "news@me.com",
 			note: "Newsletters",
 			name: "News Me",

@@ -228,10 +228,33 @@ export const APP_SCRIPT = `(() => {
         all.indeterminate = checked > 0 && checked < picks().length;
       }
     };
+    const labelMenu = bulk.querySelector("[data-bulk-labels]");
     const showValue = () => {
       const option = action && action.selectedOptions[0];
       if (value) value.hidden = !(option && option.hasAttribute("data-needs-value"));
+      if (labelMenu) {
+        labelMenu.hidden = !(option && option.hasAttribute("data-needs-labels"));
+        if (labelMenu.hidden) labelMenu.open = false;
+        else labelMenu.open = true;
+      }
     };
+    if (labelMenu) {
+      const summary = labelMenu.querySelector("summary");
+      const boxes = [...labelMenu.querySelectorAll("input[name=labels]")];
+      const filter = labelMenu.querySelector("[data-label-filter]");
+      const count = () => {
+        const n = boxes.filter((box) => box.checked).length;
+        summary.textContent = n ? summary.dataset.template.replace("{count}", String(n)) : summary.dataset.empty;
+      };
+      for (const box of boxes) box.addEventListener("change", count);
+      if (filter) filter.addEventListener("input", () => {
+        const q = filter.value.trim().toLowerCase();
+        for (const box of boxes) box.closest("label").hidden = !!q && !box.closest("label").dataset.name.includes(q);
+      });
+      // A click elsewhere closes the list, keeping what was ticked.
+      document.addEventListener("click", (event) => { if (labelMenu.open && !labelMenu.contains(event.target)) labelMenu.open = false; });
+      count();
+    }
     if (all) all.addEventListener("change", () => { for (const box of picks()) box.checked = all.checked; refresh(); });
     for (const box of picks()) box.addEventListener("change", refresh);
     if (action) action.addEventListener("change", showValue);
@@ -244,6 +267,12 @@ export const APP_SCRIPT = `(() => {
         return;
       }
       const chosen = action ? action.value : "";
+      if (labelMenu && (chosen === "label" || chosen === "unlabel") && !labelMenu.querySelector("input[name=labels]:checked")) {
+        event.preventDefault();
+        labelMenu.open = true;
+        show(labelMenu.dataset.none || bulk.dataset.noLabels, false);
+        return;
+      }
       const question = chosen === "delete" ? bulk.dataset.confirmDelete : chosen === "forget" ? bulk.dataset.confirmForget : "";
       if (question && !confirm(question)) event.preventDefault();
     });

@@ -122,6 +122,17 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 .label-edit input[type=text] { flex:0 1 13rem; min-width:9rem; }
 .labels-row { display:inline-flex; flex-wrap:wrap; gap:4px; margin-inline-start:6px; vertical-align:middle; }
 .label-picks { display:flex; flex-wrap:wrap; gap:8px 18px; margin:8px 0; }
+/* The batch bar's label picker: a drop-down list of every label that scrolls, however many there are. */
+.label-menu { position:relative; }
+.label-menu > summary { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 14px; border:1px solid var(--line); border-radius:12px; background:var(--card); cursor:pointer; list-style:none; white-space:nowrap; }
+.label-menu > summary::-webkit-details-marker { display:none; }
+.label-menu > summary::after { content:"▾"; color:var(--muted); }
+.label-menu-list { position:absolute; z-index:20; inset-inline-start:0; top:calc(100% + 6px); display:grid; gap:2px; width:max-content; min-width:240px; max-width:min(360px, 90vw); max-height:300px; overflow:auto; padding:8px; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:0 12px 32px rgb(0 0 0 / .18); }
+.label-menu-list input[type=search] { position:sticky; top:-8px; margin:-8px -8px 6px; width:calc(100% + 16px); max-width:none; border-radius:12px 12px 0 0; }
+.label-menu-list label { display:flex; align-items:center; gap:10px; min-height:40px; margin:0; padding:0 8px; border-radius:8px; font-weight:400; cursor:pointer; }
+.label-menu-list label[hidden] { display:none; }
+.label-menu-list label:hover { background:var(--hover); }
+@media (max-width: 720px) { .label-menu { flex:1 1 100%; } .label-menu-list { position:static; width:auto; max-width:none; margin-top:6px; box-shadow:none; } }
 .label-picks label { display:inline-flex; align-items:center; gap:6px; font-weight:400; }
 .rule-rows { display:grid; gap:8px; margin:8px 0; }
 .rule-rows .row > * { flex:1; min-width:0; }
@@ -585,7 +596,7 @@ ${aliases.length === 0
 ${list.page > 1 ? pager(t, list.page, Math.max(list.page, lastPage), (page) => listUrl({ page: page >= list.page ? list.page : Math.max(1, Math.min(page, lastPage)) })) : ""}`
 	: html`${pager(t, list.page, lastPage, (page) => listUrl({ page }))}
 <form id="bulk" class="toolbar bulk" method="post" action="/aliases/bulk" data-bulk
- data-confirm-delete="${t("bulk.confirmDelete")}" data-confirm-forget="${t("bulk.confirmForget")}" data-none-selected="${t("bulk.noneSelected")}">
+ data-confirm-delete="${t("bulk.confirmDelete")}" data-confirm-forget="${t("bulk.confirmForget")}" data-none-selected="${t("bulk.noneSelected")}" data-no-labels="${t("bulk.noLabels")}">
 <input type="hidden" name="back" value="${listUrl({})}" />
 <span class="muted" data-selected-count data-template="${t("bulk.selected", { count: "{count}" })}">${t("bulk.selected", { count: "0" })}</span>
 <select name="action" aria-label="${t("bulk.action")}" required>
@@ -593,11 +604,21 @@ ${list.page > 1 ? pager(t, list.page, Math.max(list.page, lastPage), (page) => l
 ${actions.map(([value, label]) => html`<option value="${value}" ${value === "note" || value === "destination" ? html`data-needs-value` : ""}>${label}</option>`)}
 ${labels.length && !deletedView
 	? html`<optgroup label="${t("nav.labels")}">
-${labels.map((label) => html`<option value="label:${label.id}">${t("bulk.addLabel", { name: label.name })}</option><option value="unlabel:${label.id}">${t("bulk.removeLabel", { name: label.name })}</option>`)}
+<option value="label" data-needs-labels>${t("bulk.addLabels")}</option>
+<option value="unlabel" data-needs-labels>${t("bulk.removeLabels")}</option>
 </optgroup>`
 	: ""}
 </select>
 <input type="text" name="value" placeholder="${t("bulk.value")}" aria-label="${t("bulk.value")}" data-bulk-value />
+${labels.length && !deletedView
+	? html`<details class="label-menu" data-bulk-labels>
+<summary data-template="${t("bulk.labelsChosen", { count: "{count}" })}" data-empty="${t("bulk.chooseLabels")}">${t("bulk.chooseLabels")}</summary>
+<div class="label-menu-list">
+${labels.length > 8 ? html`<input type="search" placeholder="${t("bulk.findLabel")}" aria-label="${t("bulk.findLabel")}" data-label-filter />` : ""}
+${labels.map((label) => html`<label data-name="${label.name.toLowerCase()}"><input type="checkbox" name="labels" value="${label.id}" /><span class="label-chip" data-colour="${label.colour}">${label.name}</span></label>`)}
+</div>
+</details>`
+	: ""}
 <button class="primary">${t("bulk.apply")}</button>
 </form>
 <table class="rt compact aliases">
@@ -1008,9 +1029,9 @@ export function blocklistPage(t: Translate, input: { entries: BlocklistRow[]; no
 ${noticeBox(notice)}
 <section>
 <h2>${t("bl.title")}</h2>
-<p class="help">${t("bl.help")}</p>
+<p class="help">${t("bl.help")} ${t("bl.helpMany")}</p>
 <form class="row mt12" method="post" action="/blocklist">
-<input name="value" type="text" placeholder="${t("bl.placeholder")}" autocapitalize="none" required aria-label="${t("bl.colSender")}" />
+<input name="value" type="text" placeholder="${t("bl.placeholder")}" autocapitalize="none" spellcheck="false" required aria-label="${t("bl.colSender")}" />
 <button class="primary">${t("bl.block")}</button>
 </form>
 ${entries.length === 0
@@ -1171,7 +1192,11 @@ ${checkbox("destinations", false, t("imp.destinations"), t("imp.destinationsHelp
 ${error ? html`<p class="notice bad" role="alert">${error}</p>` : ""}
 ${result
 	? html`<section><h2>${t("imp.resultTitle", { source: source ?? "" })}</h2>
-<p class="notice" role="status">${t("imp.done", { found: String(result.found), created: String(result.created), updated: String(result.updated) })}${result.contacts ? html` ${t("imp.doneContacts", { count: String(result.contacts) })}` : ""}</p>
+<p class="notice" role="status">${t("imp.done", { found: String(result.found), created: String(result.created), updated: String(result.updated) })}${result.deleted ? html` ${t("imp.doneDeleted", { count: String(result.deleted) })}` : ""}${result.contacts ? html` ${t("imp.doneContacts", { count: String(result.contacts) })}` : ""}${result.labels ? html` ${t("imp.doneLabels", { count: String(result.labels) })}` : ""}${result.rules ? html` ${t("imp.doneRules", { count: String(result.rules) })}` : ""}${result.blocked ? html` ${t("imp.doneBlocked", { count: String(result.blocked) })}` : ""}</p>
+${result.unread?.length ? html`<p class="notice bad" role="alert">${t("imp.unread", { parts: result.unread.join(", ") })}</p>` : ""}
+${result.rulesSkipped?.length
+	? html`<p>${t("imp.rulesSkipped")}</p><ul class="results">${result.rulesSkipped.map((name) => html`<li>${name}</li>`)}</ul>`
+	: ""}
 ${result.skippedDomains.length
 	? html`<p>${t("imp.skipped")}</p><ul class="results">${result.skippedDomains.map(
 			(item) => html`<li><code>${item.domain}</code> <span class="muted">${t("imp.count", { count: String(item.count) })}</span></li>`,

@@ -30,6 +30,9 @@ import {
 	newFetchBudget,
 	defaultImportDomains,
 	fetchAddy,
+	fetchAddyExtras,
+	importAddyExtras,
+	type AddyExtras,
 	fetchSimpleLogin,
 	ImportError,
 	importAliases,
@@ -817,17 +820,33 @@ app.get("/blocklist", async (c) => {
 	return c.html(blocklistPage(c.get("t"), { entries: results, notice: noticeFrom(c) }));
 });
 
+/** Senders to block from what was typed: addresses and domains, separated by commas, spaces, semicolons or lines. */
+export function parseBlockEntries(input: string): { entries: { kind: "address" | "domain"; value: string }[]; bad: string[] } {
+	const entries = new Map<string, "address" | "domain">();
+	const bad: string[] = [];
+	for (const piece of input.split(/[\s,;，、；،]+/).filter(Boolean).slice(0, 500)) {
+		const raw = piece.trim().toLowerCase().replace(/^@/, "").replace(/^<(.*)>$/, "$1");
+		const email = raw.includes("@") ? extractEmail(raw) : null;
+		const domain = !raw.includes("@") && DOMAIN_PATTERN.test(raw) ? raw : null;
+		if (email === raw || domain) entries.set(raw, domain ? "domain" : "address");
+		else bad.push(piece.slice(0, 100));
+	}
+	return { entries: [...entries].map(([value, kind]) => ({ kind, value })), bad };
+}
+
 app.post("/blocklist", async (c) => {
 	const form = await c.req.parseBody();
-	const raw = (typeof form.value === "string" ? form.value : "").trim().toLowerCase().replace(/^@/, "");
-	const email = raw.includes("@") ? extractEmail(raw) : null;
-	const domain = !raw.includes("@") && DOMAIN_PATTERN.test(raw) ? raw : null;
-	const value = email ?? domain;
-	if (!value) return redirectWithNotice(c, "/blocklist", "notice.badBlock");
-	await c.env.DB.prepare("INSERT INTO blocklist (id, kind, value, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (value) DO NOTHING")
-		.bind(newId("bl"), email ? "address" : "domain", value, now())
-		.run();
-	return redirectWithNotice(c, "/blocklist", "notice.blocked", { value });
+	const { entries, bad } = parseBlockEntries(typeof form.value === "string" ? form.value : "");
+	if (!entries.length) return redirectWithNotice(c, "/blocklist", "notice.badBlock");
+	const timestamp = now();
+	const statements = entries.map((entry) =>
+		c.env.DB.prepare("INSERT INTO blocklist (id, kind, value, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (value) DO NOTHING").bind(newId("bl"), entry.kind, entry.value, timestamp),
+	);
+	for (let i = 0; i < statements.length; i += 100) await c.env.DB.batch(statements.slice(i, i + 100));
+	if (bad.length) return redirectWithNotice(c, "/blocklist", "notice.blockedSome", { count: String(entries.length), values: bad.slice(0, 10).join(", ") });
+	return entries.length === 1
+		? redirectWithNotice(c, "/blocklist", "notice.blocked", { value: entries[0]!.value })
+		: redirectWithNotice(c, "/blocklist", "notice.blockedMany", { count: String(entries.length) });
 });
 
 app.post("/blocklist/:id/delete", async (c) => {
@@ -1001,6 +1020,7 @@ app.post("/import/:source", async (c) => {
 	let server = "";
 	let aliases: ImportedAlias[];
 	let selection: Selection;
+	let extras: AddyExtras | null = null;
 	try {
 		if (source.fetch) {
 			const apiKey = typeof form.apiKey === "string" ? form.apiKey.trim() : "";
@@ -1025,6 +1045,8 @@ app.post("/import/:source", async (c) => {
 			selection = selectByDomain(aliases, domains, settings.aliasDomains);
 			// Contacts are fetched only for the aliases being imported, one list per alias.
 			if (sourceName === "simplelogin" && form.contacts === "1") await addSimpleLoginContacts(server, apiKey, selection.chosen, budget);
+			// addy.io's labels, rules and blocklist come with its aliases.
+			if (sourceName === "addy") extras = await fetchAddyExtras(server, apiKey, budget);
 		} else {
 			const file = form.file;
 			if (!(file instanceof File) || file.size === 0) return render({ error: t("imp.err.empty") });
@@ -1040,12 +1062,19 @@ app.post("/import/:source", async (c) => {
 				: t(error.reason === "auth" ? "imp.err.auth" : error.reason === "empty" ? "imp.err.empty" : "imp.err.format");
 		return render({ error: message });
 	}
-	const result = await importAliases(c.env.DB, settings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
-		keepDestinations: form.destinations === "1",
-		// Fewer, larger batches on the Free plan, where a request may make only 50 D1 queries.
-		batchSize: c.get("config").workersPlan === "free" ? 500 : 100,
-	});
-	console.log(JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length, newDestinations: result.newDestinations.length }));
+	// Labels first: importing the aliases labels them by name.
+	const extra = extras ? await importAddyExtras(c.env.DB, extras, selection.chosen) : {};
+	const result = {
+		...(await importAliases(c.env.DB, settings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
+			keepDestinations: form.destinations === "1",
+			// Fewer, larger batches on the Free plan, where a request may make only 50 D1 queries.
+			batchSize: c.get("config").workersPlan === "free" ? 500 : 100,
+		})),
+		...extra,
+	};
+	console.log(
+		JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length, newDestinations: result.newDestinations.length, rulesSkipped: result.rulesSkipped?.length }),
+	);
 	return render({ result });
 });
 
@@ -1121,8 +1150,9 @@ app.post("/aliases/bulk", async (c) => {
 		c.redirect(noticeUrl(back, key, params));
 	const action = form.action as (typeof BULK_ACTIONS)[number];
 	const ids = [...new Set((Array.isArray(form.ids) ? form.ids : [form.ids]).filter((id): id is string => typeof id === "string").map(normalizeEmail))].slice(0, 500);
-	const labelAction = typeof form.action === "string" ? /^(label|unlabel):(lb_[0-9a-f]{32})$/.exec(form.action) : null;
-	if (labelAction && ids.length) {
+	if ((form.action === "label" || form.action === "unlabel") && ids.length) {
+		const labelIds = [...new Set((Array.isArray(form.labels) ? form.labels : [form.labels]).filter((id): id is string => typeof id === "string" && /^lb_[0-9a-f]{32}$/.test(id)))].slice(0, 100);
+		if (!labelIds.length) return done("notice.bulkNoLabels");
 		// D1 binds at most 100 values a statement: the aliases are looked up in chunks.
 		const addresses: string[] = [];
 		for (let i = 0; i < ids.length; i += 90) {
@@ -1130,7 +1160,8 @@ app.post("/aliases/bulk", async (c) => {
 			const { results } = await c.env.DB.prepare(`SELECT address FROM aliases WHERE deleted_at IS NULL AND address IN (${chunk.map(() => "?").join(", ")})`).bind(...chunk).all<{ address: string }>();
 			addresses.push(...results.map((row) => row.address));
 		}
-		const changed = await toggleAliasLabel(c.env.DB, addresses, labelAction[2]!, labelAction[1] === "label");
+		let changed = 0;
+		for (const labelId of labelIds) changed += await toggleAliasLabel(c.env.DB, addresses, labelId, form.action === "label");
 		return done("notice.bulkDone", { count: String(changed) });
 	}
 	if (!BULK_ACTIONS.includes(action) || ids.length === 0) return done("notice.bulkBad");

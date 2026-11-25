@@ -1,9 +1,10 @@
 /**
  * Imports aliases from SimpleLogin or addy.io, through their APIs or a CSV export, with as much of
  * their history as the source offers: note, display name, on/off state, pin, forwarding address,
- * creation date, forward/block/reply/send counts and the dates of the latest of each. From
- * SimpleLogin's API it can also bring the contacts of each alias (they get new reverse aliases
- * here). Anything else the source knows (further mailboxes, PGP, labels, ids) is kept as details.
+ * creation date, forward/block/reply/send counts and the dates of the latest of each, and deleted
+ * aliases as deleted. From SimpleLogin's API it can also bring the contacts of each alias (they get
+ * new reverse aliases here); from addy.io's, its labels, rules and blocklist. Anything else the
+ * source knows (further mailboxes, PGP, ids) is kept as details.
  *
  * Only aliases on the chosen domains are imported. An alias on SimpleLogin's or addy.io's own
  * domains keeps receiving mail there, so importing it would do nothing; an alias on your own
@@ -14,6 +15,9 @@ import { cleanDisplayName, domainOf, extractEmail, makeReverseLocal, normalizeEm
 import { aliasDomainOfReverse, isOwnAddress } from "./domains";
 import type { Settings } from "./settings";
 import { discard, readTextLimited } from "./streams";
+import { DOMAIN_PATTERN } from "./format";
+import { LABEL_COLOURS, MAX_LABELS, cleanLabelName, nearestColour } from "./labels";
+import { cleanRule, insertRules, RuleError, type RuleInput } from "./rules";
 
 export type ImportSource = "simplelogin" | "addy" | "csv";
 
@@ -43,6 +47,10 @@ export type ImportedAlias = {
 	lastSentAt: number | null;
 	/** Everything else worth keeping, shown on the alias page. */
 	details: Record<string, unknown>;
+	/** When the alias was deleted at the source: it is imported deleted, and can be restored. */
+	deletedAt?: number | null;
+	/** Its labels at the source, by name. */
+	labels?: string[];
 	/** The alias's id at the source, for fetching its contacts. */
 	sourceId?: number;
 	contacts?: ImportedContact[];
@@ -57,6 +65,23 @@ export type ImportResult = {
 	skippedDomains: { domain: string; count: number }[];
 	/** Forwarding addresses the import added that were not in use here before. */
 	newDestinations: string[];
+	/** Of those added, how many were deleted at the source (and are deleted here). */
+	deleted: number;
+	/** addy.io only: labels, rules and blocklist entries added, and rules that could not be. */
+	labels?: number;
+	rules?: number;
+	rulesSkipped?: string[];
+	blocked?: number;
+	/** Parts of the account that could not be read (for example "rules"); the rest was imported. */
+	unread?: string[];
+};
+
+/** addy.io's labels, rules and blocklist: everything about the account besides the aliases. */
+export type AddyExtras = {
+	labels: { name: string; colour: string }[];
+	rules: Record<string, unknown>[];
+	blocklist: { kind: "address" | "domain"; value: string; hits: number; createdAt: number | null }[];
+	unread: string[];
 };
 
 export class ImportError extends Error {
@@ -269,22 +294,27 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 	}
 }
 
-/** addy.io: GET /api/v1/aliases?page[size]=100&page[number]=N until meta.last_page. Deleted aliases are left out. */
+/**
+ * addy.io: GET /api/v1/aliases?page[size]=100&page[number]=N until meta.last_page, deleted aliases
+ * included (they are imported deleted), with their recipients and labels.
+ */
 export async function fetchAddy(base: string, apiKey: string, budget: FetchBudget = newFetchBudget()): Promise<ImportedAlias[]> {
 	const out: ImportedAlias[] = [];
 	for (let page = 1; out.length < MAX_ALIASES && page <= MAX_PAGES; page += 1) {
-		const body = (await getJson(`${base}/api/v1/aliases?page%5Bsize%5D=100&page%5Bnumber%5D=${page}`, {
+		const body = (await getJson(`${base}/api/v1/aliases?page%5Bsize%5D=100&page%5Bnumber%5D=${page}&filter%5Bdeleted%5D=with&with=recipients%2Clabels`, {
 			Authorization: `Bearer ${apiKey}`,
 			"X-Requested-With": "XMLHttpRequest",
 		}, budget)) as { data?: unknown[]; meta?: { last_page?: number } };
 		if (!Array.isArray(body?.data)) throw new ImportError("format");
 		for (const raw of body.data.filter(isRecord)) {
 			const email = extractEmail(text(raw.email));
-			if (!email || raw.deleted_at) continue;
+			if (!email) continue;
 			const recipients = (Array.isArray(raw.recipients) ? (raw.recipients as { email?: unknown }[]).slice(0, 50) : [])
 				.map((recipient) => extractEmail(text(recipient?.email)))
 				.filter((value): value is string => !!value);
-			const labels = (Array.isArray(raw.labels) ? (raw.labels as { name?: unknown }[]).slice(0, 50) : []).map((label) => text(label?.name, 60)).filter(Boolean);
+			const labels = (Array.isArray(raw.labels) ? (raw.labels as { name?: unknown }[]).slice(0, 50) : [])
+				.map((label) => cleanLabelName(label?.name))
+				.filter((name): name is string => !!name);
 			const safeId = typeof raw.id === "number" && Number.isFinite(raw.id) ? raw.id : typeof raw.id === "string" ? raw.id.slice(0, 64) : undefined;
 			out.push({
 				...empty(email),
@@ -302,10 +332,11 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 				lastBlockAt: toTimestamp(raw.last_blocked),
 				lastReplyAt: toTimestamp(raw.last_replied),
 				lastSentAt: toTimestamp(raw.last_sent),
+				deletedAt: raw.deleted_at ? (toTimestamp(raw.deleted_at) ?? now()) : null,
+				labels,
 				details: clean({
 					id: safeId,
 					recipients: recipients.length > 1 ? recipients : undefined,
-					labels: labels.length ? labels : undefined,
 					extension: text(raw.extension, 64),
 					attached_recipients_only: raw.attached_recipients_only === true ? true : undefined,
 				}),
@@ -315,6 +346,123 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 		if (body.data.length === 0 || !(page < last)) break;
 	}
 	return out;
+}
+
+/** A list from addy.io that may or may not be paged: pages of 100 until a short one. */
+async function addyList(base: string, path: string, apiKey: string, budget: FetchBudget, paged: boolean): Promise<Record<string, unknown>[]> {
+	const out: Record<string, unknown>[] = [];
+	for (let page = 1; page <= MAX_PAGES; page += 1) {
+		const url = paged ? `${base}${path}?page%5Bsize%5D=100&page%5Bnumber%5D=${page}` : `${base}${path}`;
+		const body = (await getJson(url, { Authorization: `Bearer ${apiKey}`, "X-Requested-With": "XMLHttpRequest" }, budget)) as { data?: unknown[]; meta?: { last_page?: number } };
+		if (!Array.isArray(body?.data)) throw new ImportError("format");
+		out.push(...body.data.filter(isRecord));
+		const last = Number(body.meta?.last_page ?? NaN);
+		if (!paged || body.data.length < 100 || (Number.isFinite(last) && page >= last)) break;
+	}
+	return out;
+}
+
+/**
+ * addy.io's labels, rules and blocklist. Each is read on its own: one that cannot be read (an older
+ * self-hosted server, or the request budget used up) is named in unread and the rest still come.
+ */
+export async function fetchAddyExtras(base: string, apiKey: string, budget: FetchBudget = newFetchBudget()): Promise<AddyExtras> {
+	const extras: AddyExtras = { labels: [], rules: [], blocklist: [], unread: [] };
+	const read = async (part: string, run: () => Promise<void>) => {
+		try {
+			await run();
+		} catch (error) {
+			if (!(error instanceof ImportError) || error.reason === "auth") throw error;
+			extras.unread.push(part);
+		}
+	};
+	await read("labels", async () => {
+		for (const raw of await addyList(base, "/api/v1/labels", apiKey, budget, false)) {
+			const name = cleanLabelName(raw.name);
+			if (name) extras.labels.push({ name, colour: nearestColour(raw.colour) });
+		}
+	});
+	await read("rules", async () => {
+		const rules = await addyList(base, "/api/v1/rules", apiKey, budget, false);
+		extras.rules = rules.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+	});
+	await read("blocklist", async () => {
+		for (const raw of await addyList(base, "/api/v1/blocklist", apiKey, budget, true)) {
+			const value = (typeof raw.value === "string" ? raw.value : "").trim().toLowerCase().replace(/^@/, "");
+			const email = raw.type === "email" ? extractEmail(value) : null;
+			const domain = raw.type === "domain" && DOMAIN_PATTERN.test(value) ? value : null;
+			if (email === value || domain) {
+				extras.blocklist.push({ kind: domain ? "domain" : "address", value, hits: count(raw.blocked), createdAt: toTimestamp(raw.created_at) });
+			}
+		}
+	});
+	return extras;
+}
+
+/**
+ * Saves addy.io's labels (with those named on imported aliases), rules and blocklist; run before
+ * importAliases, which labels the aliases. Labels and blocklist entries already here stay as they
+ * are; a rule whose name is already here is taken as imported before. A rule aliasflare cannot
+ * run as written (regular expressions, webhooks, encryption and the like) is left out, by name.
+ */
+export async function importAddyExtras(db: D1Database, extras: AddyExtras, aliases: ImportedAlias[]): Promise<Pick<ImportResult, "labels" | "rules" | "rulesSkipped" | "blocked" | "unread">> {
+	const timestamp = now();
+	// Labels: those of the account, then any only named on an alias.
+	const { results: existingLabels } = await db.prepare("SELECT name FROM labels").all<{ name: string }>();
+	const known = new Set(existingLabels.map((row) => row.name.toLowerCase()));
+	const wanted = new Map<string, { name: string; colour: string }>();
+	for (const label of extras.labels) if (!known.has(label.name.toLowerCase())) wanted.set(label.name.toLowerCase(), label);
+	for (const alias of aliases) {
+		for (const name of alias.labels ?? []) {
+			const key = name.toLowerCase();
+			if (!known.has(key) && !wanted.has(key)) wanted.set(key, { name, colour: LABEL_COLOURS[(known.size + wanted.size) % LABEL_COLOURS.length]! });
+		}
+	}
+	const newLabels = [...wanted.values()].slice(0, Math.max(0, MAX_LABELS - known.size));
+	const statements: D1PreparedStatement[] = newLabels.map((label) =>
+		db.prepare("INSERT INTO labels (id, name, colour, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING").bind(newId("lb"), label.name, label.colour, timestamp, timestamp),
+	);
+	// The blocklist: entries already here keep their own count.
+	for (const entry of extras.blocklist) {
+		statements.push(
+			db
+				.prepare("INSERT INTO blocklist (id, kind, value, hits, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (value) DO NOTHING")
+				.bind(newId("bl"), entry.kind, entry.value, entry.hits, entry.createdAt ?? timestamp),
+		);
+	}
+	let labels = 0;
+	let blocked = 0;
+	for (let i = 0; i < statements.length; i += 100) {
+		const results = await db.batch(statements.slice(i, i + 100));
+		results.forEach((result, offset) => {
+			if (!(result.meta.changes ?? 0)) return;
+			if (i + offset < newLabels.length) labels += 1;
+			else blocked += 1;
+		});
+	}
+
+	// Rules, in addy.io's order, after those already here.
+	const { results: existingRules } = await db.prepare("SELECT name FROM rules").all<{ name: string }>();
+	const ruleNames = new Set(existingRules.map((row) => row.name.toLowerCase()));
+	const inputs: RuleInput[] = [];
+	const rulesSkipped: string[] = [];
+	for (const raw of extras.rules) {
+		let input: RuleInput;
+		try {
+			input = cleanRule(raw);
+		} catch (error) {
+			if (!(error instanceof RuleError)) throw error;
+			const name = text(raw.name, 60);
+			if (name) rulesSkipped.push(name);
+			continue;
+		}
+		if (ruleNames.has(input.name.toLowerCase())) continue;
+		ruleNames.add(input.name.toLowerCase());
+		inputs.push(input);
+	}
+	const rules = await insertRules(db, inputs);
+	rulesSkipped.push(...inputs.slice(rules).map((input) => input.name));
+	return { labels, rules, rulesSkipped, blocked, unread: extras.unread };
 }
 
 /** RFC 4180 CSV: quoted fields, doubled quotes, CRLF or LF. */
@@ -385,7 +533,8 @@ export function parseAliasCsv(input: string): ImportedAlias[] {
 	for (const row of rows) {
 		if (out.length >= MAX_ALIASES) break;
 		const email = extractEmail(cell(row, "email"));
-		if (!email || (cell(row, "deletedAt") ?? "").trim() !== "") continue;
+		if (!email) continue;
+		const deleted = (cell(row, "deletedAt") ?? "").trim();
 		const destinations = (cell(row, "destination") ?? "")
 			.split(/[\s,;]+/)
 			.map((value) => extractEmail(value))
@@ -406,6 +555,7 @@ export function parseAliasCsv(input: string): ImportedAlias[] {
 			lastBlockAt: toTimestamp(cell(row, "lastBlockAt")),
 			lastReplyAt: toTimestamp(cell(row, "lastReplyAt")),
 			lastSentAt: toTimestamp(cell(row, "lastSentAt")),
+			deletedAt: deleted ? (toTimestamp(deleted) ?? now()) : null,
 			details: clean({ mailboxes: destinations.length > 1 ? destinations : undefined }),
 		});
 	}
@@ -530,23 +680,27 @@ export async function importAliases(
 				.bind(alias.note, name, alias.createdAt, ...history(alias), timestamp, alias.email);
 		}
 		const destination = destinationFor(alias);
+		// A deleted alias comes in as one deleted here: off and unpinned, and it can be restored.
+		const deletedAt = alias.deletedAt ?? null;
+		const enabled = alias.enabled && deletedAt === null;
 		return db
 			.prepare(
-				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, pinned, num_id, uid, created_at, updated_at,
+				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, pinned, deleted_at, num_id, uid, created_at, updated_at,
 				 imported_from, imported_at, imported_forwarded, imported_blocked, imported_replied, imported_sent,
 				 imported_last_forward_at, imported_last_block_at, imported_last_reply_at, imported_last_sent_at, imported_details)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'aliases'), 0)) + 1 FROM aliases), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'aliases'), 0)) + 1 FROM aliases), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT (address) DO NOTHING`,
 			)
 			.bind(
 				alias.email,
 				mailboxByDomain.get(domainOf(alias.email)) ?? "",
-				alias.enabled ? 1 : 0,
-				alias.enabled ? "all" : "none",
+				enabled ? 1 : 0,
+				enabled ? "all" : "none",
 				destination,
 				alias.note,
 				name,
-				alias.pinned ? 1 : 0,
+				alias.pinned && deletedAt === null ? 1 : 0,
+				deletedAt,
 				crypto.randomUUID(),
 				alias.createdAt ?? timestamp,
 				timestamp,
@@ -586,10 +740,19 @@ export async function importAliases(
 			);
 		}
 	}
+	// Labels by name (importAddyExtras made them); an alias keeps any labels it already had.
+	for (const alias of list) {
+		for (const label of new Set((alias.labels ?? []).map((name) => name.toLowerCase()))) {
+			statements.push(
+				db.prepare("INSERT OR IGNORE INTO alias_labels (alias_address, label_id) SELECT ?, id FROM labels WHERE name = ? COLLATE NOCASE").bind(alias.email, label),
+			);
+		}
+	}
 	// A batch is one query; scale up dynamically so large imports with many contacts stay well below Workers' subrequest limit.
 	const batchSize = Math.max(options.batchSize ?? 100, Math.ceil(statements.length / 400));
 	let created = 0;
 	let updated = 0;
+	let deleted = 0;
 	for (let i = 0; i < statements.length; i += batchSize) {
 		const results = await db.batch(statements.slice(i, i + batchSize));
 		results.forEach((result, offset) => {
@@ -597,7 +760,10 @@ export async function importAliases(
 			if (idx >= list.length) return;
 			const changes = result.meta.changes ?? 0;
 			if (existing.has(list[idx]!.email)) updated += changes > 0 ? 1 : 0;
-			else created += changes > 0 ? 1 : 0;
+			else if (changes > 0) {
+				created += 1;
+				if (list[idx]!.deletedAt) deleted += 1;
+			}
 		});
 	}
 	// The imported history (the other service's last forward, reply or send, and the contacts'
@@ -618,5 +784,6 @@ export async function importAliases(
 		contacts,
 		skippedDomains: selection.skippedDomains,
 		newDestinations: [...newDestinations].sort(),
+		deleted,
 	};
 }
