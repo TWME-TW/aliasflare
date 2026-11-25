@@ -99,9 +99,15 @@ async function findRule(token: string, zoneId: string, address: string): Promise
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 // Only "already exists / enabled / configured" counts as done, not any message with "exist" in it.
 const alreadyDone = (error: unknown) => /\balready (exists?|enabled|configured|added|in use)\b|\bduplicate\b/i.test(message(error));
-// Conflicting DNS records (e.g. existing MX/TXT/SPF/CNAME records) must be reported, not treated as done.
-const alreadyRoutingEnabled = (error: unknown) =>
-	alreadyDone(error) && !/\b(?:mx|txt|cname|spf|dns)?\s*records?\b|\bconflict/i.test(message(error));
+/** True when Cloudflare reports Email Routing as on for the zone. */
+async function routingEnabled(token: string, zoneId: string): Promise<boolean> {
+	try {
+		const settings = await cf<{ enabled?: boolean; status?: string }>(token, `/zones/${encodeURIComponent(zoneId)}/email/routing`);
+		return settings?.enabled === true || settings?.status === "ready";
+	} catch {
+		return false;
+	}
+}
 const toWorker = (actions: Action[], workerName: string) => actions.some((action) => action.type === "worker" && action.value?.includes(workerName));
 
 /** Enables Email Routing for a domain: the zone apex, or a subdomain of it. */
@@ -112,7 +118,9 @@ async function enableRouting(token: string, zone: { id: string; name: string }, 
 			...(zone.name === domain ? {} : { body: JSON.stringify({ name: domain }) }),
 		});
 	} catch (error) {
-		if (!alreadyRoutingEnabled(error)) throw error;
+		// "Already exists" is done only when Email Routing is really on: running setup again says so
+		// too, but so does an MX record of another mail service, which must be reported.
+		if (!alreadyDone(error) || !(await routingEnabled(token, zone.id))) throw error;
 	}
 }
 

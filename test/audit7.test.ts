@@ -238,6 +238,20 @@ describe("4. SSRF, Mailflare JMAP safety, and Cloudflare setup hardening", () =>
 		expect(res.domain).toBe("a.test");
 		expect(res.steps.find((s) => s.step === "routing")).toMatchObject({ ok: false });
 		expect(res.steps.find((s) => s.step === "catchall")).toMatchObject({ ok: false });
+
+		// Running setup again on a domain whose Email Routing is already on is not a conflict.
+		vi.stubGlobal("fetch", async (url: string, init: RequestInit = {}) => {
+			const path = new URL(url).pathname.replace("/client/v4", "");
+			if (path === "/zones") return Response.json({ success: true, result: [{ id: "z1", name: "a.test" }] });
+			if (path.endsWith("/email/routing/dns") && init.method === "POST") {
+				return Response.json({ success: false, errors: [{ code: 81057, message: "MX record already exists" }] }, { status: 400 });
+			}
+			if (path.endsWith("/email/routing") && (init.method ?? "GET") === "GET") return Response.json({ success: true, result: { enabled: true, status: "ready" } });
+			if (path.endsWith("/email/routing/rules") && (init.method ?? "GET") === "GET") return Response.json({ success: true, result: [] });
+			return Response.json({ success: true, result: {} });
+		});
+		const again = await setUpDomain({ token: "t", domain: "a.test", workerName: "aliasflare" });
+		expect(again.steps.find((s) => s.step === "routing")).toMatchObject({ ok: true });
 	});
 });
 
