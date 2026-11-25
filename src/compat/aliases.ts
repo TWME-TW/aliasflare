@@ -45,17 +45,51 @@ export type AliasQuery = {
 	enabled?: boolean;
 	pinned?: boolean;
 	search?: string;
+	/** Only aliases on this domain. */
+	domain?: string;
+	/** Only aliases forwarding to this address; the default one also matches aliases with no address of their own. */
+	destination?: { email: string; isDefault: boolean };
+	/** A key of ALIAS_SORT; without one, pinned first, then most recently created or used. */
+	sort?: { key: string; desc: boolean };
 	limit: number;
 	offset: number;
 };
 
-function whereClause(query: Omit<AliasQuery, "limit" | "offset">): { sql: string; params: unknown[] } {
+// A Map, so a client's sort value cannot reach ORDER BY unless it is listed here.
+export const ALIAS_SORT = new Map([
+	["local_part", "a.address"],
+	["email", "a.address"],
+	["domain", "substr(a.address, instr(a.address, '@') + 1)"],
+	["active", "(a.forward_mode != 'none')"],
+	["created_at", "a.created_at"],
+	["updated_at", "a.updated_at"],
+	["deleted_at", "a.deleted_at"],
+	["emails_forwarded", "nb_forward"],
+	["emails_blocked", "nb_block"],
+	["emails_replied", "nb_reply"],
+	["emails_sent", "nb_sent"],
+	["last_forwarded", "last_forward_at"],
+	["last_blocked", "last_block_at"],
+	["last_replied", "last_reply_at"],
+	["last_sent", "last_sent_at"],
+	["last_used", "a.last_used_at"],
+]);
+
+function whereClause(query: Omit<AliasQuery, "limit" | "offset" | "sort">): { sql: string; params: unknown[] } {
 	const conditions: string[] = [];
 	const params: unknown[] = [];
 	if ((query.deleted ?? "without") === "without") conditions.push("a.deleted_at IS NULL");
 	if (query.deleted === "only") conditions.push("a.deleted_at IS NOT NULL");
 	if (query.enabled !== undefined) conditions.push(query.enabled ? "a.forward_mode != 'none'" : "a.forward_mode = 'none'");
 	if (query.pinned !== undefined) conditions.push(query.pinned ? "a.pinned = 1" : "a.pinned = 0");
+	if (query.domain !== undefined) {
+		conditions.push("a.address LIKE ? ESCAPE '\\'");
+		params.push(`%@${query.domain.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}`);
+	}
+	if (query.destination) {
+		conditions.push(query.destination.isDefault ? "(a.destination = ? OR a.destination IS NULL OR a.destination = '')" : "a.destination = ?");
+		params.push(query.destination.email);
+	}
 	if (query.search?.trim()) {
 		conditions.push("(a.address LIKE ? ESCAPE '\\' OR COALESCE(a.note, '') LIKE ? ESCAPE '\\' OR COALESCE(a.name, '') LIKE ? ESCAPE '\\')");
 		const like = `%${query.search.trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -66,9 +100,13 @@ function whereClause(query: Omit<AliasQuery, "limit" | "offset">): { sql: string
 
 export async function listAliasViews(db: D1Database, query: AliasQuery): Promise<{ aliases: AliasView[]; total: number }> {
 	const where = whereClause(query);
+	const column = query.sort && ALIAS_SORT.get(query.sort.key);
+	const order = column
+		? `${column} ${query.sort!.desc ? "DESC" : "ASC"}, a.num_id ${query.sort!.desc ? "DESC" : "ASC"}`
+		: "a.pinned DESC, MAX(a.created_at, COALESCE(a.last_used_at, 0)) DESC, a.num_id DESC";
 	const [rows, count] = await db.batch([
 		db
-			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a ${where.sql} ORDER BY a.pinned DESC, MAX(a.created_at, COALESCE(a.last_used_at, 0)) DESC, a.num_id DESC LIMIT ? OFFSET ?`)
+			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`)
 			.bind(...where.params, query.limit, query.offset),
 		db.prepare(`SELECT COUNT(*) AS total FROM aliases a ${where.sql}`).bind(...where.params),
 	]);

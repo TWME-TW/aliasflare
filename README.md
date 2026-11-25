@@ -125,6 +125,8 @@ A subdomain allows at most 200 routing rules, which is why one rule for `reply@`
 2. On **API keys**, create one key per app or extension.
 3. In the app or extension, choose the self-hosted option and enter the URL shown on the API keys page and the key (SimpleLogin: *API URL*; addy.io: *Instance URL*).
 
+In the addy.io apps, aliases, recipients (your forwarding addresses), domains, the blocklist and actions on several aliases at once work. aliasflare has no labels, usernames, rules or failed-delivery list, so those screens stay empty. Recipient, domain and account settings are changed in aliasflare, not in the app.
+
 **Bitwarden** (and Vaultwarden, which uses the same apps) can create an alias for each new login with its *Forwarded email alias* generator. It is available in the browser extension and the desktop app.
 
 1. Turn on SimpleLogin or addy.io support and create an API key for Bitwarden, as above.

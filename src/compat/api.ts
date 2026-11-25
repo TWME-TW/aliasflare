@@ -51,7 +51,9 @@ export async function recordApiLockout(ip: string): Promise<void> {
 }
 type C = Context<ApiEnv>;
 
-const VERSION = { version: "0.2.0", major: 0, minor: 2, patch: 0 };
+// The addy.io apps refuse a self-hosted server below their minimum version (1.7.4 in late 2026)
+// and compare only these numbers, so report the addy.io API level aliasflare follows.
+const VERSION = { version: "aliasflare (addy.io API 1.99)", major: 1, minor: 99, patch: 0 };
 const SL_PAGE_SIZE = 20;
 
 export const api = new Hono<ApiEnv>();
@@ -517,6 +519,7 @@ api.get("/setting/domains", (c) => c.json(c.get("settings").aliasDomains.map((do
 // ═════════════════════════════════════════ addy.io ═════════════════════════════════════════
 
 const OWNER_ID = "00000000-0000-4000-8000-000000000001";
+const addyDomainId = (index: number) => `00000000-0000-4000-9000-${String(index + 1).padStart(12, "0")}`;
 const addyDate = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, "") : null);
 
 async function addyRecipient(email: string, aliasCount: number, settings: Settings) {
@@ -590,8 +593,8 @@ api.get("/v1/api-token-details", async (c) => {
 api.get("/v1/account-details", async (c) => {
 	const settings = c.get("settings");
 	const all = await totals(c.env.DB);
-	const defaultRecipient = settings.defaultDestination ? (await destinationIds(settings.defaultDestination)).uid : null;
 	const destinations = await listDestinations(c.env.DB, settings);
+	const defaultRecipient = destinations[0]?.uid ?? "";
 	return c.json({
 		data: {
 			id: OWNER_ID,
@@ -602,11 +605,11 @@ api.get("/v1/account-details", async (c) => {
 			spam_warning_behaviour: "off",
 			wkd_auto_encrypt: 0,
 			bandwidth: 0,
-			username_count: 1,
+			username_count: 0,
 			username_limit: 1,
 			default_username_id: OWNER_ID,
 			default_recipient_id: defaultRecipient,
-			default_alias_domain: settings.aliasDomains[0] ?? null,
+			default_alias_domain: settings.aliasDomains[0] ?? "",
 			default_alias_format: settings.randomAliasFormat,
 			alias_separator: ".",
 			custom_alias_random_characters: false,
@@ -721,7 +724,8 @@ api.get("/v1/blocklist", async (c) => {
 	return c.json({
 		data: rows.map(addyBlock),
 		links: { first: null, last: null, prev: null, next: null },
-		meta: { current_page: pageNumber, from, last_page: lastPage, per_page: size, to: from ? from + rows.length - 1 : null, total },
+		// The iOS app needs links and path whenever meta is present.
+		meta: { current_page: pageNumber, from, last_page: lastPage, links: [], path: `${new URL(c.req.url).origin}/api/v1/blocklist`, per_page: size, to: from ? from + rows.length - 1 : null, total },
 	});
 });
 
@@ -768,7 +772,7 @@ api.post("/v1/blocklist/delete/bulk", async (c) => {
 
 api.get("/v1/domain-options", (c) => {
 	const settings = c.get("settings");
-	return c.json({ data: settings.aliasDomains, sharedDomains: [], defaultAliasDomain: settings.aliasDomains[0] ?? null, defaultAliasFormat: settings.randomAliasFormat });
+	return c.json({ data: settings.aliasDomains, sharedDomains: [], defaultAliasDomain: settings.aliasDomains[0] ?? "", defaultAliasFormat: settings.randomAliasFormat });
 });
 
 api.get("/v1/aliases", async (c) => {
@@ -777,11 +781,21 @@ api.get("/v1/aliases", async (c) => {
 	const pinned = c.req.query("filter[pinned]");
 	const size = pageSize(c.req.query("page[size]"));
 	const page = pageParam(c.req.query("page[number]"), 1);
+	const settings = c.get("settings");
+	const sort = c.req.query("sort");
+	// The apps filter by domain id and recipient id; an unknown one matches nothing.
+	const domainId = c.req.query("domain");
+	const recipientId = c.req.query("recipient");
+	const domain = domainId ? (settings.aliasDomains.find((_, index) => addyDomainId(index) === domainId) ?? "\u0000") : undefined;
+	const recipient = recipientId ? (await listDestinations(c.env.DB, settings)).find((d) => d.uid === recipientId) : undefined;
 	const { aliases, total } = await listAliasViews(c.env.DB, {
 		deleted: deleted === "with" || deleted === "only" ? deleted : "without",
 		enabled: active === "true" ? true : active === "false" ? false : undefined,
 		pinned: pinned === "true" ? true : pinned === "false" ? false : undefined,
 		search: c.req.query("filter[search]")?.slice(0, 200),
+		domain,
+		destination: recipientId ? (recipient ?? { email: "\u0000", isDefault: false }) : undefined,
+		sort: sort ? { key: sort.replace(/^-/, ""), desc: sort.startsWith("-") } : undefined,
 		limit: size,
 		offset: (page - 1) * size,
 	});
@@ -892,27 +906,108 @@ api.get("/v1/recipients/:id", async (c) => {
 	return c.json({ data: await addyRecipient(match.email, match.aliasCount, settings) });
 });
 
-api.get("/v1/domains", (c) =>
-	c.json({
-		data: c.get("settings").aliasDomains.map((domain, index) => ({
-			id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
-			user_id: OWNER_ID,
-			domain,
-			description: null,
-			from_name: null,
-			aliases_count: 0,
-			default_recipient: null,
-			active: true,
-			catch_all: true,
-			auto_create_regex: null,
-			domain_verified_at: "2000-01-01 00:00:00",
-			domain_mx_validated_at: "2000-01-01 00:00:00",
-			domain_sending_verified_at: "2000-01-01 00:00:00",
-			created_at: "2000-01-01 00:00:00",
-			updated_at: "2000-01-01 00:00:00",
-		})),
-	}),
-);
+const addyDomain = (domain: string, index: number) => ({
+	id: addyDomainId(index),
+	user_id: OWNER_ID,
+	domain,
+	description: null,
+	from_name: null,
+	aliases_count: 0,
+	default_recipient: null,
+	active: true,
+	catch_all: true,
+	shared_with_family: false,
+	default_attached_recipients_only: false,
+	auto_create_regex: null,
+	domain_verified_at: "2000-01-01 00:00:00",
+	domain_mx_validated_at: "2000-01-01 00:00:00",
+	domain_sending_verified_at: "2000-01-01 00:00:00",
+	created_at: "2000-01-01 00:00:00",
+	updated_at: "2000-01-01 00:00:00",
+});
+
+api.get("/v1/domains", (c) => c.json({ data: c.get("settings").aliasDomains.map(addyDomain) }));
+
+api.get("/v1/domains/:id", (c) => {
+	const index = c.get("settings").aliasDomains.findIndex((_, i) => addyDomainId(i) === c.req.param("id"));
+	if (index < 0) throw new ClientError(404, "Not found");
+	return c.json({ data: addyDomain(c.get("settings").aliasDomains[index]!, index) });
+});
+
+// Bulk alias actions from the apps' multiple selection: { ids: [...] } in, { message, ids } out,
+// ids being those that were changed.
+const BULK_LIMIT = 100;
+
+async function bulkAliases(c: C, includeDeleted: boolean): Promise<{ input: Record<string, unknown>; aliases: AliasView[] }> {
+	const input = await body(c);
+	const ids = Array.isArray(input.ids) ? input.ids.filter((id): id is string => typeof id === "string").slice(0, BULK_LIMIT) : [];
+	if (!ids.length) throw new ClientError(422, "The ids field is required.");
+	const aliases: AliasView[] = [];
+	for (const id of new Set(ids)) {
+		const alias = await getAliasView(c.env.DB, { uid: id });
+		if (alias && (includeDeleted || !alias.deleted_at)) aliases.push(alias);
+	}
+	if (!aliases.length) throw new ClientError(404, "No aliases found");
+	return { input, aliases };
+}
+
+const bulkDone = (c: C, aliases: AliasView[], verb: string) =>
+	c.json({ message: `${aliases.length} alias${aliases.length === 1 ? "" : "es"} ${verb} successfully`, ids: aliases.map((alias) => alias.uid) });
+
+api.post("/v1/aliases/get/bulk", async (c) => {
+	const { aliases } = await bulkAliases(c, true);
+	return c.json({ data: await Promise.all(aliases.map((alias) => addyAlias(c, alias))) });
+});
+
+for (const [action, verb, includeDeleted, run] of [
+	["activate", "activated", false, (db: D1Database, address: string) => updateAlias(db, address, { enabled: true })],
+	["deactivate", "deactivated", false, (db: D1Database, address: string) => updateAlias(db, address, { enabled: false })],
+	["pin", "pinned", false, (db: D1Database, address: string) => updateAlias(db, address, { pinned: true })],
+	["unpin", "unpinned", false, (db: D1Database, address: string) => updateAlias(db, address, { pinned: false })],
+	["delete", "deleted", false, deleteAlias],
+	["restore", "restored", true, restoreAlias],
+	["forget", "forgotten", true, forgetAlias],
+] as const) {
+	api.post(`/v1/aliases/${action}/bulk`, async (c) => {
+		const { aliases } = await bulkAliases(c, includeDeleted);
+		const changed = action === "restore" ? aliases.filter((alias) => alias.deleted_at) : aliases;
+		for (const alias of changed) await run(c.env.DB, alias.address);
+		return bulkDone(c, changed, verb);
+	});
+}
+
+api.post("/v1/aliases/recipients/bulk", async (c) => {
+	const { input, aliases } = await bulkAliases(c, false);
+	const ids = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
+	if (ids.length && typeof ids[0] !== "string") throw new ClientError(400, "Unknown mailbox");
+	const destination = ids.length ? await resolveDestination(c.env.DB, c.get("settings"), ids[0] as string) : null;
+	for (const alias of aliases) await updateAlias(c.env.DB, alias.address, { destination: destination ?? null });
+	return bulkDone(c, aliases, "updated");
+});
+
+// aliasflare has no labels, usernames, rules or failed-delivery store. The apps load these lists on
+// start and in the background, so answer with empty lists rather than errors; creating one is refused.
+const NOT_SUPPORTED = "Not supported by aliasflare";
+const emptyPage = (c: C) => {
+	const url = new URL(c.req.url);
+	return c.json({
+		data: [],
+		links: { first: null, last: null, prev: null, next: null },
+		meta: { current_page: 1, from: null, last_page: 1, links: [], path: `${url.origin}${url.pathname}`, per_page: pageSize(c.req.query("page[size]")), to: null, total: 0 },
+	});
+};
+api.get("/v1/labels", (c) => c.json({ data: [] }));
+api.get("/v1/usernames", (c) => c.json({ data: [] }));
+api.get("/v1/rules", (c) => c.json({ data: [] }));
+api.get("/v1/failed-deliveries", emptyPage);
+api.post("/v1/aliases/labels/bulk", async (c) => {
+	const { input, aliases } = await bulkAliases(c, false);
+	if (Array.isArray(input.label_ids) && input.label_ids.length) throw new ClientError(422, NOT_SUPPORTED);
+	return bulkDone(c, aliases, "updated");
+});
+for (const path of ["/v1/labels", "/v1/usernames", "/v1/rules", "/v1/domains", "/v1/recipients"]) {
+	api.post(path, (c) => c.json({ message: NOT_SUPPORTED, errors: { id: [NOT_SUPPORTED] } }, 422));
+}
 
 api.all("*", (c) => c.json({ error: "Not supported by aliasflare", message: "Not Found" }, 404));
 
