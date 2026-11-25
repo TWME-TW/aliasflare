@@ -14,6 +14,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 | --- | --- |
 | ![An alias and its contacts](docs/screenshots/alias.png) | ![Activity](docs/screenshots/activity.png) |
 | ![Settings](docs/screenshots/settings.png) | ![Dark mode](docs/screenshots/dashboard-dark.png) |
+| ![A rule: conditions and actions](docs/screenshots/rules.png) | ![Labels](docs/screenshots/labels.png) |
 
 On a phone:
 
