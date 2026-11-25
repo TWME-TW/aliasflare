@@ -382,6 +382,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers 免費方案一次最多只能設定 {count} 個網域。請少勾選幾個，其餘的再執行一次設定。",
 	"conn.provider.brevo": "Brevo（免費：每天 300 封）",
 	"conn.brevoLimits": "Brevo 不接受串接標頭與內嵌圖片：收件者可能會把回信看成新的對話，內嵌圖片會變成附件，而含有 Brevo 拒收檔案類型（例如 .exe 或 .json）的回信會被退回給你。",
+	"alias.forwarding": "轉寄設定",
 };
 
 export default dictionary;

@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Trên gói Workers Miễn phí, bạn chỉ có thể thiết lập tối đa {count} miền mỗi lần. Hãy chọn ít hơn và chạy lại thiết lập cho phần còn lại.",
 	"conn.provider.brevo": "Brevo (miễn phí: 300 thư mỗi ngày)",
 	"conn.brevoLimits": "Brevo không chấp nhận tiêu đề chuỗi thư hoặc hình ảnh nhúng: thư trả lời có thể hiển thị với người nhận như một cuộc trò chuyện mới, hình ảnh nhúng được gửi dưới dạng tệp đính kèm, và các thư trả lời có loại tệp mà Brevo từ chối (như .exe hoặc .json) sẽ bị trả lại cho bạn.",
+	"alias.forwarding": "Chuyển tiếp",
 };
 
 export default dictionary;

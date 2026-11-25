@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Sur la formule gratuite de Workers, configurez au maximum {count} domaines à la fois. Cochez-en moins et relancez la configuration pour les autres.",
 	"conn.provider.brevo": "Brevo (gratuit : 300 par jour)",
 	"conn.brevoLimits": "Brevo n'accepte pas les en-têtes de fil ni les images intégrées : une réponse peut apparaître comme une nouvelle conversation pour le destinataire, les images intégrées arrivent en pièces jointes, et les réponses contenant des types de fichiers refusés par Brevo (comme .exe ou .json) vous sont renvoyées.",
+	"alias.forwarding": "Transfert",
 };
 
 export default dictionary;

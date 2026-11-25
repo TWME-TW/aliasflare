@@ -120,6 +120,11 @@ function noticeUrl(path: string, key: MessageKey, params?: Record<string, string
 	return `${path}${path.includes("?") ? "&" : "?"}${query}`;
 }
 
+/** Where a change to one alias returns: its own page when made there, else the alias list. */
+function aliasBack(form: Record<string, unknown>, address: string): string {
+	return form.back === "alias" ? `/aliases/${encodeURIComponent(address)}` : "/";
+}
+
 function redirectWithNotice(c: C, path: string, key: MessageKey, params?: Record<string, string>) {
 	return c.redirect(noticeUrl(path, key, params));
 }
@@ -800,9 +805,10 @@ app.post("/aliases/bulk", async (c) => {
 app.post("/aliases/:address/mode", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
 	const form = await c.req.parseBody();
-	if (!isForwardMode(form.mode)) return redirectWithNotice(c, "/", "notice.badMode");
+	const back = aliasBack(form, address);
+	if (!isForwardMode(form.mode)) return redirectWithNotice(c, back, "notice.badMode");
 	await setForwardMode(c.env.DB, address, form.mode);
-	return redirectWithNotice(c, "/", "notice.modeSaved", { alias: address });
+	return redirectWithNotice(c, back, "notice.modeSaved", { alias: address });
 });
 
 app.post("/aliases/new", async (c) => {
@@ -843,14 +849,15 @@ app.post("/aliases/new", async (c) => {
 app.post("/aliases/:address/destination", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
 	const form = await c.req.parseBody();
+	const back = aliasBack(form, address);
 	const raw = typeof form.destination === "string" ? form.destination.trim() : "";
 	const destination = raw ? extractEmail(raw) : null;
-	if (raw && !destination) return redirectWithNotice(c, "/", "notice.badDestination");
+	if (raw && !destination) return redirectWithNotice(c, back, "notice.badDestination");
 	if (destination && (isOwnAddress(destination, [...(await loadSettings(c.env.DB)).aliasDomains, domainOf(address)]) || destination === address)) {
-		return redirectWithNotice(c, "/", "notice.loop");
+		return redirectWithNotice(c, back, "notice.loop");
 	}
 	await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?").bind(destination, now(), address).run();
-	return redirectWithNotice(c, "/", "notice.aliasDestinationSaved", { alias: address });
+	return redirectWithNotice(c, back, "notice.aliasDestinationSaved", { alias: address });
 });
 
 app.post("/aliases/:address/note", async (c) => {
@@ -874,7 +881,8 @@ app.get("/aliases/:address", async (c) => {
 	)
 		.bind(alias.address)
 		.all<ContactRow>();
-	return c.html(aliasPage(c.get("t"), { alias, contacts, notice: noticeFrom(c) }));
+	const { defaultDestination } = await loadSettings(c.env.DB);
+	return c.html(aliasPage(c.get("t"), { alias, contacts, defaultDestination, notice: noticeFrom(c) }));
 });
 
 app.post("/aliases/:address/contacts", async (c) => {

@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "No plano gratuito do Workers, configure no máximo {count} domínios por vez. Marque menos e execute a configuração novamente para os demais.",
 	"conn.provider.brevo": "Brevo (grátis: 300 por dia)",
 	"conn.brevoLimits": "O Brevo não aceita cabeçalhos de thread nem imagens inline: uma resposta pode aparecer para o destinatário como uma nova conversa, as imagens inline chegam como anexos, e respostas com tipos de arquivo que o Brevo recusa (como .exe ou .json) são devolvidas a você.",
+	"alias.forwarding": "Encaminhamento",
 };
 
 export default dictionary;

@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "W bezpłatnym planie Workers można konfigurować najwyżej {count} domen naraz. Zaznacz mniej i uruchom konfigurację ponownie dla pozostałych.",
 	"conn.provider.brevo": "Brevo (bezpłatnie: 300 dziennie)",
 	"conn.brevoLimits": "Brevo nie obsługuje nagłówków wątków ani obrazów w treści: odpowiedź może dla odbiorcy wyglądać jak nowa rozmowa, obrazy w treści trafiają jako załączniki, a odpowiedzi z typami plików odrzucanymi przez Brevo (np. .exe lub .json) wracają do Ciebie.",
+	"alias.forwarding": "Przekazywanie",
 };
 
 export default dictionary;

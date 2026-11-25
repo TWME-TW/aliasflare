@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Kwenye mpango wa Workers Free, weka kikoa {count} au chini kwa wakati mmoja. Chagua vichache zaidi na endesha usanidi tena kwa vilivyobaki.",
 	"conn.provider.brevo": "Brevo (bure: 300 kwa siku)",
 	"conn.brevoLimits": "Brevo haikubali vichwa vya mnyororo wa barua wala picha zilizopachikwa: jibu linaweza kuonekana kwa mpokeaji kama mazungumzo mapya, picha zilizopachikwa hufika kama viambatisho, na majibu yenye aina za faili ambazo Brevo hukataa (kama .exe au .json) hurudishwa kwako.",
+	"alias.forwarding": "Kutuma",
 };
 
 export default dictionary;

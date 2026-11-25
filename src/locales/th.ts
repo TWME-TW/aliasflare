@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "ในแพ็กเกจ Workers Free ตั้งค่าโดเมนได้สูงสุด {count} โดเมนต่อครั้ง เลือกให้น้อยลงแล้วรันการตั้งค่าอีกครั้งสำหรับโดเมนที่เหลือ",
 	"conn.provider.brevo": "Brevo (ฟรี: 300 ฉบับต่อวัน)",
 	"conn.brevoLimits": "Brevo ไม่รองรับ thread header หรือรูปภาพแบบ inline การตอบกลับอาจแสดงต่อผู้รับเป็นการสนทนาใหม่ รูปภาพ inline จะถูกส่งมาเป็นไฟล์แนบ และการตอบกลับที่มีประเภทไฟล์ซึ่ง Brevo ปฏิเสธ (เช่น .exe หรือ .json) จะถูกส่งคืนให้คุณ",
+	"alias.forwarding": "การส่งต่อ",
 };
 
 export default dictionary;

@@ -786,8 +786,8 @@ ${entries.map(
 	);
 }
 
-export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: ContactRow[]; notice?: string }): Html {
-	const { alias, contacts, notice } = input;
+export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: ContactRow[]; defaultDestination: string; notice?: string }): Html {
+	const { alias, contacts, defaultDestination, notice } = input;
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return page(
 		alias.address,
@@ -805,6 +805,19 @@ ${noticeBox(notice)}
 <label for="email">${t("alias.writeNew")}</label>
 <div class="row"><input id="email" name="email" type="email" placeholder="someone@example.com" required /><button class="primary">${t("alias.create")}</button></div>
 <p class="help">${t("alias.writeNewHelp", { alias: alias.address })}</p>
+</form>
+</section>
+<section>
+<h2>${t("alias.forwarding")}</h2>
+<form method="post" action="${base}/destination">
+<input type="hidden" name="back" value="alias" />
+<label for="destination">${t("dash.colForwardTo")}</label>
+<div class="row"><input id="destination" name="destination" type="email" value="${alias.destination ?? ""}" placeholder="${defaultDestination || t("dash.default")}" /><button>${t("common.save")}</button></div>
+</form>
+<form method="post" action="${base}/mode">
+<input type="hidden" name="back" value="alias" />
+<label for="mode">${t("dash.colMode")}</label>
+<div class="row"><select id="mode" name="mode">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select><button>${t("common.set")}</button></div>
 </form>
 </section>
 ${importedHistory(t, alias)}

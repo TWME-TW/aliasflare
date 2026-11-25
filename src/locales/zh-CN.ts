@@ -382,6 +382,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "在 Workers 免费方案下，每次最多设置 {count} 个域名。请减少勾选的数量，然后再次运行设置以处理其余域名。",
 	"conn.provider.brevo": "Brevo（免费：每天 300 封）",
 	"conn.brevoLimits": "Brevo 不接受串接标头和内嵌图片：收件人可能会把回复看成新的对话，内嵌图片会变成附件，而含有 Brevo 拒收文件类型（例如 .exe 或 .json）的回复会被退回给你。",
+	"alias.forwarding": "转发设置",
 };
 
 export default dictionary;

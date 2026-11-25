@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers Ücretsiz planında bir seferde en fazla {count} alan adı ayarlayabilirsiniz. Daha az seçin ve kalanlar için kurulumu yeniden çalıştırın.",
 	"conn.provider.brevo": "Brevo (ücretsiz: günde 300)",
 	"conn.brevoLimits": "Brevo, ileti dizisi üstbilgilerini ve satır içi resimleri kabul etmez: bir yanıt alıcıya yeni bir konuşma gibi görünebilir, satır içi resimler ek olarak gelir ve Brevo'nun reddettiği dosya türlerine sahip yanıtlar (.exe veya .json gibi) size geri gönderilir.",
+	"alias.forwarding": "Yönlendirme",
 };
 
 export default dictionary;

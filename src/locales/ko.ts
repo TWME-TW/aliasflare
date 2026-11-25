@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers 무료 요금제에서는 한 번에 최대 {count}개의 도메인만 설정할 수 있습니다. 선택 수를 줄이고 나머지는 설정을 다시 실행하세요.",
 	"conn.provider.brevo": "Brevo (무료: 하루 300통)",
 	"conn.brevoLimits": "Brevo는 스레드 헤더와 인라인 이미지를 지원하지 않습니다. 그래서 답장이 받는 사람에게 새 대화로 보일 수 있고, 인라인 이미지는 첨부 파일로 도착하며, Brevo가 거부하는 파일 형식(.exe 또는 .json 등)이 포함된 답장은 발신자에게 반송됩니다.",
+	"alias.forwarding": "전달 설정",
 };
 
 export default dictionary;

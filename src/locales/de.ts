@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Im Workers-Free-Tarif kannst du höchstens {count} Domains auf einmal einrichten. Wähle weniger aus und starte die Einrichtung für die übrigen erneut.",
 	"conn.provider.brevo": "Brevo (kostenlos: 300 pro Tag)",
 	"conn.brevoLimits": "Brevo unterstützt keine Thread-Header und keine eingebetteten Bilder: Eine Antwort kann beim Empfänger als neue Unterhaltung erscheinen, eingebettete Bilder kommen als Anhänge an, und Antworten mit Dateitypen, die Brevo ablehnt (etwa .exe oder .json), werden an dich zurückgeschickt.",
+	"alias.forwarding": "Weiterleitung",
 };
 
 export default dictionary;

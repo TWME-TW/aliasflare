@@ -382,6 +382,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers 無料プランでは、一度に設定できるドメインは最大 {count} 件です。選択数を減らし、残りはセットアップをもう一度実行してください。",
 	"conn.provider.brevo": "Brevo（無料: 1 日 300 通）",
 	"conn.brevoLimits": "Brevo はスレッドヘッダーとインライン画像を受け付けません。そのため、返信が受信者には新しい会話として表示されることがあり、インライン画像は添付ファイルとして届き、Brevo が拒否するファイル形式（.exe や .json など）を含む返信は差し戻されます。",
+	"alias.forwarding": "転送設定",
 };
 
 export default dictionary;

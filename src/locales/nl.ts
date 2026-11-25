@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Op het gratis Workers-abonnement kun je per keer hooguit {count} domeinen instellen. Vink er minder aan en voer de installatie opnieuw uit voor de rest.",
 	"conn.provider.brevo": "Brevo (gratis: 300 per dag)",
 	"conn.brevoLimits": "Brevo accepteert geen threadkoppen of inline afbeeldingen: een antwoord kan bij de ontvanger als nieuw gesprek verschijnen, inline afbeeldingen komen als bijlagen aan, en antwoorden met bestandstypen die Brevo weigert (zoals .exe of .json) worden naar jou teruggestuurd.",
+	"alias.forwarding": "Doorsturen",
 };
 
 export default dictionary;

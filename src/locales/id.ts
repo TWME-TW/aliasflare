@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Di paket Workers Gratis, atur paling banyak {count} domain sekaligus. Centang lebih sedikit dan jalankan penyiapan lagi untuk sisanya.",
 	"conn.provider.brevo": "Brevo (gratis: 300 per hari)",
 	"conn.brevoLimits": "Brevo tidak menerima header thread maupun gambar sebaris: balasan mungkin tampil sebagai percakapan baru bagi penerima, gambar sebaris tiba sebagai lampiran, dan balasan dengan jenis file yang ditolak Brevo (seperti .exe atau .json) dikembalikan kepada Anda.",
+	"alias.forwarding": "Penerusan",
 };
 
 export default dictionary;

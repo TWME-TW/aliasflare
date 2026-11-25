@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers Free پلان پر ایک وقت میں زیادہ سے زیادہ {count} ڈومینز سیٹ اپ کیے جا سکتے ہیں۔ کم منتخب کریں اور باقی کے لیے سیٹ اپ دوبارہ چلائیں۔",
 	"conn.provider.brevo": "Brevo (مفت: روزانہ 300)",
 	"conn.brevoLimits": "Brevo تھریڈ ہیڈرز یا ان لائن تصاویر قبول نہیں کرتا: جواب وصول کنندہ کو نئی گفتگو کے طور پر نظر آ سکتا ہے، ان لائن تصاویر منسلکات کے طور پر پہنچتی ہیں، اور جن فائل اقسام کو Brevo مسترد کرتا ہے (جیسے .exe یا .json) ان والے جوابات آپ کو واپس بھیج دیے جاتے ہیں۔",
+	"alias.forwarding": "فارورڈنگ",
 };
 
 export default dictionary;

@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers Free සැලසුමේ එක් වරකට වැඩිම {count} ක් වසම් පමණක් සැකසිය හැක. අඩුවෙන් තෝරා ඉතිරි ඒවා සඳහා සැකසීම නැවත ක්‍රියාත්මක කරන්න.",
 	"conn.provider.brevo": "Brevo (නොමිලේ: දිනකට 300)",
 	"conn.brevoLimits": "Brevo නූල් ශීර්ෂ හෝ ඇතුළත රූප පිළිගන්නේ නැත: පිළිතුර ලබන්නාට නව සංවාදයක් ලෙස පෙනෙන්නට පුළුවන, ඇතුළත රූප ඇමුණුම් ලෙස පැමිණෙයි, සහ Brevo ප්‍රතික්ෂේප කරන ගොනු වර්ග (උදා: .exe හෝ .json) සහිත පිළිතුරු ඔබ වෙත ආපසු යවයි.",
+	"alias.forwarding": "යොමු කිරීම",
 };
 
 export default dictionary;

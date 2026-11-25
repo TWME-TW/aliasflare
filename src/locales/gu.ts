@@ -397,6 +397,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers Free પ્લાન પર એક સમયે વધુમાં વધુ {count} ડોમેન સેટ કરી શકાય છે. ઓછા પસંદ કરો અને બાકીના માટે સેટઅપ ફરીથી ચલાવો.",
 	"conn.provider.brevo": "Brevo (ફ્રી: દિવસના 300)",
 	"conn.brevoLimits": "Brevo થ્રેડ હેડર કે ઇનલાઇન છબીઓ સ્વીકારતું નથી: જવાબ પ્રાપ્તકર્તાને નવી વાતચીત તરીકે દેખાઈ શકે છે, ઇનલાઇન છબીઓ જોડાણ તરીકે પહોંચે છે, અને Brevo નકારે એવા ફાઇલ પ્રકારવાળા જવાબ (જેમ કે .exe અથવા .json) તમને પાછા મોકલવામાં આવે છે.",
+	"alias.forwarding": "ફૉરવર્ડિંગ",
 };
 
 export default dictionary;

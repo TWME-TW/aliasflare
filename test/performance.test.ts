@@ -110,3 +110,23 @@ describe("activity links", () => {
 		expect(page).toContain('<a href="/aliases/shop%2Bx%40me.test"><code>shop+x@me.test</code></a>');
 	});
 });
+
+describe("alias page forwarding", () => {
+	it("shows the forwarding address and mode, and saving them returns to the alias page", async () => {
+		const { signIn } = await import("./helpers/session");
+		const db = testDb();
+		await db.prepare("INSERT INTO aliases (address, created_at, updated_at) VALUES ('shop@me.test', 1, 1)").run();
+		const env = { DB: db, SIGNING_SECRET: TEST_SECRET } as unknown as Env;
+		const cookie = await signIn(db);
+		const page = await (await app.fetch(new Request("https://alias.test/aliases/shop%40me.test", { headers: { cookie } }), env)).text();
+		expect(page).toContain('action="/aliases/shop%40me.test/destination"');
+		expect(page).toContain('action="/aliases/shop%40me.test/mode"');
+		const post = (path: string, body: string) =>
+			app.fetch(new Request(`https://alias.test${path}`, { method: "POST", headers: { cookie, origin: "https://alias.test", "content-type": "application/x-www-form-urlencoded" }, body }), env);
+		const saved = await post("/aliases/shop%40me.test/destination", "back=alias&destination=me%40gmail.test");
+		expect(saved.headers.get("location")).toMatch(/^\/aliases\/shop%40me\.test\?notice=/);
+		const mode = await post("/aliases/shop%40me.test/mode", "back=alias&mode=none");
+		expect(mode.headers.get("location")).toMatch(/^\/aliases\/shop%40me\.test\?notice=/);
+		expect(await db.prepare("SELECT destination, forward_mode FROM aliases").first()).toEqual({ destination: "me@gmail.test", forward_mode: "none" });
+	});
+});

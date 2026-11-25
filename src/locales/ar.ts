@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "في خطة Workers المجانية، يمكن إعداد {count} نطاقات كحد أقصى في المرة الواحدة. حدّد عدداً أقل، ثم أعد تشغيل الإعداد للنطاقات المتبقية.",
 	"conn.provider.brevo": "Brevo (مجاناً: 300 يومياً)",
 	"conn.brevoLimits": "لا يقبل Brevo ترويسات الخيوط ولا الصور المضمّنة: قد يظهر الرد لدى المستلم كمحادثة جديدة، وتصل الصور المضمّنة كمرفقات، ويُعاد إليك الرد الذي يحتوي على أنواع ملفات يرفضها Brevo (مثل .exe أو .json).",
+	"alias.forwarding": "إعادة التوجيه",
 };
 
 export default dictionary;

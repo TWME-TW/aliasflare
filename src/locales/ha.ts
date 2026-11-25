@@ -403,6 +403,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "A tsarin Workers Free, zaka iya saita yankuna {count} ko ƙasa da haka a lokaci ɗaya. Zaɓi ƙasa da haka sannan ka sake gudanar da saitin don sauran.",
 	"conn.provider.brevo": "Brevo (kyauta: 300 a rana)",
 	"conn.brevoLimits": "Brevo ba ya karɓar headar zaren saƙo ko hotuna da aka saka a cikin saƙo: amsa na iya bayyana ga mai karɓa a matsayin sabon zance, hotunan da aka saka suna zuwa a matsayin abin haɗe, kuma amsoshin da ke da nau'in fayil da Brevo ya ƙi (kamar .exe ko .json) ana mayar da su gare ka.",
+	"alias.forwarding": "Tura",
 };
 
 export default dictionary;

@@ -405,6 +405,7 @@ export const en = {
 	"notice.freeSetupLimit": "On the Workers Free plan, set up at most {count} domains at a time. Tick fewer and run the setup again for the rest.",
 	"conn.provider.brevo": "Brevo (free: 300 a day)",
 	"conn.brevoLimits": "Brevo does not accept threading headers or inline images: a reply may show as a new conversation for the recipient, inline images arrive as attachments, and replies with file types Brevo refuses (such as .exe or .json) are bounced back to you.",
+	"alias.forwarding": "Forwarding",
 };
 
 export type MessageKey = keyof typeof en;

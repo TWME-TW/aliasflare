@@ -388,6 +388,7 @@ const dictionary: Dictionary = {
 	"notice.freeSetupLimit": "Workers Free প্ল্যানে একবারে সর্বোচ্চ {count}টি ডোমেইন সেট আপ করা যায়। কম টিক দিন এবং বাকিগুলোর জন্য সেটআপ আবার চালান।",
 	"conn.provider.brevo": "Brevo (ফ্রি: দিনে 300)",
 	"conn.brevoLimits": "Brevo থ্রেড হেডার বা ইনলাইন ছবি গ্রহণ করে না: উত্তর প্রাপকের কাছে নতুন কথোপকথন হিসেবে দেখাতে পারে, ইনলাইন ছবি সংযুক্তি হিসেবে আসে, এবং Brevo যে ফাইল প্রকার প্রত্যাখ্যান করে (যেমন .exe বা .json) সেগুলোর উত্তর আপনার কাছে ফেরত পাঠানো হয়।",
+	"alias.forwarding": "ফরোয়ার্ডিং",
 };
 
 export default dictionary;
