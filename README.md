@@ -8,21 +8,27 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 
 ## Screenshots
 
-![The alias list](docs/screenshots/dashboard.png)
+<p align="center"><img src="docs/screenshots/dashboard.png" width="720" alt="The alias list"></p>
 
-| An alias and its contacts | Activity |
-| --- | --- |
-| ![An alias and its contacts](docs/screenshots/alias.png) | ![Activity](docs/screenshots/activity.png) |
-| ![Settings](docs/screenshots/settings.png) | ![Dark mode](docs/screenshots/dashboard-dark.png) |
-| ![A rule: conditions and actions](docs/screenshots/rules.png) | ![Labels](docs/screenshots/labels.png) |
+<details>
+<summary>More screenshots</summary>
 
-On a phone:
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/alias.png" alt="An alias and its contacts"><br><sub>An alias and its contacts</sub></td>
+<td width="50%"><img src="docs/screenshots/activity.png" alt="Activity"><br><sub>Activity</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/rules.png" alt="A rule"><br><sub>A rule</sub></td>
+<td width="50%"><img src="docs/screenshots/labels.png" alt="Labels"><br><sub>Labels</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/screenshots/settings.png" alt="Settings"><br><sub>Settings</sub></td>
+<td width="50%"><img src="docs/screenshots/dashboard-dark.png" alt="Dark mode"><br><sub>Dark mode</sub></td>
+</tr>
+</table>
 
-<p align="center">
-<img src="docs/screenshots/mobile.png" width="220" alt="The alias list on a phone">
-&nbsp;
-<img src="docs/screenshots/mobile-activity.png" width="220" alt="Activity on a phone">
-</p>
+</details>
 
 ## Features
 
