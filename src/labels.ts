@@ -12,6 +12,22 @@ export const MAX_LABELS = 100;
  */
 export const LABEL_COLOURS = ["#6366f1", "#0ea5e9", "#14b8a6", "#10b981", "#84cc16", "#f59e0b", "#f97316", "#f43f5e", "#ec4899", "#8b5cf6", "#64748b"] as const;
 
+/** The palette colour closest to any #rrggbb, so a label from elsewhere still gets a colour shown here. */
+export function nearestColour(value: unknown): string {
+	const hex = typeof value === "string" ? /^#?([0-9a-f]{6})$/i.exec(value.trim())?.[1] : undefined;
+	if (!hex) return LABEL_COLOURS[0];
+	const rgb = (h: string) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+	const [r, g, b] = rgb(hex);
+	let best: string = LABEL_COLOURS[0];
+	let bestDistance = Infinity;
+	for (const colour of LABEL_COLOURS) {
+		const [cr, cg, cb] = rgb(colour.slice(1));
+		const distance = (r! - cr!) ** 2 + (g! - cg!) ** 2 + (b! - cb!) ** 2;
+		if (distance < bestDistance) (best = colour), (bestDistance = distance);
+	}
+	return best;
+}
+
 export class LabelError extends Error {
 	constructor(readonly reason: "name" | "colour" | "taken" | "limit" | "missing") {
 		super(reason);

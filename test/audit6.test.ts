@@ -442,7 +442,7 @@ describe("7. SSRF, config resilience, outbound, SMTP, MIME, inline images, route
 		expect(selected.chosen.map((a) => a.email)).toEqual(["ok@b.test"]);
 		const imported = await importAliases(db, await loadSettings(db), "simplelogin", selected, 2);
 		expect(imported.contacts).toBe(1);
-		expect(parseAliasCsv("email,deleted_at\ndeleted@a.test,2026-01-01\nlive2@a.test,\n").map((a) => a.email)).toEqual(["live2@a.test"]);
+		expect(parseAliasCsv("email,deleted_at\ndeleted@a.test,2026-01-01\nlive2@a.test,\n").map((a) => [a.email, a.deletedAt])).toEqual([["deleted@a.test", Date.UTC(2026, 0, 1) / 1000], ["live2@a.test", null]]);
 
 		// Client script flushes focused email inputs on pagehide and syncs initial autosave state.
 		const js = await (await app.fetch(new Request(`${ORIGIN}/assets/app.js`), env)).text();

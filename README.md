@@ -49,7 +49,7 @@ On a phone:
 **Apps and browser extensions**
 - **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. Bitwarden's alias generator works too.
 - **MCP server** for AI assistants: list, create and switch aliases and edit their notes. It never sees mail, senders or activity.
-- **Import from SimpleLogin or addy.io**, with their API key or alias export (CSV), including SimpleLogin contacts.
+- **Import from SimpleLogin or addy.io**, with their API key or alias export (CSV), including SimpleLogin contacts and addy.io labels, rules and blocklist. Deleted aliases come in deleted, so they can be restored.
 
 **Dashboard**
 - **Passkey sign-in**, with no password.

@@ -162,6 +162,26 @@ export async function createRule(db: D1Database, input: RuleInput): Promise<Rule
 	return (await getRule(db, id))!;
 }
 
+/**
+ * Adds rules after the existing ones, in two queries whatever their number (an import may run on
+ * the Workers Free plan's 50). Stops at MAX_RULES; returns how many were added.
+ */
+export async function insertRules(db: D1Database, inputs: RuleInput[]): Promise<number> {
+	if (!inputs.length) return 0;
+	const count = await db.prepare("SELECT COUNT(*) AS n, COALESCE(MAX(position), -1) AS top FROM rules").first<{ n: number; top: number }>();
+	const room = Math.max(0, MAX_RULES - Number(count?.n ?? 0));
+	const timestamp = now();
+	const statements = inputs.slice(0, room).map((input, index) =>
+		db
+			.prepare(
+				"INSERT INTO rules (id, name, position, operator, conditions, actions, forwards, replies, sends, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			)
+			.bind(newId("rl"), input.name, Number(count?.top ?? -1) + 1 + index, input.operator, JSON.stringify(input.conditions), JSON.stringify(input.actions), +input.forwards, +input.replies, +input.sends, +input.active, timestamp, timestamp),
+	);
+	if (statements.length) await db.batch(statements);
+	return statements.length;
+}
+
 export async function updateRule(db: D1Database, id: string, input: RuleInput): Promise<Rule> {
 	const result = await db
 		.prepare("UPDATE rules SET name = ?, operator = ?, conditions = ?, actions = ?, forwards = ?, replies = ?, sends = ?, active = ?, updated_at = ? WHERE id = ?")
