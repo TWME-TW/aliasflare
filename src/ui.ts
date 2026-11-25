@@ -148,6 +148,28 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	table.rt td:empty { display:none; }
 	table.rt td > form.row, table.rt td > .stack { flex:1; justify-content:flex-end; }
 	td input[type=text], td input[type=email], td select { max-width:none; font-size:16px; }
+	table.rt.compact tr { display:grid; gap:6px 10px; margin:6px 0; padding:10px 12px; border-radius:14px; }
+	table.rt.compact td, table.rt.compact td:first-child, table.rt.compact td:last-child { display:block; padding:0; border:none; text-align:start; min-width:0; }
+	table.rt.compact td::before { content:none; }
+	table.rt.aliases tr { grid-template-columns:auto minmax(0,1fr) auto; align-items:center; }
+	table.rt.aliases td.pick { grid-row:1; grid-column:1; width:auto; }
+	table.rt.aliases td.c-alias { grid-row:1; grid-column:2; }
+	table.rt.aliases .alias-cell { display:flex; flex-wrap:nowrap; min-width:0; }
+	table.rt.aliases .alias-cell code { overflow-wrap:anywhere; }
+	table.rt.aliases td.c-used { grid-row:1; grid-column:3; color:var(--muted); font-size:12px; white-space:nowrap; }
+	table.rt.aliases td.c-note { grid-row:2; grid-column:1 / -1; }
+	table.rt.aliases td.c-mode { grid-row:3; grid-column:1 / -1; }
+	table.rt.aliases td.c-mode form.row { display:flex; gap:8px; }
+	table.rt.aliases td.c-mode select { flex:1; }
+	table.rt.aliases td.c-note input, table.rt.aliases td.c-mode select { min-height:40px; padding-top:6px; padding-bottom:6px; }
+	table.rt.aliases td.c-dest, table.rt.aliases td.c-count, table.rt.aliases td.c-created { display:none; }
+	table.rt.activity tr { grid-template-columns:5.25rem minmax(0,1fr) auto; align-items:center; gap:4px 8px; padding:8px 12px; }
+	table.rt.activity td.a-what { grid-row:1; grid-column:1; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	table.rt.activity td.a-alias { grid-row:1; grid-column:2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	table.rt.activity td.a-when { grid-row:1; grid-column:3; color:var(--muted); font-size:12px; white-space:nowrap; }
+	table.rt.activity td.a-status { grid-row:2; grid-column:1; }
+	table.rt.activity td.a-detail { grid-row:2; grid-column:2 / -1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	table.rt.activity td.a-detail:empty { display:block; }
 }
 .mobile-only { display:none; }
 .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
@@ -517,27 +539,27 @@ ${actions.map(([value, label]) => html`<option value="${value}" ${value === "not
 <input type="text" name="value" placeholder="${t("bulk.value")}" aria-label="${t("bulk.value")}" data-bulk-value />
 <button class="primary">${t("bulk.apply")}</button>
 </form>
-<table class="rt">
+<table class="rt compact aliases">
 <thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th><th>${t("dash.colLastUsed")}</th><th>${t("keys.colCreated")}</th></tr></thead>
 <tbody>
 ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return html`<tr>
 <td class="pick"><input type="checkbox" form="bulk" name="ids" value="${alias.address}" aria-label="${t("dash.select", { alias: alias.address })}" data-pick /></td>
-<td data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
-<td data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
+<td class="c-alias" data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
+<td class="c-note" data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
 <input type="text" name="note" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
 <noscript><button>${t("common.save")}</button></noscript></form></td>
-<td data-label="${t("dash.colForwardTo")}"><form class="row" method="post" action="${base}/destination">
+<td class="c-dest" data-label="${t("dash.colForwardTo")}"><form class="row" method="post" action="${base}/destination">
 <input type="email" name="destination" value="${alias.destination ?? ""}" placeholder="${settings.defaultDestination || t("dash.default")}" aria-label="${t("dash.colForwardTo")}" />
 <button>${t("common.save")}</button></form></td>
-<td data-label="${t("dash.colMode")}"><form class="row" method="post" action="${base}/mode">
+<td class="c-mode" data-label="${t("dash.colMode")}"><form class="row" method="post" action="${base}/mode">
 <select name="mode" aria-label="${t("dash.colMode")}">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select>
 <button>${t("common.set")}</button></form></td>
-<td data-label="${t("dash.colContacts")}">${alias.contacts}</td>
-<td data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${isoTime(alias.used_at)}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
-<td data-label="${t("keys.colCreated")}"><time datetime="${isoTime(alias.created_at)}" title="${when(alias.created_at, t.locale)}">${ago(alias.created_at, t.locale)}</time></td>
+<td class="c-count" data-label="${t("dash.colContacts")}">${alias.contacts}</td>
+<td class="c-used" data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${isoTime(alias.used_at)}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
+<td class="c-created" data-label="${t("keys.colCreated")}"><time datetime="${isoTime(alias.created_at)}" title="${when(alias.created_at, t.locale)}">${ago(alias.created_at, t.locale)}</time></td>
 </tr>`;
 })}
 </tbody></table>
@@ -563,11 +585,11 @@ ${activity.length ? html`<p><a href="/activity">${t("dash.allActivity")} →</a>
 
 function activityTable(t: Translate, items: ActivityItem[]): Html {
 	if (items.length === 0) return html`<p class="muted">${t("dash.nothingYet")}</p>`;
-	return html`<table class="rt"><thead><tr><th>${t("dash.colWhen")}</th><th>${t("dash.colWhat")}</th><th>${t("dash.colAlias")}</th><th>${t("dash.colStatus")}</th><th>${t("dash.colDetail")}</th></tr></thead><tbody>
+	return html`<table class="rt compact activity"><thead><tr><th>${t("dash.colWhen")}</th><th>${t("dash.colWhat")}</th><th>${t("dash.colAlias")}</th><th>${t("dash.colStatus")}</th><th>${t("dash.colDetail")}</th></tr></thead><tbody>
 ${items.map(
-	(item) => html`<tr><td data-label="${t("dash.colWhen")}"><time datetime="${isoTime(item.at)}" title="${when(item.at, t.locale)}">${ago(item.at, t.locale)}</time></td><td data-label="${t("dash.colWhat")}">${translated(t, `kind.${item.kind}`, item.kind)}</td>
-<td data-label="${t("dash.colAlias")}">${item.alias ? html`<a href="/aliases/${encodeURIComponent(item.alias)}"><code>${item.alias}</code></a>` : ""}</td><td data-label="${t("dash.colStatus")}">${statusPill(t, item.status)}</td>
-<td data-label="${t("dash.colDetail")}" class="muted">${item.detail ?? ""}</td></tr>`,
+	(item) => html`<tr><td class="a-when" data-label="${t("dash.colWhen")}"><time datetime="${isoTime(item.at)}" title="${when(item.at, t.locale)}">${ago(item.at, t.locale)}</time></td><td class="a-what" data-label="${t("dash.colWhat")}">${translated(t, `kind.${item.kind}`, item.kind)}</td>
+<td class="a-alias" data-label="${t("dash.colAlias")}">${item.alias ? html`<a href="/aliases/${encodeURIComponent(item.alias)}"><code>${item.alias}</code></a>` : ""}</td><td class="a-status" data-label="${t("dash.colStatus")}">${statusPill(t, item.status)}</td>
+<td class="a-detail muted" data-label="${t("dash.colDetail")}">${item.detail ?? ""}</td></tr>`,
 )}
 </tbody></table>`;
 }
