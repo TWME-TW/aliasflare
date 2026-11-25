@@ -335,5 +335,28 @@ export const APP_SCRIPT = `(() => {
     input.addEventListener("focus", () => input.select());
     input.focus();
   }
+  for (const chip of document.querySelectorAll("[data-colour]")) {
+    if (/^#[0-9a-f]{6}$/i.test(chip.dataset.colour)) chip.style.setProperty("--lc", chip.dataset.colour);
+  }
+  // On a phone the menu is one row that scrolls sideways: keep it where it was from page to page,
+  // and bring the current page's link into view when it would be hidden.
+  const nav = document.querySelector("nav.sidebar");
+  if (nav && nav.scrollWidth > nav.clientWidth) {
+    const KEY = "af_nav_x";
+    let saved = null;
+    try { saved = sessionStorage.getItem(KEY); } catch {}
+    if (saved !== null) nav.scrollLeft = Number(saved) || 0;
+    const current = nav.querySelector("a[aria-current]");
+    if (current) {
+      const left = current.offsetLeft - nav.offsetLeft;
+      const right = left + current.offsetWidth;
+      if (saved === null || left < nav.scrollLeft || right > nav.scrollLeft + nav.clientWidth) {
+        nav.scrollLeft = left - (nav.clientWidth - current.offsetWidth) / 2;
+      }
+    }
+    const remember = () => { try { sessionStorage.setItem(KEY, String(Math.round(nav.scrollLeft))); } catch {} };
+    nav.addEventListener("scroll", remember, { passive: true });
+    addEventListener("pagehide", remember);
+  }
 })();
 `;
