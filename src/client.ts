@@ -358,5 +358,24 @@ export const APP_SCRIPT = `(() => {
     nav.addEventListener("scroll", remember, { passive: true });
     addEventListener("pagehide", remember);
   }
+
+  // Turning a page keeps the pager that was clicked where it was on the screen, so the next click
+  // lands on the same button instead of the page jumping back to the top.
+  const PAGER_KEY = "af_pager";
+  const pagers = document.querySelectorAll("nav.pager");
+  let pagerSaved = null;
+  try { pagerSaved = JSON.parse(sessionStorage.getItem(PAGER_KEY) || "null"); sessionStorage.removeItem(PAGER_KEY); } catch {}
+  if (pagerSaved && pagerSaved.path === location.pathname && pagers.length && typeof pagerSaved.top === "number") {
+    const pager = pagers[Math.min(Number(pagerSaved.index) || 0, pagers.length - 1)];
+    window.scrollTo(0, Math.max(0, window.scrollY + pager.getBoundingClientRect().top - pagerSaved.top));
+  }
+  pagers.forEach((pager, index) => {
+    pager.addEventListener("click", (event) => {
+      const link = event.target instanceof Element ? event.target.closest("a.pg") : null;
+      if (!link) return;
+      const top = Math.round(pager.getBoundingClientRect().top);
+      try { sessionStorage.setItem(PAGER_KEY, JSON.stringify({ path: location.pathname, index, top })); } catch {}
+    });
+  });
 })();
 `;
