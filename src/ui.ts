@@ -307,20 +307,13 @@ table.aliases td.c-mode select { width:auto; min-width:0; }
 @media (max-width: 600px) { .theme-btn .theme-text { display:none; } }
 [dir="rtl"] .arrow { display:inline-block; transform:scaleX(-1); }
 
-/* Moving between pages: the old page answers the click at once (see the page script), and the
-   new one fades in over it while the bar and menu stay put. */
-html[data-navigating] .content, html[data-navigating] body > main { opacity:.55; pointer-events:none; transition:opacity .2s .08s; }
-html[data-navigating] body::before { content:""; position:fixed; inset-inline:0; top:0; height:3px; z-index:50; background:var(--primary); transform-origin:0 50%; animation:nav-bar 8s cubic-bezier(.1,.7,.2,1) forwards; }
-html[dir="rtl"][data-navigating] body::before { transform-origin:100% 50%; }
-@keyframes nav-bar { from { transform:scaleX(.08); } to { transform:scaleX(.92); } }
-@media (prefers-reduced-motion: no-preference) {
-	@view-transition { navigation: auto; }
-	.topbar { view-transition-name: topbar; }
-	.sidebar { view-transition-name: sidebar; }
-	::view-transition-old(root), ::view-transition-new(root) { animation-duration:.14s; }
-	::view-transition-group(sidebar), ::view-transition-group(topbar) { animation-duration:0s; }
-}
-@media (prefers-reduced-motion: reduce) { html[data-navigating] body::before { animation:none; transform:scaleX(.6); } }
+/* Moving between pages: the menu marks the page at once (see the page script). Only when the next
+   page has not arrived after a moment does a thin bar sweep along the top; it shows activity, not
+   a share done, so it never seems to stop part way. */
+html[data-navigating] body::before { content:""; position:fixed; top:0; left:0; width:30%; height:3px; z-index:50; border-radius:0 3px 3px 0; background:var(--primary); opacity:0; animation:nav-sweep 1.1s ease-in-out .3s infinite, nav-show 0s .3s forwards; }
+@keyframes nav-sweep { from { transform:translateX(-100%); } to { transform:translateX(340%); } }
+@keyframes nav-show { to { opacity:1; } }
+@media (prefers-reduced-motion: reduce) { html[data-navigating] body::before { width:100%; animation:nav-show 0s .3s forwards; } }
 
 .lang-label { margin:0; display:flex; }
 .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }

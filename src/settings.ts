@@ -186,6 +186,11 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 
 export async function loadSettings(db: D1Database): Promise<Settings> {
 	const { results } = await db.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();
+	return settingsFromRows(results);
+}
+
+/** Settings from the settings table's rows. */
+export function settingsFromRows(results: { key: string; value: string }[]): Settings {
 	const raw: Record<string, unknown> = Object.create(null);
 	for (const row of results) {
 		try {

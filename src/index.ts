@@ -5,6 +5,7 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simp
 import {
 	endSession,
 	isSignedIn,
+	claimedSessionId,
 	requireAdmin,
 	sameOrigin,
 	setChallengeCookie,
@@ -56,7 +57,7 @@ import {
 import { handleReverseAliasMail } from "./reply";
 import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabels, updateLabel } from "./labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, type Rule } from "./rules";
-import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings } from "./settings";
+import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings, settingsFromRows, type Settings } from "./settings";
 import {
 	aliasPage,
 	apiKeysPage,
@@ -98,9 +99,6 @@ app.use("*", async (c, next) => {
 	c.header("X-Frame-Options", "DENY");
 	if (new URL(c.req.url).protocol === "https:") c.header("Strict-Transport-Security", "max-age=31536000");
 	if (NO_STORE.test(c.req.path)) c.header("Cache-Control", "no-store");
-	// Dashboard pages let the browser fetch a link's page while the pointer rests on it (or a finger
-	// presses it), so most clicks open a page that has already arrived. Only GET pages, which change nothing.
-	else if (c.req.method === "GET" && c.res.headers.get("Content-Type")?.startsWith("text/html")) c.header("Speculation-Rules", `"${SPECULATION_PATH}"`);
 	c.header(
 		"Content-Security-Policy",
 		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
@@ -114,24 +112,7 @@ const MAX_IMPORT_UPLOAD = 5_100_000;
 const NO_STORE = /^\/(?:unsubscribe|action|setup|login)(?:\/|$)/;
 
 /** Static files: they need neither the configuration (a D1 read) nor a language. */
-const SPECULATION_PATH = "/assets/speculation.json";
-const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/app.css", "/favicon.svg", SPECULATION_PATH]);
-/** Which links may be fetched ahead: this site's pages, never a one-time link, sign-in step or API. */
-const SPECULATION_RULES = JSON.stringify({
-	prefetch: [
-		{
-			source: "document",
-			where: {
-				and: [
-					{ href_matches: "/*" },
-					{ not: { href_matches: ["/assets/*", "/unsubscribe/*", "/action/*", "/setup", "/setup/*", "/login", "/login/*", "/logout", "/webhook", "/api", "/api/*", "/mcp", "/mcp/*"] } },
-					{ not: { selector_matches: "[data-no-prefetch], [download], [target]" } },
-				],
-			},
-			eagerness: "moderate",
-		},
-	],
-});
+const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/app.css", "/favicon.svg"]);
 /** A year, for a versioned asset URL; an unversioned one is kept briefly so a deploy shows soon. */
 const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
 
@@ -159,7 +140,16 @@ app.use("*", async (c, next) => {
 		}
 	}
 	try {
-		c.set("config", await loadConfig(c.env));
+		// One D1 round trip for what nearly every page needs: the configuration, the settings and
+		// whether the session the cookie names is still live (its signature is checked later).
+		const db = c.env.DB;
+		const claimed = claimedSessionId(c);
+		const reads = [db.prepare("SELECT key, value FROM config"), db.prepare("SELECT key, value FROM settings")];
+		if (claimed) reads.push(db.prepare("SELECT 1 AS ok FROM sessions WHERE id = ? AND expires_at >= ?").bind(claimed, now()));
+		const [config, settings, session] = await db.batch<{ key: string; value: string }>(reads);
+		c.set("config", await loadConfig(c.env, config!.results));
+		c.set("settings", settingsFromRows(settings!.results));
+		if (claimed) c.set("session", { id: claimed, live: session!.results.length > 0 });
 	} catch (error) {
 		if (!(error instanceof ConfigError)) throw error;
 		console.error("Configuration error:", error.message);
@@ -169,6 +159,12 @@ app.use("*", async (c, next) => {
 });
 
 type C = Context<AppEnv>;
+
+/** The settings for showing a page: read at the start of a GET request, or read now after a change. */
+async function pageSettings(c: C): Promise<Settings> {
+	const early = c.req.method === "GET" ? c.get("settings") : undefined;
+	return early ?? loadSettings(c.env.DB);
+}
 
 const MAX_FORM_BYTES = 512 * 1024;
 
@@ -266,11 +262,6 @@ app.get("/favicon.svg", (c) => {
 app.get("/assets/app.css", (c) => {
 	c.header("Cache-Control", assetCache(c));
 	return c.body(String(STYLE), 200, { "Content-Type": "text/css; charset=utf-8" });
-});
-
-app.get(SPECULATION_PATH, (c) => {
-	c.header("Cache-Control", "public, max-age=3600");
-	return c.body(SPECULATION_RULES, 200, { "Content-Type": "application/speculationrules+json" });
 });
 
 app.get("/assets/app.js", (c) => {
@@ -601,7 +592,7 @@ const LAST_USED = `MAX(created_at, COALESCE(last_used_at, 0))`;
 
 app.get("/", async (c) => {
 	const db = c.env.DB;
-	const settings = await loadSettings(db);
+	const settings = await pageSettings(c);
 	const query = (c.req.query("q") ?? "").trim().slice(0, 100);
 	const requested = c.req.query("filter") as AliasFilter;
 	const filter: AliasFilter = ALIAS_FILTERS.includes(requested) ? requested : "all";
@@ -613,8 +604,9 @@ app.get("/", async (c) => {
 	if (filter === "active") where.push("forward_mode != 'none'");
 	if (filter === "disabled") where.push("forward_mode = 'none'");
 	if (filter === "pinned") where.push("pinned = 1");
-	const labels = await listLabels(db);
-	const label = labels.some((row) => row.id === c.req.query("label")) ? c.req.query("label")! : "";
+	// The labels are read alongside the aliases, so a label id is only checked for its form here.
+	const requestedLabel = c.req.query("label") ?? "";
+	const label = /^lb_[0-9a-f]{32}$/.test(requestedLabel) ? requestedLabel : "";
 	if (label) {
 		where.push("address IN (SELECT alias_address FROM alias_labels WHERE label_id = ?)");
 		params.push(label);
@@ -626,7 +618,8 @@ app.get("/", async (c) => {
 		params.push(like, like, like, like);
 	}
 	const clause = `WHERE ${where.join(" AND ")}`;
-	const [{ results: aliases }, counted] = await Promise.all([
+	const [labels, { results: aliases }, counted, activity] = await Promise.all([
+		listLabels(db),
 		db
 			.prepare(
 				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts, last_used_at AS used_at FROM aliases ${clause}
@@ -635,9 +628,9 @@ app.get("/", async (c) => {
 			.bind(...params, perPage, (pageNumber - 1) * perPage)
 			.all<AliasRow & { contacts: number }>(),
 		db.prepare(`SELECT COUNT(*) AS total FROM aliases ${clause}`).bind(...params).first<{ total: number }>(),
+		activityPage(db, DASHBOARD_ACTIVITY, 0),
 	]);
-	const list = { query, filter, label, page: pageNumber, perPage, total: counted?.total ?? 0 };
-	const activity = await activityPage(db, DASHBOARD_ACTIVITY, 0);
+	const list = { query, filter, label: labels.some((row) => row.id === label) ? label : "", page: pageNumber, perPage, total: counted?.total ?? 0 };
 	const byAlias = labels.length ? await labelsOf(db, aliases.map((alias) => alias.address)) : new Map();
 	const withLabels = aliases.map((alias) => ({ ...alias, labels: byAlias.get(alias.address) ?? [] }));
 	return c.html(
@@ -648,7 +641,7 @@ app.get("/", async (c) => {
 app.get("/settings", async (c) =>
 	c.html(
 		settingsPage(c.get("t"), {
-			settings: await loadSettings(c.env.DB),
+			settings: await pageSettings(c),
 			origin: publicOrigin(c),
 			notice: noticeFrom(c),
 		}),
@@ -748,7 +741,7 @@ app.post("/settings", async (c) => {
 });
 
 async function renderConnection(c: C, config: AppConfig, setup?: DomainSetup[]) {
-	const settings = await loadSettings(c.env.DB);
+	const settings = await pageSettings(c);
 	return c.html(
 		connectionPage(c.get("t"), {
 			values: { mailflareUrl: config.mailflareUrl, publicUrl: config.publicUrl, outboundProvider: config.outboundProvider, workersPlan: config.workersPlan, outboundOptions: config.outboundOptions },
@@ -1356,16 +1349,18 @@ app.post("/aliases/:address/note", async (c) => {
 });
 
 app.get("/aliases/:address", async (c) => {
-	const alias = await getAlias(c.env.DB, normalizeEmail(c.req.param("address")));
+	const db = c.env.DB;
+	const address = normalizeEmail(c.req.param("address"));
+	// Everything on the page at once: the alias, its contacts and labels, and all labels.
+	const [alias, { results: contacts }, labels, chosen, { defaultDestination }] = await Promise.all([
+		getAlias(db, address),
+		db.prepare("SELECT * FROM contacts WHERE alias_address = ? ORDER BY COALESCE(last_forward_at, created_at) DESC LIMIT 1000").bind(address).all<ContactRow>(),
+		listLabels(db),
+		labelsOf(db, [address]),
+		pageSettings(c),
+	]);
 	if (!alias) return c.notFound();
-	const { results: contacts } = await c.env.DB.prepare(
-		"SELECT * FROM contacts WHERE alias_address = ? ORDER BY COALESCE(last_forward_at, created_at) DESC LIMIT 1000",
-	)
-		.bind(alias.address)
-		.all<ContactRow>();
-	const { defaultDestination } = await loadSettings(c.env.DB);
-	const labels = await listLabels(c.env.DB);
-	const aliasLabels = ((await labelsOf(c.env.DB, [alias.address])).get(alias.address) ?? []).map((label) => label.id);
+	const aliasLabels = (chosen.get(address) ?? []).map((label) => label.id);
 	return c.html(aliasPage(c.get("t"), { alias, contacts, defaultDestination, labels, aliasLabels, notice: noticeFrom(c) }));
 });
 

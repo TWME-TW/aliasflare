@@ -575,8 +575,8 @@ export const APP_SCRIPT = `(() => {
     for (const a of jumps) { const section = document.getElementById(a.getAttribute("href").slice(1)); if (section) observer.observe(section); }
   }
 
-  // A click on a link to another page answers at once: the menu shows where you are going, a bar
-  // runs along the top and the old content fades, while the next page loads (often already fetched).
+  // A click on a link to another page answers at once: the menu shows where you are going while the
+  // next page loads, and a slow load shows a bar along the top.
   const root = document.documentElement;
   const leaving = (link) => {
     root.setAttribute("data-navigating", "");
@@ -599,7 +599,7 @@ export const APP_SCRIPT = `(() => {
   for (const form of document.querySelectorAll('form[method="get"], form:not([method])')) {
     form.addEventListener("submit", (event) => { if (!event.defaultPrevented && !form.hasAttribute("data-autosave")) leaving(null); });
   }
-  // Coming back with the Back button shows the page as it was left: undo the fading.
+  // Coming back with the Back button shows the page as it was left: take the bar away.
   addEventListener("pageshow", (event) => { if (event.persisted) root.removeAttribute("data-navigating"); });
 })();
 `;

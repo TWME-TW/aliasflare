@@ -5,8 +5,13 @@ import { signToken, verifyToken } from "./crypto";
 import { now } from "./db";
 import { randomToken } from "./format";
 import type { Translate } from "./i18n";
+import type { Settings } from "./settings";
 
-export type AppEnv = { Bindings: Env; Variables: { config: AppConfig; t: Translate } };
+/**
+ * `settings` and `session` are read in the same D1 round trip as the configuration, at the start of
+ * a request: `session` says whether the session id in the cookie (not yet checked) is still live.
+ */
+export type AppEnv = { Bindings: Env; Variables: { config: AppConfig; t: Translate; settings?: Settings; session?: { id: string; live: boolean } } };
 
 // Sent as __Host-af_session and __Host-af_challenge: Secure, Path=/ and no Domain, so a
 // sibling subdomain cannot set or overwrite them.
@@ -29,6 +34,13 @@ export async function startSession(c: Context<AppEnv>, passkeyId: string): Promi
 	]);
 	const token = await signToken(c.get("config").signingSecret, "session", id, SESSION_TTL_SECONDS);
 	setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "Strict", path: "/", maxAge: SESSION_TTL_SECONDS, prefix: COOKIE_PREFIX });
+}
+
+/** The session id the cookie claims, before its signature is checked: only to look the row up early. */
+export function claimedSessionId(c: Context): string | null {
+	const token = getCookie(c, SESSION_COOKIE, COOKIE_PREFIX);
+	const id = token?.split(".")[0];
+	return id && /^[A-Za-z0-9_-]{16,128}$/.test(id) ? id : null;
 }
 
 async function sessionId(c: Context<AppEnv>): Promise<string | null> {
@@ -55,6 +67,9 @@ export function takeChallengeCookie(c: Context): string | undefined {
 export async function isSignedIn(c: Context<AppEnv>): Promise<boolean> {
 	const id = await sessionId(c);
 	if (!id) return false;
+	// Already read with the configuration; the signature, checked just now, says the id is ours.
+	const known = c.get("session");
+	if (known && known.id === id) return known.live;
 	const row = await c.env.DB.prepare("SELECT 1 AS ok FROM sessions WHERE id = ? AND expires_at >= ?").bind(id, now()).first<{ ok: number }>();
 	return !!row;
 }
