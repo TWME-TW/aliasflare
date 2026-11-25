@@ -37,9 +37,9 @@ function foldAscii(value: string, max = 900): string {
 }
 
 /** The value as is when it is plain ASCII (folded if long), otherwise RFC 2047 words of at most 45 bytes each. */
-export function encodeWords(value: string): string {
+export function encodeWords(value: string, forceEncode = false): string {
 	const clean = oneLine(value);
-	if (/^[\x20-\x7e]*$/.test(clean) && clean.split(" ").every((token) => token.length <= 900)) return foldAscii(clean);
+	if (!forceEncode && /^[\x20-\x7e]*$/.test(clean) && clean.split(" ").every((token) => token.length <= 900)) return foldAscii(clean);
 	const words: string[] = [];
 	let chunk = "";
 	for (const char of clean) {
@@ -60,7 +60,7 @@ export function formatAddress(from: OutboundMessage["from"]): string {
 	if (!name) return `<${email}>`;
 	return /^[\x20-\x7e]*$/.test(name) && name.length + email.length + 6 <= 900 && name.split(" ").every((token) => token.length <= 900)
 		? `"${name}" <${email}>`
-		: `${encodeWords(name)} <${email}>`;
+		: `${encodeWords(name, true)} <${email}>`;
 }
 
 /** RFC 2231 attr-char percent-encoding from UTF-8 bytes (never throws URIError on lone surrogates). */
@@ -77,9 +77,9 @@ function rfc2231Encode(value: string): string {
 /** A parameter value: quoted ASCII, or RFC 2231 UTF-8 (split into continuations so no line exceeds 998 bytes). */
 function parameter(name: string, value: string): string {
 	const clean = oneLine(value).replace(/["\\]/g, "_");
-	if (/^[\x20-\x7e]*$/.test(clean) && name.length + clean.length + 3 <= 800) return `${name}="${clean}"`;
+	if (/^[\x20-\x7e]*$/.test(clean) && name.length + clean.length + 3 <= 700) return `${name}="${clean}"`;
 	const encoded = rfc2231Encode(clean);
-	if (name.length + encoded.length + 10 <= 800) return `${name}*=UTF-8''${encoded}`;
+	if (name.length + encoded.length + 10 <= 700) return `${name}*=UTF-8''${encoded}`;
 	const parts: string[] = [];
 	for (let pos = 0, section = 0; pos < encoded.length; section += 1) {
 		const budget = section === 0 ? 60 : 70;
@@ -134,12 +134,13 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
 	if (inline.length) root = multipart("related", [root, ...inline.map((file) => filePart(file, "inline"))]);
 	if (attached.length) root = multipart("mixed", [root, ...attached.map((file) => filePart(file, "attachment"))]);
 
+	const validDate = Number.isNaN(date.getTime()) ? new Date() : date;
 	const headers = [
 		`From: ${formatAddress(message.from)}`,
 		`To: <${bareAddress(message.to)}>`,
 		...(message.replyTo ? [`Reply-To: <${bareAddress(message.replyTo)}>`] : []),
 		`Subject: ${encodeWords(message.subject)}`,
-		`Date: ${date.toUTCString().replace("GMT", "+0000")}`,
+		`Date: ${validDate.toUTCString().replace("GMT", "+0000")}`,
 		`Message-ID: ${oneLine(messageId)}`,
 		"MIME-Version: 1.0",
 		...Object.entries(message.headers ?? {})

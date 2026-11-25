@@ -50,7 +50,7 @@ export function isTrackingParam(name: string): boolean {
 	return TRACKING_PARAMS.has(lower) || TRACKING_PARAM_PREFIXES.some((prefix) => lower.startsWith(prefix));
 }
 
-/** Removes tracking query parameters from an http(s) link; anything else is returned unchanged. */
+/** Removes tracking query parameters from an http(s) link while preserving raw encoding of unrelated params. */
 export function cleanLink(href: string): { href: string; changed: boolean } {
 	let url: URL;
 	try {
@@ -59,11 +59,30 @@ export function cleanLink(href: string): { href: string; changed: boolean } {
 		return { href, changed: false };
 	}
 	if (url.protocol !== "http:" && url.protocol !== "https:") return { href, changed: false };
-	const names = [...url.searchParams.keys()];
-	const tracking = names.filter(isTrackingParam);
-	if (tracking.length === 0) return { href, changed: false };
-	for (const name of new Set(tracking)) url.searchParams.delete(name);
-	return { href: url.toString(), changed: true };
+	if (!url.search || url.search.length <= 1) return { href, changed: false };
+	const raw = url.search.slice(1);
+	const parts = raw.split("&");
+	let changed = false;
+	const kept: string[] = [];
+	for (const part of parts) {
+		const eq = part.indexOf("=");
+		const rawName = eq >= 0 ? part.slice(0, eq) : part;
+		let decodedName = rawName.replace(/\+/g, " ");
+		try {
+			decodedName = decodeURIComponent(decodedName);
+		} catch {
+			// Keep undecodable key as-is.
+		}
+		if (rawName && isTrackingParam(decodedName)) changed = true;
+		else kept.push(part);
+	}
+	if (!changed) return { href, changed: false };
+	const query = kept.length ? `?${kept.join("&")}` : "";
+	const qIndex = href.indexOf("?");
+	const hIndex = href.indexOf("#", qIndex >= 0 ? qIndex : 0);
+	const before = qIndex >= 0 ? href.slice(0, qIndex) : href;
+	const hash = hIndex >= 0 ? href.slice(hIndex) : "";
+	return { href: `${before}${query}${hash}`, changed: true };
 }
 
 function pixelSize(value: string | null): number | null {

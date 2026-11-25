@@ -174,7 +174,7 @@ export const APP_SCRIPT = `(() => {
     if (select && select.value !== theme) {
       select.value = theme;
       const settingsForm = select.closest("form[data-autosave]");
-      if (settingsForm && settingsForm._syncLastSent) settingsForm._syncLastSent();
+      if (settingsForm && settingsForm._syncLastSent) settingsForm._syncLastSent("uiTheme", theme);
     }
     const next = THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length];
     for (const form of document.querySelectorAll("form[data-theme-toggle]")) {
@@ -251,8 +251,9 @@ export const APP_SCRIPT = `(() => {
         const q = filter.value.trim().toLowerCase();
         for (const box of boxes) box.closest("label").hidden = !!q && !box.closest("label").dataset.name.includes(q);
       });
-      // A click elsewhere closes the list, keeping what was ticked.
+      // A click elsewhere or Escape closes the list, keeping what was ticked.
       document.addEventListener("click", (event) => { if (labelMenu.open && !labelMenu.contains(event.target)) labelMenu.open = false; });
+      labelMenu.addEventListener("keydown", (event) => { if (event.key === "Escape" && labelMenu.open) { labelMenu.open = false; summary.focus(); } });
       count();
     }
     if (all) all.addEventListener("change", () => { for (const box of picks()) box.checked = all.checked; refresh(); });
@@ -270,6 +271,8 @@ export const APP_SCRIPT = `(() => {
       if (labelMenu && (chosen === "label" || chosen === "unlabel") && !labelMenu.querySelector("input[name=labels]:checked")) {
         event.preventDefault();
         labelMenu.open = true;
+        const summary = labelMenu.querySelector("summary");
+        if (summary) summary.focus();
         show(labelMenu.dataset.none || bulk.dataset.noLabels, false);
         return;
       }
@@ -314,7 +317,16 @@ export const APP_SCRIPT = `(() => {
     // Saves run one after another, so an older change can never land after a newer one.
     let queue = Promise.resolve();
     let lastSent = new URLSearchParams(new FormData(form)).toString();
-    form._syncLastSent = () => { lastSent = new URLSearchParams(new FormData(form)).toString(); };
+    form._syncLastSent = (name, val) => {
+      if (lastSent === null) return;
+      if (name === undefined) {
+        lastSent = new URLSearchParams(new FormData(form)).toString();
+        return;
+      }
+      const params = new URLSearchParams(lastSent);
+      params.set(name, val);
+      lastSent = params.toString();
+    };
     const save = () => {
       const body = new URLSearchParams(new FormData(form)).toString();
       // Enter in a field fires both submit and change: the same values are sent once.
@@ -335,9 +347,12 @@ export const APP_SCRIPT = `(() => {
         if (result && result.theme) applyTheme(result.theme);
         if (result && result.reload) pendingReload = true;
         if (id !== latest) return; // a newer change is already on its way
-        if (pendingReload) { location.reload(); return; }
         const ok = !!(response.ok && result && result.ok);
-        if (!ok) lastSent = null; // a failed save may be tried again unchanged
+        if (ok && pendingReload) { location.reload(); return; }
+        if (!ok) {
+          pendingReload = false;
+          lastSent = null; // a failed save may be tried again unchanged
+        }
         show((result && (result.message || result.error)) || form.dataset.msgFailed, ok);
       } catch {
         if (id === latest) {
@@ -395,11 +410,12 @@ export const APP_SCRIPT = `(() => {
   let pagerSaved = null;
   try { pagerSaved = JSON.parse(sessionStorage.getItem(PAGER_KEY) || "null"); sessionStorage.removeItem(PAGER_KEY); } catch {}
   if (pagerSaved && pagerSaved.path === location.pathname && pagers.length && typeof pagerSaved.top === "number") {
-    const pager = pagers[Math.min(Number(pagerSaved.index) || 0, pagers.length - 1)];
+    const pager = pagers[Math.max(0, Math.min(Number(pagerSaved.index) || 0, pagers.length - 1))];
     window.scrollTo(0, Math.max(0, window.scrollY + pager.getBoundingClientRect().top - pagerSaved.top));
   }
   pagers.forEach((pager, index) => {
     pager.addEventListener("click", (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const link = event.target instanceof Element ? event.target.closest("a.pg") : null;
       if (!link) return;
       const top = Math.round(pager.getBoundingClientRect().top);

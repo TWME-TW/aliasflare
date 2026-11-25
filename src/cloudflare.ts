@@ -115,11 +115,18 @@ async function routingEnabled(token: string, zoneId: string): Promise<boolean> {
  */
 async function subdomainRoutingEnabled(token: string, zoneId: string, domain: string): Promise<boolean> {
 	try {
-		const records = await cf<{ type?: string; content?: string }[]>(
-			token,
-			`/zones/${encodeURIComponent(zoneId)}/dns_records?type=MX&name=${encodeURIComponent(domain)}&per_page=50`,
-		);
-		return Array.isArray(records) && records.length > 0 && records.every((record) => /\.mx\.cloudflare\.net\.?$/i.test(record.content ?? ""));
+		let total = 0;
+		for (let page = 1; page <= 10; page += 1) {
+			const records = await cf<{ type?: string; content?: string }[]>(
+				token,
+				`/zones/${encodeURIComponent(zoneId)}/dns_records?type=MX&name=${encodeURIComponent(domain)}&page=${page}&per_page=100`,
+			);
+			if (!Array.isArray(records)) return false;
+			if (records.some((record) => !/\.mx\.cloudflare\.net\.?$/i.test(record.content ?? ""))) return false;
+			total += records.length;
+			if (records.length < 100) break;
+		}
+		return total > 0;
 	} catch {
 		return false;
 	}
@@ -152,7 +159,7 @@ async function enableSending(token: string, zoneId: string, domain: string): Pro
 
 export async function setUpDomain(input: { token: string; domain: string; workerName: string; replaceCatchAll?: boolean }): Promise<DomainSetup> {
 	const { token, workerName } = input;
-	const domain = input.domain.trim().toLowerCase();
+	const domain = input.domain.trim().toLowerCase().replace(/\.$/, "");
 	const reverseDomain = reverseDomainFor(domain);
 	const steps: SetupStep[] = [];
 	const attempt = async (step: SetupStepName, run: () => Promise<string>) => {

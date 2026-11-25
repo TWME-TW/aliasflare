@@ -149,16 +149,32 @@ export async function getRule(db: D1Database, id: string): Promise<Rule | null> 
 }
 
 export async function createRule(db: D1Database, input: RuleInput): Promise<Rule> {
-	const count = await db.prepare("SELECT COUNT(*) AS n, COALESCE(MAX(position), -1) AS top FROM rules").first<{ n: number; top: number }>();
-	if (Number(count?.n ?? 0) >= MAX_RULES) throw new RuleError("limit");
 	const id = newId("rl");
 	const timestamp = now();
-	await db
+	// Enforce MAX_RULES and compute the next position atomically inside the INSERT.
+	const result = await db
 		.prepare(
-			"INSERT INTO rules (id, name, position, operator, conditions, actions, forwards, replies, sends, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			`INSERT INTO rules (id, name, position, operator, conditions, actions, forwards, replies, sends, active, created_at, updated_at)
+			 SELECT ?, ?, COALESCE(MAX(position), -1) + 1, ?, ?, ?, ?, ?, ?, ?, ?, ?
+			 FROM rules
+			 HAVING COUNT(*) < ?`,
 		)
-		.bind(id, input.name, Number(count?.top ?? -1) + 1, input.operator, JSON.stringify(input.conditions), JSON.stringify(input.actions), +input.forwards, +input.replies, +input.sends, +input.active, timestamp, timestamp)
+		.bind(
+			id,
+			input.name,
+			input.operator,
+			JSON.stringify(input.conditions),
+			JSON.stringify(input.actions),
+			+input.forwards,
+			+input.replies,
+			+input.sends,
+			+input.active,
+			timestamp,
+			timestamp,
+			MAX_RULES,
+		)
 		.run();
+	if (!result.meta.changes) throw new RuleError("limit");
 	return (await getRule(db, id))!;
 }
 
@@ -241,7 +257,7 @@ function test(match: Match, subject: string, value: string): boolean {
 	}
 }
 
-export type RuleMessage = { sender: string; senders?: string[]; spoofed?: boolean; subject: string; alias: string };
+export type RuleMessage = { sender: string; senders?: string[]; envelopeSender?: string | null; spoofed?: boolean; subject: string; alias: string };
 
 /** Whether the message meets the condition: any of its values for a positive match, all of them for a negative one ("is not a or b"). */
 function meets(condition: Condition, message: RuleMessage): boolean {
@@ -276,6 +292,25 @@ export type RuleOutcome = {
 	applied: string[];
 };
 
+/** Evaluates a block rule condition-by-condition across candidate senders.
+ * Positive sender conditions match if any candidate matches (envelope or From, so spoofing From
+ * cannot evade a block). Negative sender conditions ("does not end with @work.test") must hold
+ * for every non-spoofed candidate; when the From header is spoofed, it is excluded so a forged
+ * From cannot exempt a message from a negative-sender block rule.
+ */
+function blockRuleMatches(rule: Rule, message: RuleMessage, candidates: string[], negativeCandidates: string[]): boolean {
+	if (!rule.conditions.length) return false;
+	const check = (condition: Condition) => {
+		if (condition.type !== "sender") return meets(condition, message);
+		const negative = condition.match.startsWith("is not") || condition.match.startsWith("does not");
+		if (negative) {
+			return negativeCandidates.length === 0 || negativeCandidates.every((sender) => meets(condition, { ...message, sender }));
+		}
+		return candidates.some((sender) => meets(condition, { ...message, sender }));
+	};
+	return rule.operator === "OR" ? rule.conditions.some(check) : rule.conditions.every(check);
+}
+
 /** The combined actions of every active rule that matches, for forwarded mail or for replies. */
 export async function runRules(db: D1Database, kind: "forwards" | "replies", message: RuleMessage): Promise<RuleOutcome> {
 	const { results } = await db
@@ -283,16 +318,14 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 		.all<RuleRow>();
 	const outcome: RuleOutcome = { applied: [] };
 	const candidates = [...new Set([message.sender, ...(message.senders ?? [])].filter(Boolean))];
+	// When From is spoofed (DMARC fail / missing / multiple From), only the envelope sender (if any)
+	// may participate in negative-sender checks so a forged From cannot bypass "does not end with ...".
+	const negativeCandidates = message.spoofed ? (message.envelopeSender ? [message.envelopeSender] : []) : candidates;
 	for (const rule of results.map(parse)) {
 		const actions = kind === "replies" ? rule.actions.filter((action) => REPLY_ACTIONS.includes(action.type)) : rule.actions;
 		if (!actions.length) continue;
 		const hasBlock = actions.some((action) => action.type === "block");
-		// Block rules test every candidate sender (envelope and From), so spoofing From cannot evade a
-		// block. A rule with a negative sender condition ("does not end with @work.test") has to hold for
-		// all of them: a newsletter's bounce address must not block mail whose From the rule allows.
-		const negativeSender = rule.conditions.some((condition) => condition.type === "sender" && (condition.match.startsWith("is not") || condition.match.startsWith("does not")));
-		const blockMatched =
-			hasBlock && (negativeSender ? candidates.every((sender) => ruleMatches(rule, { ...message, sender })) : candidates.some((sender) => ruleMatches(rule, { ...message, sender })));
+		const blockMatched = hasBlock && blockRuleMatches(rule, message, candidates, negativeCandidates);
 		// A spoofed From address must not trigger positive sender rules (forwardTo, displayFrom, subject, banner).
 		const hasSenderCondition = rule.conditions.some((condition) => condition.type === "sender");
 		const normalMatched = !(message.spoofed && hasSenderCondition) && ruleMatches(rule, message);
@@ -315,6 +348,7 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 			else if (action.type === "banner") outcome.hideBanner = true;
 		}
 		if (applied) outcome.applied.push(rule.id);
+		if (outcome.block) break;
 	}
 	if (outcome.applied.length) {
 		const timestamp = now();

@@ -198,8 +198,15 @@ export async function loadSettings(db: D1Database): Promise<Settings> {
 }
 
 export async function saveSettings(db: D1Database, settings: Settings): Promise<void> {
+	await saveSettingKeys(db, settings);
+}
+
+/** Updates only the given settings keys, so concurrent changes to other keys are never overwritten. */
+export async function saveSettingKeys(db: D1Database, values: Partial<Settings>): Promise<void> {
+	const entries = Object.entries(values);
+	if (!entries.length) return;
 	const statement = db.prepare(
 		"INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
 	);
-	await db.batch(Object.entries(settings).map(([key, value]) => statement.bind(key, JSON.stringify(value))));
+	await db.batch(entries.map(([key, value]) => statement.bind(key, JSON.stringify(value))));
 }

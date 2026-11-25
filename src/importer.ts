@@ -348,19 +348,21 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 	return out;
 }
 
-/** A list from addy.io that may or may not be paged: pages of 100 until a short one. */
-async function addyList(base: string, path: string, apiKey: string, budget: FetchBudget, paged: boolean): Promise<Record<string, unknown>[]> {
+/** A list from addy.io that may or may not be paged: pages of 100 until a short one or `maxItems`. */
+async function addyList(base: string, path: string, apiKey: string, budget: FetchBudget, paged: boolean, maxItems = MAX_ALIASES): Promise<Record<string, unknown>[]> {
 	const out: Record<string, unknown>[] = [];
-	for (let page = 1; page <= MAX_PAGES; page += 1) {
+	for (let page = 1; page <= MAX_PAGES && out.length < maxItems; page += 1) {
 		const url = paged ? `${base}${path}?page%5Bsize%5D=100&page%5Bnumber%5D=${page}` : `${base}${path}`;
 		const body = (await getJson(url, { Authorization: `Bearer ${apiKey}`, "X-Requested-With": "XMLHttpRequest" }, budget)) as { data?: unknown[]; meta?: { last_page?: number } };
 		if (!Array.isArray(body?.data)) throw new ImportError("format");
-		out.push(...body.data.filter(isRecord));
+		out.push(...body.data.filter(isRecord).slice(0, maxItems - out.length));
 		const last = Number(body.meta?.last_page ?? NaN);
 		if (!paged || body.data.length < 100 || (Number.isFinite(last) && page >= last)) break;
 	}
 	return out;
 }
+
+const MAX_IMPORT_BLOCKLIST = 5_000;
 
 /**
  * addy.io's labels, rules and blocklist. Each is read on its own: one that cannot be read (an older
@@ -377,17 +379,43 @@ export async function fetchAddyExtras(base: string, apiKey: string, budget: Fetc
 		}
 	};
 	await read("labels", async () => {
-		for (const raw of await addyList(base, "/api/v1/labels", apiKey, budget, false)) {
+		for (const raw of await addyList(base, "/api/v1/labels", apiKey, budget, false, MAX_LABELS * 2)) {
 			const name = cleanLabelName(raw.name);
 			if (name) extras.labels.push({ name, colour: nearestColour(raw.colour) });
 		}
 	});
+	// Best-effort map of addy.io recipient UUIDs -> email addresses so forwardTo rules resolve cleanly.
+	const recipientsById = new Map<string, string>();
+	try {
+		for (const raw of await addyList(base, "/api/v1/recipients", apiKey, budget, false, 500)) {
+			const id = typeof raw.id === "string" || typeof raw.id === "number" ? String(raw.id) : "";
+			const email = extractEmail(text(raw.email));
+			if (id && email) recipientsById.set(id, email);
+		}
+	} catch (error) {
+		if (!(error instanceof ImportError) || error.reason === "auth") throw error;
+	}
 	await read("rules", async () => {
-		const rules = await addyList(base, "/api/v1/rules", apiKey, budget, false);
-		extras.rules = rules.sort((a, b) => Number(a.order ?? 0) - Number(b.order ?? 0));
+		const rules = await addyList(base, "/api/v1/rules", apiKey, budget, false, 500);
+		const numOrder = (value: unknown) => {
+			const n = Number(value ?? 0);
+			return Number.isFinite(n) ? n : 0;
+		};
+		extras.rules = rules
+			.map((rule) => {
+				if (!Array.isArray(rule.actions) || !recipientsById.size) return rule;
+				const mapped = rule.actions.map((action) => {
+					if (!action || typeof action !== "object" || (action as { type?: unknown }).type !== "forwardTo") return action;
+					const val = (action as { value?: unknown }).value;
+					const resolved = typeof val === "string" || typeof val === "number" ? recipientsById.get(String(val)) : undefined;
+					return resolved ? { ...(action as Record<string, unknown>), value: resolved } : action;
+				});
+				return { ...rule, actions: mapped };
+			})
+			.sort((a, b) => numOrder(a.order) - numOrder(b.order));
 	});
 	await read("blocklist", async () => {
-		for (const raw of await addyList(base, "/api/v1/blocklist", apiKey, budget, true)) {
+		for (const raw of await addyList(base, "/api/v1/blocklist", apiKey, budget, true, MAX_IMPORT_BLOCKLIST)) {
 			const value = (typeof raw.value === "string" ? raw.value : "").trim().toLowerCase().replace(/^@/, "");
 			const email = raw.type === "email" ? extractEmail(value) : null;
 			const domain = raw.type === "domain" && DOMAIN_PATTERN.test(value) ? value : null;
@@ -403,9 +431,15 @@ export async function fetchAddyExtras(base: string, apiKey: string, budget: Fetc
  * Saves addy.io's labels (with those named on imported aliases), rules and blocklist; run before
  * importAliases, which labels the aliases. Labels and blocklist entries already here stay as they
  * are; a rule whose name is already here is taken as imported before. A rule aliasflare cannot
- * run as written (regular expressions, webhooks, encryption and the like) is left out, by name.
+ * run as written (regular expressions, webhooks, encryption, or disallowed forwardTo targets) is
+ * left out, by name.
  */
-export async function importAddyExtras(db: D1Database, extras: AddyExtras, aliases: ImportedAlias[]): Promise<Pick<ImportResult, "labels" | "rules" | "rulesSkipped" | "blocked" | "unread">> {
+export async function importAddyExtras(
+	db: D1Database,
+	extras: AddyExtras,
+	aliases: ImportedAlias[],
+	options: { batchSize?: number; allowedDestinations?: Set<string>; ownDomains?: string[] } = {},
+): Promise<Pick<ImportResult, "labels" | "rules" | "rulesSkipped" | "blocked" | "unread">> {
 	const timestamp = now();
 	// Labels: those of the account, then any only named on an alias.
 	const { results: existingLabels } = await db.prepare("SELECT name FROM labels").all<{ name: string }>();
@@ -422,18 +456,19 @@ export async function importAddyExtras(db: D1Database, extras: AddyExtras, alias
 	const statements: D1PreparedStatement[] = newLabels.map((label) =>
 		db.prepare("INSERT INTO labels (id, name, colour, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (name) DO NOTHING").bind(newId("lb"), label.name, label.colour, timestamp, timestamp),
 	);
-	// The blocklist: entries already here keep their own count.
-	for (const entry of extras.blocklist) {
+	// The blocklist: capped and batched cleanly to stay inside Workers' subrequest budget.
+	for (const entry of extras.blocklist.slice(0, MAX_IMPORT_BLOCKLIST)) {
 		statements.push(
 			db
 				.prepare("INSERT INTO blocklist (id, kind, value, hits, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (value) DO NOTHING")
 				.bind(newId("bl"), entry.kind, entry.value, entry.hits, entry.createdAt ?? timestamp),
 		);
 	}
+	const batchSize = Math.max(options.batchSize ?? 100, Math.ceil(statements.length / 20));
 	let labels = 0;
 	let blocked = 0;
-	for (let i = 0; i < statements.length; i += 100) {
-		const results = await db.batch(statements.slice(i, i + 100));
+	for (let i = 0; i < statements.length; i += batchSize) {
+		const results = await db.batch(statements.slice(i, i + batchSize));
 		results.forEach((result, offset) => {
 			if (!(result.meta.changes ?? 0)) return;
 			if (i + offset < newLabels.length) labels += 1;
@@ -446,6 +481,8 @@ export async function importAddyExtras(db: D1Database, extras: AddyExtras, alias
 	const ruleNames = new Set(existingRules.map((row) => row.name.toLowerCase()));
 	const inputs: RuleInput[] = [];
 	const rulesSkipped: string[] = [];
+	const ownDomains = options.ownDomains ?? [];
+	const allowed = options.allowedDestinations;
 	for (const raw of extras.rules) {
 		let input: RuleInput;
 		try {
@@ -454,6 +491,16 @@ export async function importAddyExtras(db: D1Database, extras: AddyExtras, alias
 			if (!(error instanceof RuleError)) throw error;
 			const name = text(raw.name, 60);
 			if (name) rulesSkipped.push(name);
+			continue;
+		}
+		// Never import forwardTo rules targeting own/loop domains or unknown destinations.
+		const badForwardTo = input.actions.some(
+			(action) =>
+				action.type === "forwardTo" &&
+				((ownDomains.length > 0 && isOwnAddress(action.value, ownDomains)) || (allowed !== undefined && !allowed.has(action.value.toLowerCase()))),
+		);
+		if (badForwardTo) {
+			rulesSkipped.push(input.name);
 			continue;
 		}
 		if (ruleNames.has(input.name.toLowerCase())) continue;
@@ -535,6 +582,7 @@ export function parseAliasCsv(input: string): ImportedAlias[] {
 		const email = extractEmail(cell(row, "email"));
 		if (!email) continue;
 		const deleted = (cell(row, "deletedAt") ?? "").trim();
+		const isDeletedSentinel = !deleted || /^(null|none|false|0|-|n\/a)$/i.test(deleted);
 		const destinations = (cell(row, "destination") ?? "")
 			.split(/[\s,;]+/)
 			.map((value) => extractEmail(value))
@@ -555,7 +603,7 @@ export function parseAliasCsv(input: string): ImportedAlias[] {
 			lastBlockAt: toTimestamp(cell(row, "lastBlockAt")),
 			lastReplyAt: toTimestamp(cell(row, "lastReplyAt")),
 			lastSentAt: toTimestamp(cell(row, "lastSentAt")),
-			deletedAt: deleted ? (toTimestamp(deleted) ?? now()) : null,
+			deletedAt: isDeletedSentinel ? null : (toTimestamp(deleted) ?? now()),
 			details: clean({ mailboxes: destinations.length > 1 ? destinations : undefined }),
 		});
 	}

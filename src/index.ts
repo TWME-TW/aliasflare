@@ -54,7 +54,7 @@ import {
 	relyingParty,
 } from "./passkeys";
 import { handleReverseAliasMail } from "./reply";
-import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabel, updateLabel } from "./labels";
+import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabels, updateLabel } from "./labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, type Rule } from "./rules";
 import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings } from "./settings";
 import {
@@ -149,14 +149,36 @@ app.use("*", async (c, next) => {
 
 type C = Context<AppEnv>;
 
+const MAX_FORM_BYTES = 512 * 1024;
+
+app.onError((error, c) => {
+	console.error("Unhandled request error:", error instanceof Error ? error.message : error);
+	return c.text("Internal error", 500);
+});
+
+// Bound non-import dashboard form POSTs before parseBody() buffers the body in isolate memory.
+app.use("*", async (c, next) => {
+	if (
+		c.req.method === "POST" &&
+		!c.req.path.startsWith("/import/") &&
+		!c.req.path.startsWith("/api") &&
+		!c.req.path.startsWith("/mcp") &&
+		c.req.path !== "/webhook"
+	) {
+		if (Number(c.req.header("Content-Length") ?? 0) > MAX_FORM_BYTES) return c.text("Request too large", 413);
+	}
+	await next();
+});
+
 /**
  * A URL that shows a notice once at the top of the page. Only the message key and its
  * values travel in the URL, so a crafted link cannot put text of its own on the page.
  */
 function noticeUrl(path: string, key: MessageKey, params?: Record<string, string>): string {
+	const base = path.split("#")[0] || "/";
 	const query = new URLSearchParams({ notice: key });
 	for (const [name, value] of Object.entries(params ?? {})) query.set(`n.${name}`, value);
-	return `${path}${path.includes("?") ? "&" : "?"}${query}`;
+	return `${base}${base.includes("?") ? "&" : "?"}${query}`;
 }
 
 /** Where a change to one alias returns: its own page when made there, else the alias list. */
@@ -295,9 +317,20 @@ app.post("/webhook", async (c) => {
 	} catch {
 		return c.json({ error: "Invalid JSON" }, 400);
 	}
-	const event = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as { type?: string; data?: InboundEvent }) : null;
-	if (!event || event.type !== "message.inbound" || !event.data) return c.json({ result: "ignored" });
-	const outcome = await handleInbound(c.env, config, event.data, publicOrigin(c));
+	const event = payload && typeof payload === "object" && !Array.isArray(payload) ? (payload as { type?: unknown; data?: unknown }) : null;
+	if (!event || event.type !== "message.inbound" || !event.data || typeof event.data !== "object" || Array.isArray(event.data)) {
+		return c.json({ result: "ignored" });
+	}
+	const data = event.data as Record<string, unknown>;
+	if (
+		typeof data.messageId !== "string" ||
+		(data.to !== undefined && typeof data.to !== "string") ||
+		(data.from !== undefined && typeof data.from !== "string") ||
+		(data.subject !== undefined && typeof data.subject !== "string")
+	) {
+		return c.json({ error: "Invalid webhook payload" }, 400);
+	}
+	const outcome = await handleInbound(c.env, config, data as unknown as InboundEvent, publicOrigin(c));
 	return c.json({ result: outcome.result }, outcome.status as 200);
 });
 
@@ -816,7 +849,7 @@ app.post("/connection", async (c) => {
 });
 
 app.get("/blocklist", async (c) => {
-	const { results } = await c.env.DB.prepare("SELECT * FROM blocklist ORDER BY created_at DESC").all<BlocklistRow>();
+	const { results } = await c.env.DB.prepare("SELECT * FROM blocklist ORDER BY created_at DESC LIMIT 5000").all<BlocklistRow>();
 	return c.html(blocklistPage(c.get("t"), { entries: results, notice: noticeFrom(c) }));
 });
 
@@ -824,7 +857,7 @@ app.get("/blocklist", async (c) => {
 export function parseBlockEntries(input: string): { entries: { kind: "address" | "domain"; value: string }[]; bad: string[] } {
 	const entries = new Map<string, "address" | "domain">();
 	const bad: string[] = [];
-	for (const piece of input.split(/[\s,;，、；،]+/).filter(Boolean).slice(0, 500)) {
+	for (const piece of input.slice(0, 50_000).split(/[\s,;，、；،]+/).filter(Boolean).slice(0, 500)) {
 		const raw = piece.trim().toLowerCase().replace(/^@/, "").replace(/^<(.*)>$/, "$1");
 		const email = raw.includes("@") ? extractEmail(raw) : null;
 		const domain = !raw.includes("@") && DOMAIN_PATTERN.test(raw) ? raw : null;
@@ -832,6 +865,16 @@ export function parseBlockEntries(input: string): { entries: { kind: "address" |
 		else bad.push(piece.slice(0, 100));
 	}
 	return { entries: [...entries].map(([value, kind]) => ({ kind, value })), bad };
+}
+
+function joinNoticeValues(values: string[], maxItems = 10, maxChars = 200): string {
+	let out = "";
+	for (const value of values.slice(0, maxItems)) {
+		const next = out ? `${out}, ${value}` : value;
+		if (next.length > maxChars) break;
+		out = next;
+	}
+	return out || values[0]?.slice(0, maxChars) || "";
 }
 
 app.post("/blocklist", async (c) => {
@@ -843,7 +886,7 @@ app.post("/blocklist", async (c) => {
 		c.env.DB.prepare("INSERT INTO blocklist (id, kind, value, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (value) DO NOTHING").bind(newId("bl"), entry.kind, entry.value, timestamp),
 	);
 	for (let i = 0; i < statements.length; i += 100) await c.env.DB.batch(statements.slice(i, i + 100));
-	if (bad.length) return redirectWithNotice(c, "/blocklist", "notice.blockedSome", { count: String(entries.length), values: bad.slice(0, 10).join(", ") });
+	if (bad.length) return redirectWithNotice(c, "/blocklist", "notice.blockedSome", { count: String(entries.length), values: joinNoticeValues(bad) });
 	return entries.length === 1
 		? redirectWithNotice(c, "/blocklist", "notice.blocked", { value: entries[0]!.value })
 		: redirectWithNotice(c, "/blocklist", "notice.blockedMany", { count: String(entries.length) });
@@ -1062,13 +1105,26 @@ app.post("/import/:source", async (c) => {
 				: t(error.reason === "auth" ? "imp.err.auth" : error.reason === "empty" ? "imp.err.empty" : "imp.err.format");
 		return render({ error: message });
 	}
-	// Labels first: importing the aliases labels them by name.
-	const extra = extras ? await importAddyExtras(c.env.DB, extras, selection.chosen) : {};
+	// Labels first: importing the aliases labels them by name. Rules' forwardTo targets must be
+	// known owner destinations (plus any destinations being imported when keepDestinations is on).
+	const keepDestinations = form.destinations === "1";
+	const batchSize = c.get("config").workersPlan === "free" ? 500 : 100;
+	let extra: Partial<Awaited<ReturnType<typeof importAddyExtras>>> = {};
+	if (extras) {
+		const ownDomains = [...new Set([...settings.aliasDomains, ...domains, ...selection.chosen.map((alias) => domainOf(alias.email))])];
+		const allowedDestinations = new Set((await listDestinations(c.env.DB, settings)).map((d) => d.email.toLowerCase()));
+		if (keepDestinations) {
+			for (const alias of selection.chosen) {
+				if (alias.destination && !isOwnAddress(alias.destination, ownDomains)) allowedDestinations.add(alias.destination.toLowerCase());
+			}
+		}
+		extra = await importAddyExtras(c.env.DB, extras, selection.chosen, { batchSize, allowedDestinations, ownDomains });
+	}
 	const result = {
 		...(await importAliases(c.env.DB, settings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
-			keepDestinations: form.destinations === "1",
+			keepDestinations,
 			// Fewer, larger batches on the Free plan, where a request may make only 50 D1 queries.
-			batchSize: c.get("config").workersPlan === "free" ? 500 : 100,
+			batchSize,
 		})),
 		...extra,
 	};
@@ -1153,15 +1209,7 @@ app.post("/aliases/bulk", async (c) => {
 	if ((form.action === "label" || form.action === "unlabel") && ids.length) {
 		const labelIds = [...new Set((Array.isArray(form.labels) ? form.labels : [form.labels]).filter((id): id is string => typeof id === "string" && /^lb_[0-9a-f]{32}$/.test(id)))].slice(0, 100);
 		if (!labelIds.length) return done("notice.bulkNoLabels");
-		// D1 binds at most 100 values a statement: the aliases are looked up in chunks.
-		const addresses: string[] = [];
-		for (let i = 0; i < ids.length; i += 90) {
-			const chunk = ids.slice(i, i + 90);
-			const { results } = await c.env.DB.prepare(`SELECT address FROM aliases WHERE deleted_at IS NULL AND address IN (${chunk.map(() => "?").join(", ")})`).bind(...chunk).all<{ address: string }>();
-			addresses.push(...results.map((row) => row.address));
-		}
-		let changed = 0;
-		for (const labelId of labelIds) changed += await toggleAliasLabel(c.env.DB, addresses, labelId, form.action === "label");
+		const changed = await toggleAliasLabels(c.env.DB, ids, labelIds, form.action === "label");
 		return done("notice.bulkDone", { count: String(changed) });
 	}
 	if (!BULK_ACTIONS.includes(action) || ids.length === 0) return done("notice.bulkBad");
@@ -1329,14 +1377,20 @@ app.post("/aliases/:address/contacts/:id/destination", async (c) => {
 	if (raw && !destination) return redirectWithNotice(c, base, "notice.badDestination");
 	const settings = await loadSettings(c.env.DB);
 	if (destination && isOwnAddress(destination, [...settings.aliasDomains, domainOf(address)])) return redirectWithNotice(c, base, "notice.destinationOnReverse");
-	const result = await c.env.DB.prepare("UPDATE contacts SET destination = ? WHERE id = ? AND alias_address = ?").bind(destination?.toLowerCase() ?? null, c.req.param("id"), address).run();
+	const result = await c.env.DB
+		.prepare("UPDATE contacts SET destination = ? WHERE id = ? AND alias_address = ? AND EXISTS (SELECT 1 FROM aliases WHERE address = ? AND deleted_at IS NULL)")
+		.bind(destination?.toLowerCase() ?? null, c.req.param("id"), address, address)
+		.run();
 	if (!result.meta.changes) return redirectWithNotice(c, base, "notice.contactMissing");
 	return redirectWithNotice(c, base, "notice.contactDestinationSaved");
 });
 
 app.post("/aliases/:address/contacts/:id/block", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
-	await c.env.DB.prepare("UPDATE contacts SET blocked = 1 - blocked WHERE id = ? AND alias_address = ?").bind(c.req.param("id"), address).run();
+	await c.env.DB
+		.prepare("UPDATE contacts SET blocked = 1 - blocked WHERE id = ? AND alias_address = ? AND EXISTS (SELECT 1 FROM aliases WHERE address = ? AND deleted_at IS NULL)")
+		.bind(c.req.param("id"), address, address)
+		.run();
 	return c.redirect(`/aliases/${encodeURIComponent(address)}`);
 });
 

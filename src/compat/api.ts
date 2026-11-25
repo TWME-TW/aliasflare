@@ -15,7 +15,7 @@ import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
 import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
-import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
+import { loadSettings, normalizeSettings, saveSettingKeys, type Settings } from "../settings";
 import { createLabel, deleteLabel, getLabelWithCount, LabelError, labelsOf, listLabels, setAliasLabels, updateLabel, type LabelRow } from "../labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, reorderRules, RuleError, setRuleActive, updateRule, type Rule } from "../rules";
 import {
@@ -452,11 +452,19 @@ api.get("/mailboxes", slMailboxes);
 
 // ── Settings changed from apps ────────────────────────────────────────────────────────────────
 
-/** Saves settings an app changed, if apps may change settings. */
+/** Saves only the settings keys an app changed, reloading first so concurrent admin changes are never clobbered. */
 async function changeSettings(c: C, update: Partial<Settings>): Promise<Settings> {
 	requireAppSettings(c);
-	const next = normalizeSettings({ ...c.get("settings"), ...update });
-	await saveSettings(c.env.DB, next);
+	const latest = await loadSettings(c.env.DB);
+	if (!latest.appSettings) {
+		throw new ClientError(403, "Changing settings from apps is turned off. Turn it on in the aliasflare settings.");
+	}
+	const next = normalizeSettings({ ...latest, ...update });
+	const changed: Partial<Settings> = {};
+	for (const key of Object.keys(update) as (keyof Settings)[]) {
+		(changed as Record<string, unknown>)[key] = next[key];
+	}
+	await saveSettingKeys(c.env.DB, changed);
 	c.set("settings", next);
 	return next;
 }
@@ -704,9 +712,15 @@ async function addBlocks(c: C, entries: { kind: "address" | "domain"; value: str
 		),
 	);
 	const created = ids.filter((_, index) => (results[index]?.meta.changes ?? 0) > 0);
-	const rows = created.length
-		? (await c.env.DB.prepare(`SELECT * FROM blocklist WHERE id IN (${created.map(() => "?").join(", ")})`).bind(...created).all<BlocklistRow>()).results
-		: [];
+	const rows: BlocklistRow[] = [];
+	for (let i = 0; i < created.length; i += 90) {
+		const chunk = created.slice(i, i + 90);
+		const { results: chunkRows } = await c.env.DB
+			.prepare(`SELECT * FROM blocklist WHERE id IN (${chunk.map(() => "?").join(", ")})`)
+			.bind(...chunk)
+			.all<BlocklistRow>();
+		rows.push(...chunkRows);
+	}
 	return { rows, skipped: entries.length - rows.length };
 }
 
@@ -755,9 +769,14 @@ api.post("/v1/blocklist", async (c) => {
 
 api.post("/v1/blocklist/store/bulk", async (c) => {
 	const body = await jsonBody(c);
-	const values = Array.isArray(body.values) ? [...new Set(body.values)].slice(0, 100) : [];
-	if (!values.length) throw new ClientError(422, "No values given.");
-	const { rows, skipped } = await addBlocks(c, values.map((value) => blockValue(body.type, value)));
+	const rawValues = Array.isArray(body.values) ? body.values.slice(0, 100) : [];
+	if (!rawValues.length) throw new ClientError(422, "No values given.");
+	const deduped = new Map<string, ReturnType<typeof blockValue>>();
+	for (const value of rawValues) {
+		const entry = blockValue(body.type, value);
+		deduped.set(entry.value, entry);
+	}
+	const { rows, skipped } = await addBlocks(c, [...deduped.values()]);
 	const added = rows.length;
 	const message =
 		added === 0
@@ -778,12 +797,24 @@ api.delete("/v1/blocklist/:id", async (c) => {
 api.post("/v1/blocklist/delete/bulk", async (c) => {
 	requireAppSettings(c);
 	const body = await jsonBody(c);
-	const ids = Array.isArray(body.ids) ? body.ids.filter((id): id is string => typeof id === "string").slice(0, 100) : [];
-	const found = ids.length
-		? (await c.env.DB.prepare(`SELECT id FROM blocklist WHERE id IN (${ids.map(() => "?").join(", ")})`).bind(...ids).all<{ id: string }>()).results.map((row) => row.id)
-		: [];
+	const ids = Array.isArray(body.ids) ? [...new Set(body.ids.filter((id): id is string => typeof id === "string"))].slice(0, 100) : [];
+	const found: string[] = [];
+	for (let i = 0; i < ids.length; i += 90) {
+		const chunk = ids.slice(i, i + 90);
+		const { results } = await c.env.DB
+			.prepare(`SELECT id FROM blocklist WHERE id IN (${chunk.map(() => "?").join(", ")})`)
+			.bind(...chunk)
+			.all<{ id: string }>();
+		found.push(...results.map((row) => row.id));
+	}
 	if (!found.length) return c.json({ message: "No blocklist entries found" }, 404);
-	await c.env.DB.prepare(`DELETE FROM blocklist WHERE id IN (${found.map(() => "?").join(", ")})`).bind(...found).run();
+	for (let i = 0; i < found.length; i += 90) {
+		const chunk = found.slice(i, i + 90);
+		await c.env.DB
+			.prepare(`DELETE FROM blocklist WHERE id IN (${chunk.map(() => "?").join(", ")})`)
+			.bind(...chunk)
+			.run();
+	}
 	return c.json({ message: found.length === 1 ? "1 entry removed from blocklist" : `${found.length} entries removed from blocklist`, ids: found });
 });
 
@@ -854,10 +885,11 @@ api.post("/v1/aliases", async (c) => {
 	const note = str(input.description) ?? null;
 	let alias: AliasView;
 	if (format === "custom") {
-		const rawLocal = str(input.local_part, 64)?.trim() ?? "";
-		const cleaned = cleanPrefix(rawLocal);
-		if (!cleaned || cleaned !== rawLocal.toLowerCase()) throw new ClientError(422, "Invalid local part.");
-		alias = await createAlias(c.env.DB, settings, { localPart: cleaned, domain, note, destination });
+		const rawLocal = str(input.local_part, 64)?.trim().toLowerCase() ?? "";
+		if (!rawLocal || !/^[a-z0-9._+-]{1,64}$/.test(rawLocal) || rawLocal.startsWith(".") || rawLocal.endsWith(".") || rawLocal.includes("..")) {
+			throw new ClientError(422, "Invalid local part.");
+		}
+		alias = await createAlias(c.env.DB, settings, { localPart: rawLocal, domain, note, destination });
 	} else {
 		alias = await createRandomAlias(c.env.DB, settings, { domain, format, note, destination });
 	}
@@ -1003,7 +1035,8 @@ for (const [action, verb, includeDeleted, run] of [
 
 api.post("/v1/aliases/recipients/bulk", async (c) => {
 	const { input, aliases } = await bulkAliases(c, false);
-	const ids = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
+	if (!Array.isArray(input.recipient_ids)) throw new ClientError(422, "The recipient_ids field must be an array.");
+	const ids = input.recipient_ids;
 	if (ids.length && typeof ids[0] !== "string") throw new ClientError(400, "Unknown mailbox");
 	const destination = ids.length ? await resolveDestination(c.env.DB, c.get("settings"), ids[0] as string) : null;
 	await updateAliases(c.env.DB, aliases.map((alias) => alias.address), { destination: destination ?? null });
@@ -1071,7 +1104,8 @@ api.delete("/v1/labels/:id", async (c) => {
 // Gives each alias exactly these labels; an empty list removes them all.
 api.post("/v1/aliases/labels/bulk", async (c) => {
 	const { input, aliases } = await bulkAliases(c, false);
-	await setAliasLabels(c.env.DB, aliases.map((alias) => alias.address), Array.isArray(input.label_ids) ? input.label_ids : []);
+	if (!Array.isArray(input.label_ids)) throw new ClientError(422, "The label_ids field must be an array.");
+	await setAliasLabels(c.env.DB, aliases.map((alias) => alias.address), input.label_ids);
 	return bulkDone(c, aliases, "updated");
 });
 
@@ -1116,13 +1150,14 @@ const RULE_ERRORS: Record<RuleError["reason"], [number, string]> = {
 async function ruleInput(c: C, existing: Rule | null = null) {
 	const input = await body(c);
 	const destinations = await ruleDestinations(c);
-	const kept = existing?.actions.find((action) => action.type === "forwardTo")?.value;
+	const kept = new Set(existing?.actions.filter((action) => action.type === "forwardTo").map((action) => action.value.toLowerCase()) ?? []);
 	const actions = (Array.isArray(input.actions) ? input.actions : []).map((action) => {
 		if (!action || typeof action !== "object" || (action as { type?: unknown }).type !== "forwardTo") return action;
 		const value = (action as { value?: unknown }).value;
-		const match = destinations.find((d) => d.uid === value || String(d.numId) === String(value));
+		const scalar = typeof value === "string" || typeof value === "number";
+		const match = scalar ? destinations.find((d) => d.uid === value || String(d.numId) === String(value)) : undefined;
 		if (match) return { type: "forwardTo", value: match.email };
-		if (kept && typeof value === "string" && value.toLowerCase() === kept) return { type: "forwardTo", value: kept };
+		if (typeof value === "string" && kept.has(value.toLowerCase())) return { type: "forwardTo", value: value.toLowerCase() };
 		throw new ClientError(...RULE_ERRORS.forwardTo);
 	});
 	try {

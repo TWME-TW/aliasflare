@@ -431,8 +431,8 @@ export function parseHeaderLines(lines: string): [string, string][] {
 			throw new OutboundError(`Not a header line: ${line.slice(0, 60)}`);
 		}
 		const value = line.slice(at + 1).trim();
-		if (/[\u0000-\u001f\u007f]/.test(value)) {
-			throw new OutboundError(`Header value contains control characters: ${name}`);
+		if (/[\u0000-\u001f\u007f]|[^\x00-\xff]/.test(value)) {
+			throw new OutboundError(`Header value contains invalid or control characters: ${name}`);
 		}
 		out.push([name, value]);
 	}
@@ -484,29 +484,31 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 	}
 	const provider = config.outboundProvider;
 	const options = config.outboundOptions;
+	// Ensure plain-text-only messages never send an empty string (rejected by Resend, SMTP2GO, Postmark, Mailgun).
+	const normalized: OutboundMessage = !message.html && !message.text ? { ...message, text: " " } : message;
 	// An SMTP server may take mail without a password; everything else needs its secret.
 	if (!config.outboundApiKey && !(provider === "smtp" && !options.smtpUsername) && provider !== "custom") throw new OutboundError(`No API key is set for ${provider}`);
 	const key = config.outboundApiKey;
 	const blockedHosts = [config.publicUrl, config.siteOrigin, config.mailflareUrl].map(hostnameOf).filter((host): host is string => !!host);
 	switch (provider) {
 		case "resend":
-			return { messageId: await viaResend(key, message) };
+			return { messageId: await viaResend(key, normalized) };
 		case "smtp2go":
-			return { messageId: await viaSmtp2go(key, message) };
+			return { messageId: await viaSmtp2go(key, normalized) };
 		case "brevo":
-			return { messageId: await viaBrevo(key, message) };
+			return { messageId: await viaBrevo(key, normalized) };
 		case "postmark":
-			return { messageId: await viaPostmark(key, message) };
+			return { messageId: await viaPostmark(key, normalized) };
 		case "mailgun":
-			return { messageId: await viaMailgun(key, options, message) };
+			return { messageId: await viaMailgun(key, options, normalized) };
 		case "ses":
-			return { messageId: await viaSes(key, options, message) };
+			return { messageId: await viaSes(key, options, normalized) };
 		case "mailbaby":
-			return { messageId: await viaMailbaby(key, options, message) };
+			return { messageId: await viaMailbaby(key, options, normalized) };
 		case "smtp":
-			return { messageId: await viaSmtp(key, options, message, blockedHosts) };
+			return { messageId: await viaSmtp(key, options, normalized, blockedHosts) };
 		case "custom":
-			return { messageId: await viaCustom(key, options, message, blockedHosts) };
+			return { messageId: await viaCustom(key, options, normalized, blockedHosts) };
 		default:
 			throw new OutboundError(`Unknown outbound provider: ${String(provider)}`);
 	}
