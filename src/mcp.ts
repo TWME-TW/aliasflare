@@ -151,20 +151,21 @@ async function callTool(db: D1Database, settings: Settings, name: string, args: 
 			const domain = (text(args.domain, 253)?.trim() || settings.aliasDomains[0] || "").toLowerCase();
 			const note = typeof args.note === "string" ? args.note.trim().slice(0, MAX_NOTE) || null : null;
 			const localPart = typeof args.local_part === "string" ? args.local_part.trim().slice(0, 64) : undefined;
+			if (args.local_part !== undefined && !localPart) return { error: "local_part must not be empty." };
 			const alias = localPart
 				? await createAlias(db, settings, { localPart: cleanPrefix(localPart), domain, note, allowRestore: false })
 				: await createRandomAlias(db, settings, { domain, note });
 			return { data: { alias: view(alias) } };
 		}
 		case "set_alias_mode": {
-			const alias = await findAlias(db, args.address);
 			if (!MODES.includes(args.mode as ForwardMode)) return { error: `mode must be one of: ${MODES.join(", ")}.` };
+			const alias = await findAlias(db, args.address);
 			await setForwardMode(db, alias.address, args.mode as ForwardMode);
 			return { data: { alias: view({ ...alias, forward_mode: args.mode as ForwardMode }) } };
 		}
 		case "set_alias_note": {
-			const alias = await findAlias(db, args.address);
 			if (typeof args.note !== "string") return { error: "note must be a string." };
+			const alias = await findAlias(db, args.address);
 			const note = args.note.trim().slice(0, MAX_NOTE) || null;
 			await updateAlias(db, alias.address, { note });
 			return { data: { alias: view({ ...alias, note }) } };
@@ -241,6 +242,9 @@ mcp.post("/", async (c) => {
 			return rpcError(c, null, -32600, "Invalid Request", 400);
 		}
 		return c.body(null, 202);
+	}
+	if (typeof id !== "string" && !Number.isSafeInteger(id)) {
+		return rpcError(c, null, -32600, "Invalid Request", 400);
 	}
 	if (typeof method !== "string") return rpcError(c, id, -32600, "Invalid Request", 400);
 	if (params !== undefined && (!params || typeof params !== "object" || Array.isArray(params))) {

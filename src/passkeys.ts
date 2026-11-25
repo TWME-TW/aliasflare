@@ -222,7 +222,7 @@ export async function completeAuthentication(
 	response: AuthenticationResponseJSON,
 ): Promise<PasskeyRow | null> {
 	const expectedChallenge = await takeChallenge(db, challengeId, "login");
-	if (!expectedChallenge) return null;
+	if (!expectedChallenge || typeof response?.id !== "string" || !response.id) return null;
 	const row = await db.prepare("SELECT * FROM passkeys WHERE id = ?").bind(response.id).first<PasskeyRow>();
 	if (!row) return null;
 	const verification = await verifyAuthenticationResponse({

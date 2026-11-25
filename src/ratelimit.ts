@@ -6,21 +6,30 @@
 export function clientKey(ip: string | null | undefined): string {
 	const value = (ip ?? "").trim().toLowerCase();
 	if (!value.includes(":")) return value || "unknown";
-	// IPv4-mapped IPv6 addresses (::ffff:1.2.3.4 or ::ffff:0102:0304) must bucket per IPv4 host, not one /64.
-	const mappedDotted = value.match(/^(?:::|(?:0+:){5})ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-	if (mappedDotted) return mappedDotted[1]!;
-	const mappedHex = value.match(/^(?:::|(?:0+:){5})ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-	if (mappedHex) {
-		const hi = parseInt(mappedHex[1]!, 16);
-		const lo = parseInt(mappedHex[2]!, 16);
-		return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+	// Expand IPv6 groups (including any embedded dotted IPv4 tail) so every IPv4-mapped form
+	// (::ffff:1.2.3.4, 0:0::ffff:1.2.3.4, ::ffff:0102:0304) buckets per IPv4 host instead of one /64.
+	const ipv4Tail = value.match(/:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+	let normalized = value;
+	if (ipv4Tail) {
+		const octets = ipv4Tail.slice(1).map(Number);
+		if (octets.every((n) => n >= 0 && n <= 255)) {
+			const hi = ((octets[0]! << 8) | octets[1]!).toString(16);
+			const lo = ((octets[2]! << 8) | octets[3]!).toString(16);
+			normalized = `${value.slice(0, value.length - ipv4Tail[0]!.length)}:${hi}:${lo}`;
+		}
 	}
-	const [head = "", tail = ""] = value.split("::");
+	const [head = "", tail = ""] = normalized.split("::");
 	const left = head ? head.split(":") : [];
-	const right = value.includes("::") ? (tail ? tail.split(":") : []) : [];
-	const groups = value.includes("::") ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right] : left;
-	return `${groups
-		.slice(0, 4)
-		.map((group) => (group || "0").replace(/^0+(?=.)/, ""))
-		.join(":")}::/64`;
+	const right = normalized.includes("::") ? (tail ? tail.split(":") : []) : [];
+	const groups = (normalized.includes("::") ? [...left, ...Array(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right] : left).map((group) =>
+		(group || "0").replace(/^0+(?=.)/, ""),
+	);
+	if (groups.length === 8 && groups.slice(0, 5).every((g) => g === "0") && groups[5] === "ffff") {
+		const hi = parseInt(groups[6]!, 16);
+		const lo = parseInt(groups[7]!, 16);
+		if (!Number.isNaN(hi) && !Number.isNaN(lo)) {
+			return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+		}
+	}
+	return `${groups.slice(0, 4).join(":")}::/64`;
 }

@@ -4,7 +4,7 @@
  */
 import { connect } from "cloudflare:sockets";
 import { bytesToBase64 } from "./crypto";
-import { OutboundError } from "./outbound";
+import { OutboundError, redact } from "./outbound";
 
 export type SmtpSecurity = "tls" | "starttls";
 export type SmtpOptions = { host: string; port: number; security: SmtpSecurity; username: string; password: string };
@@ -120,31 +120,33 @@ class Conversation {
 	}
 
 	/** Sends a command and expects one of the codes. Secrets are never put in the error. */
-	async command(line: string, expect: number[], what = line.split(" ")[0]): Promise<string> {
+	async command(line: string, expect: number[], what = line.split(" ")[0], secrets: string[] = []): Promise<string> {
 		await this.send(`${line}\r\n`);
-		return this.expect(expect, what ?? "");
+		return this.expect(expect, what ?? "", secrets);
 	}
 
-	async expect(codes: number[], what: string): Promise<string> {
+	async expect(codes: number[], what: string, secrets: string[] = []): Promise<string> {
 		const { code, text } = await this.reply();
-		if (!codes.includes(code)) throw new OutboundError(`SMTP ${what} failed: ${text.slice(0, 300)}`);
+		if (!codes.includes(code)) throw new OutboundError(`SMTP ${what} failed: ${redact(text, secrets).slice(0, 300)}`);
 		return text;
 	}
 
 	async close() {
-		await this.reader.cancel().catch(() => undefined);
+		await Promise.allSettled([
+			this.socket.close().catch(() => undefined),
+			this.reader.cancel().catch(() => undefined),
+			this.writer.abort().catch(() => undefined),
+		]);
 		try {
 			this.reader.releaseLock();
 		} catch {
-			// Already released or locked by an active read; socket.close() aborts it.
+			// Already released or locked by an active read.
 		}
-		await this.writer.abort().catch(() => undefined);
 		try {
 			this.writer.releaseLock();
 		} catch {
 			// Already released or writing.
 		}
-		await this.socket.close().catch(() => undefined);
 	}
 }
 
@@ -161,6 +163,9 @@ export async function sendSmtp(options: SmtpOptions, envelope: { from: string; t
 	if (!Number.isInteger(options.port) || options.port <= 0 || options.port >= 65536) throw new OutboundError("Invalid SMTP port");
 	if (!envelope.from || !envelope.to || /[\u0000-\u001f\u007f\s<>]/.test(envelope.from) || /[\u0000-\u001f\u007f\s<>]/.test(envelope.to)) {
 		throw new OutboundError("Invalid SMTP envelope address");
+	}
+	if (/[\u0000\r\n]/.test(options.username) || /[\u0000\r\n]/.test(options.password)) {
+		throw new OutboundError("Invalid SMTP credentials");
 	}
 	const socket = open({ hostname: options.host, port: options.port }, { secureTransport: options.security === "tls" ? "on" : "starttls", allowHalfOpen: false });
 	const smtp = new Conversation(socket);
@@ -184,12 +189,13 @@ export async function sendSmtp(options: SmtpOptions, envelope: { from: string; t
 			for (const match of features.matchAll(/^250[ -]AUTH[ =]([^\r\n]*)/gim)) {
 				for (const item of (match[1] ?? "").toUpperCase().split(/\s+/)) if (item) mechanisms.add(item);
 			}
+			const authSecrets = [options.password, b64(options.password), b64(`\0${options.username}\0${options.password}`)];
 			if (mechanisms.has("PLAIN")) {
-				await smtp.command(`AUTH PLAIN ${b64(`\0${options.username}\0${options.password}`)}`, [235], "AUTH");
+				await smtp.command(`AUTH PLAIN ${b64(`\0${options.username}\0${options.password}`)}`, [235], "AUTH", authSecrets);
 			} else if (mechanisms.has("LOGIN")) {
-				await smtp.command("AUTH LOGIN", [334], "AUTH");
-				await smtp.command(b64(options.username), [334], "AUTH");
-				await smtp.command(b64(options.password), [235], "AUTH");
+				await smtp.command("AUTH LOGIN", [334], "AUTH", authSecrets);
+				await smtp.command(b64(options.username), [334], "AUTH", authSecrets);
+				await smtp.command(b64(options.password), [235], "AUTH", authSecrets);
 			} else {
 				throw new OutboundError("SMTP server does not support AUTH PLAIN or AUTH LOGIN");
 			}

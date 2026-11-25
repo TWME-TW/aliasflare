@@ -55,7 +55,9 @@ async function claim(db: D1Database, messageId: string, aliasAddress: string): P
 	const existing = await db.prepare("SELECT * FROM forwards WHERE inbound_id = ?").bind(messageId).first<ForwardRow>();
 	if (!existing) return { status: 409, result: "busy" };
 	if (existing.status === "sent" || existing.status === "skipped") return { status: 200, result: `duplicate (${existing.status})` };
-	if (existing.status === "failed" && (existing.attempts ?? 0) >= MAX_ATTEMPTS) return { status: 200, result: `gave up after ${MAX_ATTEMPTS} attempts` };
+	if ((existing.status === "failed" || (existing.status === "processing" && existing.updated_at < timestamp - STALE_PROCESSING_SECONDS)) && (existing.attempts ?? 0) >= MAX_ATTEMPTS) {
+		return { status: 200, result: `gave up after ${MAX_ATTEMPTS} attempts` };
+	}
 	const reclaimed = await db
 		.prepare(
 			"UPDATE forwards SET status = 'processing', error = NULL, attempts = attempts + 1, updated_at = ? WHERE id = ? AND (status = 'failed' OR (status = 'processing' AND updated_at < ?))",
@@ -113,7 +115,7 @@ export function dmarcFailedAtCloudflare(authResults: string | null): boolean {
 
 /** The header block, or null when it does not end within 64 KiB (then nothing in it is trusted). */
 function rawHeaderSection(raw: ArrayBuffer): string | null {
-	const head = new TextDecoder().decode(new Uint8Array(raw).subarray(0, 65536));
+	const head = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(new Uint8Array(raw).subarray(0, 65536));
 	const end = head.search(/\r?\n\r?\n/);
 	return end >= 0 ? head.slice(0, end) : null;
 }
@@ -271,8 +273,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			const envelopeSender = parseBareEmail(event.from);
 			const parsedFrom = addressParser(headers.get("From") ?? "", { flatten: true })
 				.map((entry) => parseBareEmail(entry.address))
-				.filter((value): value is string => !!value)
-				.slice(0, 20);
+				.filter((value): value is string => !!value);
+			if (parsedFrom.length > 20) return await skip("too many From addresses");
 			const senders = [...new Set([envelopeSender, ...parsedFrom].filter((value): value is string => !!value))];
 			if (!senders.length || senders.some((sender) => isReverseDomainOf(domainOf(sender), [...settings.aliasDomains, aliasDomain]))) return await skip("no usable sender");
 			for (const sender of senders) {
@@ -291,7 +293,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				return await skip("promotional mail is blocked for this alias");
 			}
 			// The message is passed on unchanged, so of a rule's actions only Block and Forward to act on it.
-			const rules = await runRules(db, "forwards", { sender: primarySender, subject: await decodedSubject(headers.get("Subject")), alias: aliasAddress });
+			const passSpoofed = parsedFrom.length > 1 || dmarcFailedAtCloudflare(headers.get("Authentication-Results"));
+			const rules = await runRules(db, "forwards", { sender: primarySender, senders, spoofed: passSpoofed, subject: await decodedSubject(headers.get("Subject")), alias: aliasAddress });
 			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
@@ -366,7 +369,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		await finish(db, forwardId, { contact_id: contact.id });
 		if (contact.blocked) return await skip("sender is blocked");
 		// A sender can have an address of its own (set by an unsubscribe, say).
-		const rules = await runRules(db, "forwards", { sender: senderEmail, subject: email.subject ?? "", alias: aliasAddress });
+		const ruleSenders = [senderEmail, ...(envelopeSender ? [envelopeSender] : [])];
+		const rules = await runRules(db, "forwards", { sender: senderEmail, senders: ruleSenders, spoofed, subject: email.subject ?? "", alias: aliasAddress });
 		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 		// A rule's Forward to comes first, then the sender's own address, then the alias's.
 		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo);
@@ -406,7 +410,15 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			if (carriesAddresses(type, filename) !== "calendar") continue;
 			for (const organizer of calendarOrganizers(attachment.content as ArrayBuffer).slice(0, 3)) {
 				if (calendarReplacements.length >= 5 || calendarReplacements.some((r) => r.from === organizer)) continue;
-				if (isOwnAddress(organizer, [...settings.aliasDomains, aliasDomain]) || isReverseDomainOf(domainOf(organizer), settings.aliasDomains)) continue;
+				if (
+					organizer === normalizeEmail(destination) ||
+					organizer === normalizeEmail(recipient) ||
+					isOwnAddress(organizer, [...settings.aliasDomains, aliasDomain]) ||
+					isReverseDomainOf(domainOf(organizer), settings.aliasDomains) ||
+					(await matchBlocklist(db, organizer))
+				) {
+					continue;
+				}
 				const organizerContact = organizer === contact.email ? contact : await ensureContact(db, aliasAddress, organizer, null, settings.includeSenderInReverseAlias);
 				calendarReplacements.push({ from: organizer, to: reverseAddressOf(organizerContact.reverse_local, reverseDomain) });
 			}

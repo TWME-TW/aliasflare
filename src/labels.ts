@@ -43,6 +43,17 @@ export async function getLabel(db: D1Database, id: string): Promise<LabelRow | n
 	return db.prepare("SELECT * FROM labels WHERE id = ?").bind(id).first<LabelRow>();
 }
 
+export async function getLabelWithCount(db: D1Database, id: string): Promise<LabelWithCount | null> {
+	const row = await db
+		.prepare(
+			`SELECT l.*, (SELECT COUNT(*) FROM alias_labels al JOIN aliases a ON a.address = al.alias_address WHERE al.label_id = l.id AND a.deleted_at IS NULL) AS aliases
+			 FROM labels l WHERE l.id = ?`,
+		)
+		.bind(id)
+		.first<LabelWithCount>();
+	return row ? { ...row, aliases: Number(row.aliases) } : null;
+}
+
 export async function createLabel(db: D1Database, input: { name: unknown; colour?: unknown }): Promise<LabelRow> {
 	const name = cleanLabelName(input.name);
 	if (!name) throw new LabelError("name");
@@ -68,8 +79,14 @@ export async function updateLabel(db: D1Database, id: string, input: { name?: un
 	if (!colour) throw new LabelError("colour");
 	const clash = await db.prepare("SELECT id FROM labels WHERE name = ? AND id != ?").bind(name, id).first();
 	if (clash) throw new LabelError("taken");
-	await db.prepare("UPDATE labels SET name = ?, colour = ?, updated_at = ? WHERE id = ?").bind(name, colour, now(), id).run();
-	return { ...label, name, colour, updated_at: now() };
+	const updatedAt = now();
+	try {
+		await db.prepare("UPDATE labels SET name = ?, colour = ?, updated_at = ? WHERE id = ?").bind(name, colour, updatedAt, id).run();
+	} catch (error) {
+		if (error instanceof Error && /unique/i.test(error.message)) throw new LabelError("taken");
+		throw error;
+	}
+	return { ...label, name, colour, updated_at: updatedAt };
 }
 
 export async function deleteLabel(db: D1Database, id: string): Promise<boolean> {
@@ -81,20 +98,40 @@ export async function deleteLabel(db: D1Database, id: string): Promise<boolean> 
 async function knownLabelIds(db: D1Database, ids: unknown[]): Promise<string[]> {
 	const wanted = [...new Set(ids.filter((id): id is string => typeof id === "string"))].slice(0, MAX_LABELS);
 	if (!wanted.length) return [];
-	const { results } = await db.prepare(`SELECT id FROM labels WHERE id IN (${wanted.map(() => "?").join(", ")})`).bind(...wanted).all<{ id: string }>();
-	const known = new Set(results.map((row) => row.id));
+	const known = new Set<string>();
+	for (let i = 0; i < wanted.length; i += 90) {
+		const chunk = wanted.slice(i, i + 90);
+		const { results } = await db.prepare(`SELECT id FROM labels WHERE id IN (${chunk.map(() => "?").join(", ")})`).bind(...chunk).all<{ id: string }>();
+		for (const row of results) known.add(row.id);
+	}
 	return wanted.filter((id) => known.has(id));
 }
 
-/** Gives each alias exactly these labels (unknown ids are left out). */
+/** Gives each alias exactly these labels (unknown ids are left out), keeping each alias atomic in one batch. */
 export async function setAliasLabels(db: D1Database, addresses: string[], labelIds: unknown[]): Promise<void> {
 	if (!addresses.length) return;
 	const ids = await knownLabelIds(db, labelIds);
-	const statements = addresses.flatMap((address) => [
-		db.prepare("DELETE FROM alias_labels WHERE alias_address = ?").bind(address),
-		...ids.map((id) => db.prepare("INSERT OR IGNORE INTO alias_labels (alias_address, label_id) VALUES (?, ?)").bind(address, id)),
-	]);
-	for (let i = 0; i < statements.length; i += 100) await db.batch(statements.slice(i, i + 100));
+	const chunks: string[][] = [];
+	for (let i = 0; i < ids.length; i += 90) chunks.push(ids.slice(i, i + 90));
+	let batch: D1PreparedStatement[] = [];
+	const flush = async () => {
+		if (!batch.length) return;
+		await db.batch(batch);
+		batch = [];
+	};
+	for (const address of addresses) {
+		const perAlias: D1PreparedStatement[] = [
+			db.prepare("DELETE FROM alias_labels WHERE alias_address = ?").bind(address),
+			...chunks.map((chunk) =>
+				db
+					.prepare(`INSERT OR IGNORE INTO alias_labels (alias_address, label_id) SELECT ?, id FROM labels WHERE id IN (${chunk.map(() => "?").join(", ")})`)
+					.bind(address, ...chunk),
+			),
+		];
+		if (batch.length + perAlias.length > 100) await flush();
+		batch.push(...perAlias);
+	}
+	await flush();
 }
 
 /** Adds (or removes) one label on each alias, leaving their other labels. */

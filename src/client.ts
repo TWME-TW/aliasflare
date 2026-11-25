@@ -348,10 +348,10 @@ export const APP_SCRIPT = `(() => {
     if (saved !== null) nav.scrollLeft = Number(saved) || 0;
     const current = nav.querySelector("a[aria-current]");
     if (current) {
-      const left = current.offsetLeft - nav.offsetLeft;
-      const right = left + current.offsetWidth;
-      if (saved === null || left < nav.scrollLeft || right > nav.scrollLeft + nav.clientWidth) {
-        nav.scrollLeft = left - (nav.clientWidth - current.offsetWidth) / 2;
+      const navRect = nav.getBoundingClientRect();
+      const itemRect = current.getBoundingClientRect();
+      if (saved === null || itemRect.left < navRect.left || itemRect.right > navRect.right) {
+        current.scrollIntoView({ block: "nearest", inline: "center" });
       }
     }
     const remember = () => { try { sessionStorage.setItem(KEY, String(Math.round(nav.scrollLeft))); } catch {} };

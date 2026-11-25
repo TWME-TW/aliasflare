@@ -99,11 +99,24 @@ async function findRule(token: string, zoneId: string, address: string): Promise
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 // Only "already exists / enabled / configured" counts as done, not any message with "exist" in it.
 const alreadyDone = (error: unknown) => /\balready (exists?|enabled|configured|added|in use)\b|\bduplicate\b/i.test(message(error));
-/** True when Cloudflare reports Email Routing as on for the zone. */
+/** True when Cloudflare reports Email Routing as on for the zone apex. */
 async function routingEnabled(token: string, zoneId: string): Promise<boolean> {
 	try {
 		const settings = await cf<{ enabled?: boolean; status?: string }>(token, `/zones/${encodeURIComponent(zoneId)}/email/routing`);
 		return settings?.enabled === true || settings?.status === "ready";
+	} catch {
+		return false;
+	}
+}
+/** True when Cloudflare reports Email Routing MX records are configured on the subdomain. */
+async function subdomainRoutingEnabled(token: string, zoneId: string, domain: string): Promise<boolean> {
+	try {
+		const result = await cf<{ type?: string; content?: string }[] | { records?: { type?: string; content?: string }[] }>(
+			token,
+			`/zones/${encodeURIComponent(zoneId)}/email/routing/dns?subdomain=${encodeURIComponent(domain)}`,
+		);
+		const records = Array.isArray(result) ? result : (result?.records ?? []);
+		return records.some((record) => record.type?.toUpperCase() === "MX" && /\.mx\.cloudflare\.net\.?$/i.test(record.content ?? ""));
 	} catch {
 		return false;
 	}
@@ -118,9 +131,10 @@ async function enableRouting(token: string, zone: { id: string; name: string }, 
 			...(zone.name === domain ? {} : { body: JSON.stringify({ name: domain }) }),
 		});
 	} catch (error) {
-		// "Already exists" is done only when Email Routing is really on: running setup again says so
-		// too, but so does an MX record of another mail service, which must be reported.
-		if (!alreadyDone(error) || !(await routingEnabled(token, zone.id))) throw error;
+		// "Already exists" is done only when Email Routing is really on for that host (apex or subdomain):
+		// running setup again says so too, but so does an MX record of another mail service, which must be reported.
+		const enabled = zone.name === domain ? await routingEnabled(token, zone.id) : await subdomainRoutingEnabled(token, zone.id, domain);
+		if (!alreadyDone(error) || !enabled) throw error;
 	}
 }
 
@@ -198,8 +212,15 @@ export async function setUpDomain(input: { token: string; domain: string; worker
 			name: `aliasflare reverse aliases (${address})`,
 		};
 		const existing = await findRule(token, found.id, address);
-		if (existing) await cf(token, `${zonePath}/email/routing/rules/${encodeURIComponent(existing.id)}`, { method: "PUT", body: JSON.stringify(rule) });
-		else await cf(token, `${zonePath}/email/routing/rules`, { method: "POST", body: JSON.stringify(rule) });
+		if (existing) {
+			if (existing.enabled && !toWorker(existing.actions, workerName) && !input.replaceCatchAll) {
+				const where = existing.actions.map((action) => [action.type, ...(action.value ?? [])].join(" ")).join(", ");
+				throw new Error(`The rule for ${address} already sends mail elsewhere (${where}); it was left unchanged. Tick “Replace existing catch-alls” and run the setup again to replace it.`);
+			}
+			await cf(token, `${zonePath}/email/routing/rules/${encodeURIComponent(existing.id)}`, { method: "PUT", body: JSON.stringify(rule) });
+		} else {
+			await cf(token, `${zonePath}/email/routing/rules`, { method: "POST", body: JSON.stringify(rule) });
+		}
 		return `${address} → ${workerName}`;
 	});
 

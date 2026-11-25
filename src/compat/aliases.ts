@@ -125,6 +125,22 @@ export async function getAliasView(db: D1Database, by: { numId: number } | { uid
 	return db.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a WHERE a.${column} = ?`).bind(value).first<AliasView>();
 }
 
+/** Batch version of getAliasView by uid (chunked by 90 params to stay within D1 limits). Preserves input order. */
+export async function getAliasViewsByUids(db: D1Database, uids: string[]): Promise<AliasView[]> {
+	const unique = [...new Set(uids)];
+	if (!unique.length) return [];
+	const byUid = new Map<string, AliasView>();
+	for (let i = 0; i < unique.length; i += 90) {
+		const chunk = unique.slice(i, i + 90);
+		const { results } = await db
+			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a WHERE a.uid IN (${chunk.map(() => "?").join(", ")})`)
+			.bind(...chunk)
+			.all<AliasView>();
+		for (const row of results) byUid.set(row.uid, row);
+	}
+	return unique.map((uid) => byUid.get(uid)).filter((row): row is AliasView => !!row);
+}
+
 /** The contact with the most recent forward or reply, for SimpleLogin's latest_activity. */
 export async function latestContact(db: D1Database, address: string): Promise<ContactRow | null> {
 	return db
@@ -197,7 +213,7 @@ export async function listDestinations(db: D1Database, settings: Settings): Prom
 		.all<{ destination: string | null; n: number }>();
 	const counts = new Map<string, number>();
 	for (const row of results) {
-		const email = row.destination || settings.defaultDestination;
+		const email = row.destination?.toLowerCase() || settings.defaultDestination;
 		if (email && !isOwnAddress(email, settings.aliasDomains)) counts.set(email, (counts.get(email) ?? 0) + Number(row.n));
 	}
 	if (settings.defaultDestination && !isOwnAddress(settings.defaultDestination, settings.aliasDomains) && !counts.has(settings.defaultDestination)) {
@@ -346,6 +362,16 @@ export async function updateAlias(
 	address: string,
 	fields: { note?: string | null; name?: string | null; pinned?: boolean; enabled?: boolean; destination?: string | null },
 ): Promise<void> {
+	await updateAliases(db, [address], fields);
+}
+
+/** Batch-updates one or more aliases in chunks of 100 statements. */
+export async function updateAliases(
+	db: D1Database,
+	addresses: string[],
+	fields: { note?: string | null; name?: string | null; pinned?: boolean; enabled?: boolean; destination?: string | null },
+): Promise<void> {
+	if (!addresses.length) return;
 	const sets: string[] = [];
 	const params: unknown[] = [];
 	if (fields.note !== undefined) sets.push("note = ?"), params.push(fields.note?.trim().slice(0, MAX_NOTE_LENGTH) || null);
@@ -359,15 +385,37 @@ export async function updateAlias(
 	if (fields.destination !== undefined) sets.push("destination = ?"), params.push(fields.destination);
 	if (!sets.length) return;
 	sets.push("updated_at = ?"), params.push(now());
-	await db.prepare(`UPDATE aliases SET ${sets.join(", ")} WHERE address = ?`).bind(...params, address).run();
+	const sql = `UPDATE aliases SET ${sets.join(", ")} WHERE address = ?`;
+	if (addresses.length === 1) {
+		await db.prepare(sql).bind(...params, addresses[0]).run();
+		return;
+	}
+	const statements = addresses.map((address) => db.prepare(sql).bind(...params, address));
+	for (let i = 0; i < statements.length; i += 100) await db.batch(statements.slice(i, i + 100));
 }
 
 export async function deleteAlias(db: D1Database, address: string): Promise<void> {
-	await db.prepare("UPDATE aliases SET deleted_at = ?, forward_mode = 'none', forward_enabled = 0, pinned = 0, updated_at = ? WHERE address = ?").bind(now(), now(), address).run();
+	await deleteAliases(db, [address]);
+}
+
+export async function deleteAliases(db: D1Database, addresses: string[]): Promise<void> {
+	if (!addresses.length) return;
+	const ts = now();
+	const statements = addresses.map((address) =>
+		db.prepare("UPDATE aliases SET deleted_at = ?, forward_mode = 'none', forward_enabled = 0, pinned = 0, updated_at = ? WHERE address = ?").bind(ts, ts, address),
+	);
+	for (let i = 0; i < statements.length; i += 100) await db.batch(statements.slice(i, i + 100));
 }
 
 export async function restoreAlias(db: D1Database, address: string): Promise<void> {
-	await db.prepare("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ?").bind(now(), address).run();
+	await restoreAliases(db, [address]);
+}
+
+export async function restoreAliases(db: D1Database, addresses: string[]): Promise<void> {
+	if (!addresses.length) return;
+	const ts = now();
+	const statements = addresses.map((address) => db.prepare("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ?").bind(ts, address));
+	for (let i = 0; i < statements.length; i += 100) await db.batch(statements.slice(i, i + 100));
 }
 
 /**
@@ -387,6 +435,15 @@ export function forgetStatements(db: D1Database, address: string): D1PreparedSta
 
 /** Removes the alias and everything about it for good; mail that still arrives makes it appear again. */
 export async function forgetAlias(db: D1Database, address: string): Promise<void> {
-	// The apps may forget an alias that is not deleted yet: mark it deleted in the same batch.
-	await db.batch([db.prepare("UPDATE aliases SET deleted_at = COALESCE(deleted_at, ?) WHERE address = ?").bind(now(), address), ...forgetStatements(db, address)]);
+	await forgetAliases(db, [address]);
+}
+
+/** Batch-forgets aliases, keeping each alias's 5 statements atomic in the same batch (20 aliases = 100 statements). */
+export async function forgetAliases(db: D1Database, addresses: string[]): Promise<void> {
+	if (!addresses.length) return;
+	const ts = now();
+	for (let i = 0; i < addresses.length; i += 20) {
+		const chunk = addresses.slice(i, i + 20);
+		await db.batch(chunk.flatMap((address) => [db.prepare("UPDATE aliases SET deleted_at = COALESCE(deleted_at, ?) WHERE address = ?").bind(ts, address), ...forgetStatements(db, address)]));
+	}
 }
