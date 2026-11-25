@@ -69,7 +69,9 @@ export function rewriteAttachment(
 }
 
 const MAX_EML_DEPTH = 5;
-export const MAX_NESTED_EML_PARSES = 16;
+// Each attached message, at any depth, costs one parse. Above the 50 attachments a reply may
+// carry, so a reply forwarding many messages keeps them all; only crafted nesting runs out.
+export const MAX_NESTED_EML_PARSES = 64;
 export const MAX_NESTED_ATTACHMENTS = 32;
 
 export type EmlParseBudget = { remaining: number };

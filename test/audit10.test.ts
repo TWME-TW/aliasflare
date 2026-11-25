@@ -61,9 +61,16 @@ describe("1. Linear-time stripSignedLinks against repeated scheme-less tokens", 
 });
 
 describe("2. Bounded nested .eml parsing and early reply attachment limit enforcement", () => {
+	it("leaves room for every attached message a reply may carry", () => {
+		// A reply holds at most 50 attachments; each attached message costs one parse.
+		expect(MAX_NESTED_EML_PARSES).toBeGreaterThan(50);
+	});
+
 	it("bounds total PostalMime parses across wide nested .eml attachments", async () => {
 		const leafEml = toArrayBuffer("From: leak@home.test\r\nTo: other@example.com\r\nSubject: Leaf\r\n\r\nBody me@home.test");
-		const nestedCount = MAX_NESTED_EML_PARSES + 6;
+		// A small budget, well under the 32-part width cap, so it runs out on width alone.
+		const budgetSize = 8;
+		const nestedCount = budgetSize + 6;
 		const outerRaw = buildMime(
 			{
 				from: "sender@example.com",
@@ -82,20 +89,20 @@ describe("2. Bounded nested .eml parsing and early reply attachment limit enforc
 		);
 		const parseSpy = vi.spyOn(PostalMime, "parse");
 		try {
-			const searchBudget = { remaining: MAX_NESTED_EML_PARSES };
+			const searchBudget = { remaining: budgetSize };
 			await attachmentSearchText(toArrayBuffer(outerRaw), "message", 0, searchBudget);
 			expect(searchBudget.remaining).toBe(0);
-			expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(MAX_NESTED_EML_PARSES);
+			expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(budgetSize);
 
 			parseSpy.mockClear();
-			const scrubBudget = { remaining: MAX_NESTED_EML_PARSES };
+			const scrubBudget = { remaining: budgetSize };
 			const scrubbed = await scrubAttachedMessage(toArrayBuffer(outerRaw), [{ from: "me@home.test", to: "shop@a.test" }], stripSignedLinks, { budget: scrubBudget });
 			expect(scrubBudget.remaining).toBe(0);
-			expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(MAX_NESTED_EML_PARSES);
+			expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(budgetSize);
 
 			// Inner messages past the budget must be replaced by safe stubs, never leaked raw.
 			const rebuilt = await PostalMime.parse(scrubbed, { attachmentEncoding: "arraybuffer" });
-			const stubbed = rebuilt.attachments.slice(MAX_NESTED_EML_PARSES - 1);
+			const stubbed = rebuilt.attachments.slice(budgetSize - 1);
 			expect(stubbed.length).toBeGreaterThan(0);
 			for (const part of stubbed) {
 				const parsedStub = await PostalMime.parse(part.content as ArrayBuffer);
