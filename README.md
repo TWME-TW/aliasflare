@@ -263,7 +263,7 @@ Found a vulnerability? Please report it privately as described in [SECURITY.md](
 
 - **Activity** (forwards and other events, with subjects) is kept for a year and then removed by a daily cleanup; deleting an alias for good removes its activity at once.
 
-- **Dashboard.** Passkey (WebAuthn) sign-in with user verification. The first passkey needs the one-time setup code. Sessions are stored server-side, end on sign-out or when their passkey is removed, and use `__Host-` cookies; every change checks the origin, and sign-in is rate limited.
+- **Dashboard.** Passkey (WebAuthn) sign-in with user verification. The first passkey needs the one-time setup code. Sessions are stored server-side, end on sign-out or when their passkey is removed, and use `__Host-` cookies; every change checks the origin, and sign-in is rate limited. Adding a passkey or an API key asks for the passkey again (a confirmation lasts five minutes), so a stolen session cookie cannot add a way back in that outlives the session. **Passkeys** lists the signed-in browsers (browser, system, country, last active) and signs out any one of them, or all but the current one.
 - **Reverse aliases** accept mail only from the alias's forwarding address with Cloudflare's own `dmarc=pass`, and only on the alias's own reverse-alias domain. They contain at least 8 random characters.
 - **Links in forwarded mail** (unsubscribe, block, disable) are signed, work once and expire after 90 days. `GET` only shows a confirmation. Replies never carry the banner or these links to the correspondent.
 - **App API keys** are random 238-bit values; only their SHA-256 hash is stored. Both client APIs are off by default and rate limited.
