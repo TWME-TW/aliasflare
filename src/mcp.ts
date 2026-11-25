@@ -130,6 +130,9 @@ async function callTool(db: D1Database, settings: Settings, name: string, args: 
 		case "list_domains":
 			return { data: { domains: settings.aliasDomains, default_domain: settings.aliasDomains[0] ?? null } };
 		case "list_aliases": {
+			if (args.search !== undefined && typeof args.search !== "string") {
+				return { error: "search must be a string." };
+			}
 			if (args.page !== undefined && (!Number.isInteger(args.page) || (args.page as number) < 1)) {
 				return { error: "page must be a positive integer." };
 			}
@@ -142,10 +145,13 @@ async function callTool(db: D1Database, settings: Settings, name: string, args: 
 			return { data: { aliases: aliases.map(view), total, page, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) } };
 		}
 		case "create_alias": {
+			if (args.domain !== undefined && typeof args.domain !== "string") return { error: "domain must be a string." };
+			if (args.local_part !== undefined && typeof args.local_part !== "string") return { error: "local_part must be a string." };
+			if (args.note !== undefined && typeof args.note !== "string") return { error: "note must be a string." };
 			const domain = (text(args.domain, 253)?.trim() || settings.aliasDomains[0] || "").toLowerCase();
-			const note = text(args.note, MAX_NOTE)?.trim() || null;
-			const localPart = text(args.local_part, 64);
-			const alias = localPart?.trim()
+			const note = typeof args.note === "string" ? args.note.trim().slice(0, MAX_NOTE) || null : null;
+			const localPart = typeof args.local_part === "string" ? args.local_part.trim().slice(0, 64) : undefined;
+			const alias = localPart
 				? await createAlias(db, settings, { localPart: cleanPrefix(localPart), domain, note, allowRestore: false })
 				: await createRandomAlias(db, settings, { domain, note });
 			return { data: { alias: view(alias) } };
@@ -159,7 +165,7 @@ async function callTool(db: D1Database, settings: Settings, name: string, args: 
 		case "set_alias_note": {
 			const alias = await findAlias(db, args.address);
 			if (typeof args.note !== "string") return { error: "note must be a string." };
-			const note = args.note.slice(0, MAX_NOTE).trim() || null;
+			const note = args.note.trim().slice(0, MAX_NOTE) || null;
 			await updateAlias(db, alias.address, { note });
 			return { data: { alias: view({ ...alias, note }) } };
 		}

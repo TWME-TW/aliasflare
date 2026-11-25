@@ -5,15 +5,25 @@
  */
 
 import type { AppConfig } from "./config";
+import { hostnameOf } from "./format";
 import { discard, readLimited, readTextLimited } from "./streams";
 
 /** JMAP answers here are a few small objects; a larger one is refused rather than buffered. */
 const MAX_JSON_BYTES = 1024 * 1024;
+const INTERNAL_HOST = /(^|\.)(localhost|localdomain|local|internal|intranet|lan|home|corp|arpa)$/;
+
+function validJmapSegment(value: string): boolean {
+	return !!value && value !== "." && value !== ".." && !/[\\/\u0000-\u001f\u007f]/.test(value);
+}
 
 async function readJson<T>(response: Response): Promise<T> {
 	const text = await readTextLimited(response, MAX_JSON_BYTES);
 	if (text === null) throw new MailflareError(`Mailflare answered with more than ${MAX_JSON_BYTES} bytes`, 502);
-	return JSON.parse(text) as T;
+	try {
+		return JSON.parse(text) as T;
+	} catch {
+		throw new MailflareError("Mailflare returned invalid JSON", 502);
+	}
 }
 
 const JMAP_CORE = "urn:ietf:params:jmap:core";
@@ -47,10 +57,35 @@ export class MailflareError extends Error {
 
 export function mailflareConfig(config: AppConfig): MailflareConfig {
 	if (!config.mailflareUrl || !config.mailflareApiKey) throw new Error("The Mailflare URL and API key are not set yet");
+	if (!config.mailflareService) {
+		let parsed: URL;
+		try {
+			parsed = new URL(config.mailflareUrl);
+		} catch {
+			throw new MailflareError("Invalid Mailflare URL", 502);
+		}
+		const host = parsed.hostname.trim().toLowerCase().replace(/\.$/, "");
+		const selfHosts = [config.publicUrl, config.siteOrigin]
+			.map(hostnameOf)
+			.filter((entry): entry is string => !!entry)
+			.map((entry) => entry.trim().toLowerCase().replace(/\.$/, ""));
+		if (
+			parsed.protocol !== "https:" ||
+			parsed.username ||
+			parsed.password ||
+			!host ||
+			host.startsWith("[") ||
+			/^[\d.]+$/.test(host) ||
+			INTERNAL_HOST.test(host) ||
+			selfHosts.some((self) => host === self || host.endsWith(`.${self}`))
+		) {
+			throw new MailflareError("Mailflare URL is not an allowed https host", 502);
+		}
+	}
 	return { baseUrl: config.mailflareUrl, apiKey: config.mailflareApiKey, service: config.mailflareService };
 }
 
-async function call(config: MailflareConfig, path: string, init: RequestInit = {}): Promise<Response> {
+async function call(config: MailflareConfig, path: string, init: RequestInit = {}, allowNotFound = false): Promise<Response> {
 	// A service binding reaches Mailflare directly; otherwise go over its public URL.
 	const send = config.service ? config.service.fetch.bind(config.service) : fetch;
 	const response = await send(`${config.baseUrl}${path}`, {
@@ -62,7 +97,9 @@ async function call(config: MailflareConfig, path: string, init: RequestInit = {
 	if (!response.ok) {
 		// Only the start of an error body is wanted; the rest is let go of.
 		const body = (await readTextLimited(response, 4096).catch(() => null)) ?? "";
-		throw new MailflareError(`Mailflare ${path.split("?")[0]} answered ${response.status}: ${body.slice(0, 300)}`, response.status);
+		// Only a missing message/blob should surface as 404 (skipped); a 404 on /jmap/session or /jmap/api must retry.
+		const status = response.status === 404 && !allowNotFound ? 502 : response.status;
+		throw new MailflareError(`Mailflare ${path.split("?")[0]} answered ${response.status}: ${body.slice(0, 300)}`, status);
 	}
 	return response;
 }
@@ -80,7 +117,7 @@ async function jmapAccountId(config: MailflareConfig): Promise<string> {
 		primaryAccounts?: Record<string, string>;
 	};
 	const id = session.primaryAccounts?.[JMAP_MAIL];
-	if (!id) throw new Error("Mailflare's JMAP session has no mail account");
+	if (!id || !validJmapSegment(id)) throw new MailflareError("Mailflare's JMAP session has no valid mail account", 502);
 	cachedAccountId = { key, id };
 	return id;
 }
@@ -101,6 +138,7 @@ export async function getStoredMessage(config: MailflareConfig, messageId: strin
 	if (name !== "Email/get" || !result) throw new Error(`Mailflare JMAP Email/get failed: ${JSON.stringify(result ?? body).slice(0, 300)}`);
 	const email = (result.list as { mailboxIds?: Record<string, boolean>; blobId?: string; size?: number }[] | undefined)?.[0];
 	if (!email?.blobId) throw new MailflareError(`Message ${messageId} was not found in Mailflare`, 404);
+	if (!validJmapSegment(email.blobId)) throw new MailflareError("Mailflare returned an invalid blob id", 502);
 	if ((email.size ?? 0) > MAX_MESSAGE_BYTES) throw new MailflareError(`Message ${messageId} is larger than ${MAX_MESSAGE_BYTES} bytes`, 413);
 	// Mailbox ids look like "<mailbox>", "<mailbox>~inbox" or "<mailbox>~f~<folder>".
 	const firstMailbox = Object.entries(email.mailboxIds ?? {}).find(([, active]) => active === true)?.[0];
@@ -110,6 +148,8 @@ export async function getStoredMessage(config: MailflareConfig, messageId: strin
 	const download = await call(
 		config,
 		`/jmap/download/${encodeURIComponent(accountId)}/${encodeURIComponent(email.blobId)}/message.eml?type=message/rfc822`,
+		{},
+		true,
 	);
 	return { mailboxId, raw: await readCapped(download, MAX_MESSAGE_BYTES) };
 }

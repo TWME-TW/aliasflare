@@ -281,6 +281,7 @@ export const APP_SCRIPT = `(() => {
   const autosaveForms = [];
   for (const form of document.querySelectorAll("form[data-autosave]")) {
     let latest = 0;
+    let pendingReload = false;
     // Saves run one after another, so an older change can never land after a newer one.
     let queue = Promise.resolve();
     let lastSent = new URLSearchParams(new FormData(form)).toString();
@@ -302,15 +303,18 @@ export const APP_SCRIPT = `(() => {
           credentials: "same-origin",
         });
         const result = await response.json().catch(() => null);
-        if (id !== latest) return; // a newer change is already on its way
         if (result && result.theme) applyTheme(result.theme);
-        if (result && result.reload) { location.reload(); return; }
+        if (result && result.reload) pendingReload = true;
+        if (id !== latest) return; // a newer change is already on its way
+        if (pendingReload) { location.reload(); return; }
         const ok = !!(response.ok && result && result.ok);
         if (!ok) lastSent = null; // a failed save may be tried again unchanged
         show((result && (result.message || result.error)) || form.dataset.msgFailed, ok);
       } catch {
-        lastSent = null;
-        if (id === latest) show(form.dataset.msgFailed, false);
+        if (id === latest) {
+          lastSent = null;
+          show(form.dataset.msgFailed, false);
+        }
       }
     };
     autosaveForms.push({ form, getLastSent: () => lastSent });

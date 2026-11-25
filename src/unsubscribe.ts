@@ -8,6 +8,7 @@ import type { Translate } from "./i18n";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings, unsubscribeRuleFor, type UnsubscribeBehavior, type UnsubscribeFallback } from "./settings";
 import { isOwnAddress } from "./domains";
+import { discard } from "./streams";
 
 const TIMEOUT_MS = 10_000;
 
@@ -204,7 +205,7 @@ async function runOriginalUnsubscribe(env: Env, config: AppConfig, forward: Forw
 			? { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: "List-Unsubscribe=One-Click" }
 			: {}),
 	});
-	await response.body?.cancel();
+	await discard(response);
 	// Redirects are not followed (they could lead anywhere), so one is not a done unsubscribe.
 	if (response.status >= 300) throw new Error(`The sender's unsubscribe page answered ${response.status}`);
 	return `${plan.kind === "post" ? "one-click POST to" : "visited"} ${new URL(plan.url).hostname}`;
@@ -296,7 +297,11 @@ export async function performAction(env: Env, config: AppConfig, target: LinkTar
 		await recordEvent(env.DB, { kind: target.kind, contactId: forward.contact_id, aliasAddress: forward.alias_address, status: "failed", detail: message });
 		throw error;
 	}
-	await recordEvent(env.DB, { kind: target.kind, contactId: forward.contact_id, aliasAddress: forward.alias_address, status: "done", detail });
+	try {
+		await recordEvent(env.DB, { kind: target.kind, contactId: forward.contact_id, aliasAddress: forward.alias_address, status: "done", detail });
+	} catch (error) {
+		console.error("Link action succeeded, but recording it failed", target.kind, error instanceof Error ? error.message : error);
+	}
 	return { detail, done };
 }
 
