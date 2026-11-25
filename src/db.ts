@@ -95,7 +95,6 @@ export async function getAlias(db: D1Database, address: string): Promise<AliasRo
 	return db.prepare("SELECT * FROM aliases WHERE address = ?").bind(address).first<AliasRow>();
 }
 
-/** Returns the alias, creating it with the given defaults the first time it is seen. */
 /** Note on an alias that appeared because mail arrived for it (Mailflare catch-all), as SimpleLogin words it. */
 export const CATCH_ALL_NOTE = "Created by catchall option";
 
@@ -104,7 +103,7 @@ export async function ensureAlias(
 	db: D1Database,
 	address: string,
 	mailboxId: string,
-	defaults: { forwardEnabled: boolean; destination: string | null },
+	defaults: { forwardEnabled: boolean },
 ): Promise<AliasRow> {
 	const timestamp = now();
 	// The number is taken inside the INSERT, and D1 runs one statement at a time, so two
@@ -115,14 +114,14 @@ export async function ensureAlias(
 		await db
 			.prepare(
 				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, num_id, uid, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
+				 VALUES (?, ?, ?, ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'aliases'), 0)) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
 			)
 			.bind(
 				address,
 				mailboxId,
 				defaults.forwardEnabled ? 1 : 0,
 				defaults.forwardEnabled ? "all" : "none",
-				defaults.destination,
+				null,
 				CATCH_ALL_NOTE,
 				crypto.randomUUID(),
 				timestamp,
@@ -193,7 +192,7 @@ export async function ensureContact(
 		const result = await db
 			.prepare(
 				`INSERT INTO contacts (id, alias_address, email, name, reverse_local, num_id, created_at)
-				 VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM contacts), ?) ON CONFLICT DO NOTHING`,
+				 VALUES (?, ?, ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'contacts'), 0)) + 1 FROM contacts), ?) ON CONFLICT DO NOTHING`,
 			)
 			.bind(id, aliasAddress, email, name, reverseLocal, now())
 			.run();

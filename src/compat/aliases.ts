@@ -1,7 +1,8 @@
 /**
- * Alias operations shared by the SimpleLogin and addy.io APIs. In aliasflare an alias is a
- * Mailflare address; one created here starts receiving mail once Mailflare accepts mail for it,
- * which is why new aliases may only use the configured alias domains (catch-all in Mailflare).
+ * Alias operations shared by the SimpleLogin and addy.io APIs. An alias is an address on one of
+ * the configured alias domains, whose mail reaches this Worker through Cloudflare Email Routing's
+ * catch-all (or Mailflare's, when Mailflare is used); one created here receives mail at once,
+ * which is why new aliases may only use those domains.
  */
 import { now, type AliasRow, type ContactRow } from "../db";
 import { isOwnAddress } from "../domains";
@@ -293,7 +294,7 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 			db
 				.prepare(
 					`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, num_id, uid, created_at, updated_at)
-					 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
+					 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'aliases'), 0)) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
 				)
 				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, note, name, crypto.randomUUID(), timestamp, timestamp)
 				.run();

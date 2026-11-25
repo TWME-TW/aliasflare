@@ -125,8 +125,8 @@ describe("3. direct inbound 409 retry and mailbox_id preservation", () => {
 	});
 
 	it("preserves an existing Mailflare mailbox_id when ensureAlias is called with empty mailboxId", async () => {
-		await ensureAlias(db, "shop@a.test", "mb_123", { forwardEnabled: true, destination: null });
-		const after = await ensureAlias(db, "shop@a.test", "", { forwardEnabled: true, destination: null });
+		await ensureAlias(db, "shop@a.test", "mb_123", { forwardEnabled: true });
+		const after = await ensureAlias(db, "shop@a.test", "", { forwardEnabled: true });
 		expect(after.mailbox_id).toBe("mb_123");
 	});
 });

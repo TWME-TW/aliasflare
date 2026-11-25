@@ -1,7 +1,7 @@
 import PostalMime, { addressParser, type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { signToken } from "./crypto";
-import { ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
+import { CATCH_ALL_NOTE, ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
 import { cleanAttachment, domainOf, ensureAngle, extractEmail, cleanSubjectLine, formatSenderName, parseBareEmail, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
 import { translator } from "./i18n";
 import { getStoredMessage, mailflareConfig, MailflareError, MAX_MESSAGE_BYTES, type StoredMessage } from "./mailflare";
@@ -11,6 +11,8 @@ import { LINK_TTL_SECONDS } from "./unsubscribe";
 import { authResultClauses, firstAuthenticationResults, hasSingleFromHeader } from "./reply";
 import { loadSettings } from "./settings";
 import { readLimited } from "./streams";
+import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
+import type { Replacement } from "./format";
 import { transformForward, type BannerInfo } from "./transform";
 
 export const LOOP_HEADER = "X-Aliasflare";
@@ -201,6 +203,14 @@ type ForwardInput = {
 	passThrough?: (destination: string) => Promise<void>;
 };
 
+/** Aliases incoming mail may create in 24 hours; past that, mail to a new address is refused until the next day. */
+export const MAX_NEW_ALIASES_FROM_MAIL_PER_DAY = 200;
+
+async function newAliasesFromMailToday(db: D1Database): Promise<number> {
+	const row = await db.prepare("SELECT COUNT(*) AS n FROM aliases WHERE note = ? AND created_at > ?").bind(CATCH_ALL_NOTE, now() - 86400).first<{ n: number }>();
+	return Number(row?.n ?? 0);
+}
+
 async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput): Promise<ForwardOutcome> {
 	const db = env.DB;
 	const { aliasAddress, origin } = input;
@@ -213,7 +223,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	// leaves no rows behind.
 	const settings = await loadSettings(db);
 	const known = await getAlias(db, aliasAddress);
-	const unknown = !known && !settings.createAliasesFromMail;
+	// Only on an alias domain (Mailflare may receive for others), and not without end: mail to
+	// thousands of made-up addresses would otherwise make thousands of aliases.
+	const unknown = !known && (!settings.createAliasesFromMail || !settings.aliasDomains.includes(aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
 	if (unknown && !input.claimUnknown) return { status: 404, result: "no such alias" };
 
 	const claimed = await claim(db, input.key, aliasAddress);
@@ -241,10 +253,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const tooLarge = config.workersPlan === "free" && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES;
 		const passThrough = input.passThrough && (direct || tooLarge) ? input.passThrough : null;
 		let stored = passThrough ? null : await input.load();
-		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", {
-			forwardEnabled: settings.autoForwardNewAliases,
-			destination: settings.defaultDestination || null,
-		});
+		// No address of its own: the alias follows the default, also when the default changes later.
+		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", { forwardEnabled: settings.autoForwardNewAliases });
 		const destination = alias.destination || settings.defaultDestination;
 		if (alias.deleted_at) return await skip("the alias was deleted");
 		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias");
@@ -376,6 +386,20 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		);
 
 		const reverseAddress = reverseAddressOf(contact.reverse_local, reverseDomain);
+		// A calendar client answers an invitation straight to its ORGANIZER, from the owner's real
+		// mailbox. Each organizer becomes a reverse alias, so the answer comes back through here
+		// like a reply (which puts the alias in place of the owner's address).
+		const calendarReplacements: Replacement[] = [];
+		for (const [index, attachment] of email.attachments.entries()) {
+			const { filename, type } = cleanAttachment(attachment, index);
+			if (carriesAddresses(type, filename) !== "calendar") continue;
+			for (const organizer of calendarOrganizers(attachment.content as ArrayBuffer).slice(0, 3)) {
+				if (calendarReplacements.length >= 5 || calendarReplacements.some((r) => r.from === organizer)) continue;
+				if (isOwnAddress(organizer, [...settings.aliasDomains, aliasDomain]) || isReverseDomainOf(domainOf(organizer), settings.aliasDomains)) continue;
+				const organizerContact = organizer === contact.email ? contact : await ensureContact(db, aliasAddress, organizer, null, settings.includeSenderInReverseAlias);
+				calendarReplacements.push({ from: organizer, to: reverseAddressOf(organizerContact.reverse_local, reverseDomain) });
+			}
+		}
 		const displayName = formatSenderName(settings.senderFormat, contact.name, contact.email);
 		const headers: Record<string, string> = {
 			[LOOP_HEADER]: aliasAddress,
@@ -403,9 +427,13 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			text: body.text ?? (body.html ? undefined : ""),
 			attachments: email.attachments.map((attachment, index) => {
 				const { filename, type, contentId } = cleanAttachment(attachment, index);
+				const content =
+					carriesAddresses(type, filename) === "calendar"
+						? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", calendarReplacements)
+						: (attachment.content as ArrayBuffer);
 				return (attachment.disposition === "inline" || attachment.related) && contentId
-					? { disposition: "inline" as const, contentId, filename, type, content: attachment.content as ArrayBuffer }
-					: { disposition: "attachment" as const, filename, type, content: attachment.content as ArrayBuffer };
+					? { disposition: "inline" as const, contentId, filename, type, content }
+					: { disposition: "attachment" as const, filename, type, content };
 			}),
 		});
 

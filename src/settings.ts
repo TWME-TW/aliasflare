@@ -68,7 +68,7 @@ export type Settings = {
 	addyApi: boolean;
 	/** Serve the MCP server at /mcp, so an AI assistant can list, create and switch aliases. */
 	mcpServer: boolean;
-	/** Domains new aliases can be created on. Mailflare must accept mail for any address there (a catch-all). */
+	/** Domains new aliases can be created on. Every address there must reach this Worker: Email Routing's catch-all, or Mailflare's. */
 	aliasDomains: string[];
 	randomAliasFormat: RandomAliasFormat;
 	/**

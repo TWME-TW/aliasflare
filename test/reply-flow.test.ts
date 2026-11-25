@@ -75,3 +75,37 @@ describe("replying through a reverse alias", () => {
 		expect(sent).toHaveLength(0);
 	});
 });
+
+describe("a reply's calendar answer and attached message", () => {
+	it("carry the alias instead of the owner's address, and the correspondent instead of the reverse alias", async () => {
+		const ics = ["BEGIN:VCALENDAR", "METHOD:REPLY", "BEGIN:VEVENT", "ORGANIZER:mailto:reply+rbob@r.me.test", "ATTENDEE;PARTSTAT=ACCEPTED:mailto:owner@gmail.test", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+		const eml = "From: Owner <owner@gmail.test>\r\nTo: x@y.test\r\nSubject: old\r\n\r\nold mail\r\n";
+		const body = [
+			"--b",
+			"Content-Type: text/plain",
+			"",
+			"Accepted",
+			"--b",
+			'Content-Type: text/calendar; method=REPLY; name="reply.ics"',
+			"",
+			ics,
+			"--b",
+			"Content-Type: message/rfc822",
+			'Content-Disposition: attachment; filename="old.eml"',
+			"",
+			eml,
+			"--b--",
+		].join("\r\n");
+		const raw = `${PASS}\r\nFrom: owner@gmail.test\r\nTo: reply+rbob@r.me.test\r\nSubject: Accepted\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="b"\r\n\r\n${body}\r\n`;
+		const message = { to: "reply+rbob@r.me.test", raw: new Response(raw).body, setReject: () => {} } as unknown as ForwardableEmailMessage;
+		await handleReverseAliasMail(message, { DB: db } as Env, config);
+		const files = (sent[0] as unknown as { attachments: { filename: string; contentBase64: string }[] }).attachments;
+		expect(files).toHaveLength(2);
+		for (const file of files) {
+			const content = atob(file.contentBase64);
+			expect(content, file.filename).not.toContain("owner@gmail.test");
+			expect(content, file.filename).toContain("shop@me.test");
+		}
+		expect(atob(files[0]!.contentBase64)).toContain("ORGANIZER:mailto:bob@store.test");
+	});
+});

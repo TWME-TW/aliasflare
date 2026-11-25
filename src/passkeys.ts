@@ -89,9 +89,12 @@ async function takeChallenge(db: D1Database, id: string | undefined, purpose: st
  */
 const SETUP_CODE_COOLDOWN_SECONDS = 60;
 
+/** Setup codes valid at once: a new one does not end the earlier ones. */
+const MAX_SETUP_CODES = 5;
+
 export async function issueSetupCode(db: D1Database, replace = false): Promise<{ created: boolean; expiresAt: number }> {
 	const existing = await db
-		.prepare("SELECT challenge, expires_at FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? LIMIT 1")
+		.prepare("SELECT challenge, expires_at FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? ORDER BY expires_at DESC LIMIT 1")
 		.bind(now())
 		.first<{ challenge: string; expires_at: number }>();
 	// The code is logged once, when it is made, so the logs hold one copy per code. Whoever
@@ -121,8 +124,15 @@ export async function issueSetupCode(db: D1Database, replace = false): Promise<{
 		console.log(`[aliasflare] Setup code: ${code} (valid for 60 minutes)`);
 		return { created: true, expiresAt };
 	}
+	// Earlier codes keep working until they expire: someone else asking for a new code must not
+	// break the one the owner is typing. Only the newest few are kept.
 	await db.batch([
-		db.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup'"),
+		db.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup' AND expires_at < ?").bind(currentTime),
+		db
+			.prepare(
+				`DELETE FROM auth_challenges WHERE purpose = 'setup' AND id NOT IN
+				 (SELECT id FROM auth_challenges WHERE purpose = 'setup' ORDER BY expires_at DESC LIMIT ${MAX_SETUP_CODES - 1})`,
+			),
 		db.prepare("INSERT INTO auth_challenges (id, purpose, challenge, expires_at) VALUES (?, 'setup', ?, ?)").bind(newId("ch"), code, expiresAt),
 	]);
 	console.log(`[aliasflare] Setup code: ${code} (valid for 60 minutes)`);
@@ -136,10 +146,11 @@ export async function checkSetupCode(env: Env, code: string): Promise<boolean> {
 	// earlier stops working once the secret is set.
 	const fixed = env.SETUP_CODE?.trim();
 	if (fixed) return digestEqual(entered, fixed.toUpperCase());
-	const row = await env.DB.prepare("SELECT challenge FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? LIMIT 1")
+	const { results } = await env.DB.prepare(`SELECT challenge FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? ORDER BY expires_at DESC LIMIT ${MAX_SETUP_CODES}`)
 		.bind(now())
-		.first<{ challenge: string }>();
-	return !!row && safeEqual(entered, row.challenge);
+		.all<{ challenge: string }>();
+	// Every code is compared, so the time taken does not tell which one is close.
+	return results.map((row) => safeEqual(entered, row.challenge)).includes(true);
 }
 
 export type RegistrationPurpose = "register" | "setup_register";

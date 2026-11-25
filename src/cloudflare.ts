@@ -15,8 +15,8 @@
  * is why reverse aliases use plus addressing and alias domains must be a zone apex here. An
  * alias domain on a subdomain can still be received by Mailflare instead.
  *
- * Token permissions, for each zone: Zone: Read, Zone Settings: Edit, Email Routing Rules: Edit
- * and Email Sending: Edit.
+ * Token permissions, for each zone: Zone: Read, Zone Settings: Edit, DNS: Edit (Email Routing's
+ * MX and SPF records), Email Routing Rules: Edit; and for the account: Email Sending: Edit.
  */
 import { reverseDomainFor } from "./domains";
 import { REVERSE_BASE } from "./format";

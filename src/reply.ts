@@ -23,6 +23,7 @@ import { loadSettings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES } from "./forward";
 import { readLimited } from "./streams";
+import { carriesAddresses, rewriteAttachment } from "./attachments";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
 
 /** Mailflare's limit per message. */
@@ -123,7 +124,27 @@ export function singleSender(rawHeaders: string, parsedFrom: string | undefined)
 }
 
 /** Signed block, turn-off and unsubscribe links of this service, with any host in front. */
-const SIGNED_LINK = /https?:\/\/[^\s"'<>]+\/(?:action|unsubscribe)\/(?:(?:block|disable)~)?fw_[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+/gi;
+const SIGNED_PATH = /\/(?:action|unsubscribe)\/(?:(?:block|disable)~)?fw_[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+/gi;
+const URL_CHAR = /[^\s"'<>]/;
+
+/**
+ * Replaces each URL that ends in a signed path. The path is found first and the URL's start
+ * walked back to: a pattern starting at "https://" with an open-ended host retried at every
+ * "http" of a large body and took seconds. The walk stops at the previous match.
+ */
+function stripSignedUrls(body: string): string {
+	let out = "";
+	let done = 0;
+	for (const match of body.matchAll(SIGNED_PATH)) {
+		let start = match.index;
+		while (start > done && URL_CHAR.test(body[start - 1]!)) start -= 1;
+		const scheme = body.slice(start, match.index).search(/https?:\/\/[^\s"'<>]/i);
+		if (scheme < 0) continue;
+		out += `${body.slice(done, start + scheme)}[link removed]`;
+		done = match.index + match[0].length;
+	}
+	return out + body.slice(done);
+}
 /**
  * The token of such a link on its own, wherever it appears: with "~" written as %7E or an HTML
  * entity, or inside a link a mail filter wrapped (Safe Links and the like), the URL above does
@@ -132,7 +153,7 @@ const SIGNED_LINK = /https?:\/\/[^\s"'<>]+\/(?:action|unsubscribe)\/(?:(?:block|
 const SIGNED_TOKEN = /(?:(?:block|disable)(?:~|%7e|&#126;|&#x0*7e;|&tilde;))?fw_[0-9a-f]{32}(?:\.|%2e)\d+(?:\.|%2e)[A-Za-z0-9_-]+/gi;
 
 export function stripSignedLinks(body: string): string {
-	return body.replace(SIGNED_LINK, "[link removed]").replace(SIGNED_TOKEN, "[link removed]");
+	return stripSignedUrls(body).replace(SIGNED_TOKEN, "[link removed]");
 }
 
 /** The ways a "+" or "@" is written in mail bodies: in mailto: links (%2B/%40) and as HTML entities. */
@@ -226,19 +247,10 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	}
 	const headers = headerSection(raw);
 	const authResults = headers === null ? null : firstAuthenticationResults(headers);
-	let email: Email;
-	try {
-		email = await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" });
-	} catch (error) {
-		const detail = `Unreadable message: ${error instanceof Error ? error.message : String(error)}`;
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail });
-		message.setReject("This message could not be read");
-		return;
-	} finally {
-		// Drop the raw buffer before transforms and MIME serialization so GC can reclaim it.
-		raw = null;
-	}
-	const headerFrom = headers === null ? null : singleSender(headers, email.from?.address);
+	// The sender is checked before the message is parsed, from its header block alone: a large
+	// message from anyone else costs no parsing.
+	const headerOnly = headers === null ? null : await PostalMime.parse(`${headers}\r\n\r\n`).catch(() => null);
+	const headerFrom = headers === null ? null : singleSender(headers, headerOnly?.from?.address);
 
 	// Only the alias owner may write through a reverse alias, or anyone could send as the alias.
 	const destination = owners.find((owner) => normalizeEmail(owner) === headerFrom) ?? owners[0] ?? "";
@@ -263,13 +275,33 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 
+	let email: Email;
+	try {
+		email = await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" });
+	} catch (error) {
+		const detail = `Unreadable message: ${error instanceof Error ? error.message : String(error)}`;
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail });
+		message.setReject("This message could not be read");
+		return;
+	} finally {
+		// Drop the raw buffer before transforms and MIME serialization so GC can reclaim it.
+		raw = null;
+	}
 	// A quoted forward carries the banner with its block / turn-off links; they are the
 	// owner's, so neither the banner nor any signed link may reach the correspondent.
 	let html = email.html ? await removeBanner(stripSignedLinks(email.html)) : undefined;
 	let text = email.text ? stripSignedLinks(email.text) : undefined;
 	const replacements: Replacement[] = [];
+	// Calendar answers and attached messages name addresses too; they are rewritten like the body.
+	const addressParts = email.attachments.map((attachment, index) => {
+		const { filename, type } = cleanAttachment(attachment, index);
+		return carriesAddresses(type, filename);
+	});
 	if (settings.reverseAliasReplacement) {
-		const body = `${html ?? ""}\n${text ?? ""}`;
+		const partTexts = email.attachments
+			.filter((_, index) => addressParts[index])
+			.map((attachment) => new TextDecoder("latin1").decode(attachment.content as ArrayBuffer));
+		const body = [html ?? "", text ?? "", ...partTexts].join("\n");
 		// mailto: links and HTML bodies may encode "+" as %2B and "@" as %40 / &#64;.
 		const normalizedBody = body.replace(ENCODED_PLUS_PATTERN, "+").replace(ENCODED_AT_PATTERN, "@");
 		const reverseLocals = findAddressesOnDomain(normalizedBody, reverseDomain)
@@ -311,7 +343,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	const files = email.attachments.map((attachment, index) => ({
 		...cleanAttachment(attachment, index),
 		inline: attachment.disposition === "inline" || !!attachment.related,
-		content: attachment.content as ArrayBuffer,
+		content: addressParts[index] ? rewriteAttachment(attachment.content as ArrayBuffer, addressParts[index]!, replacements) : (attachment.content as ArrayBuffer),
 	}));
 	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, files.map((file) => file.filename));
 	if (refused) {

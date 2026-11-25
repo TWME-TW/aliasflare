@@ -532,7 +532,7 @@ export async function importAliases(
 				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, pinned, num_id, uid, created_at, updated_at,
 				 imported_from, imported_at, imported_forwarded, imported_blocked, imported_replied, imported_sent,
 				 imported_last_forward_at, imported_last_block_at, imported_last_reply_at, imported_last_sent_at, imported_details)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'aliases'), 0)) + 1 FROM aliases), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT (address) DO NOTHING`,
 			)
 			.bind(
@@ -563,7 +563,7 @@ export async function importAliases(
 				db
 					.prepare(
 						`INSERT INTO contacts (id, alias_address, email, name, reverse_local, blocked, last_reply_at, num_id, created_at)
-						 VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM contacts), ?)
+						 VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'contacts'), 0)) + 1 FROM contacts), ?)
 						 ON CONFLICT (alias_address, email) DO UPDATE SET
 						   name = COALESCE(NULLIF(contacts.name, ''), excluded.name),
 						   blocked = MAX(contacts.blocked, excluded.blocked),

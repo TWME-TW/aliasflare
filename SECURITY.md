@@ -24,7 +24,8 @@ not backported.
 In scope: this repository's code, its D1 migrations and its default Wrangler configuration.
 
 Out of scope: Cloudflare itself (Workers, Email Routing, Email Sending), Mailflare, the
-sending providers (Resend, SMTP2GO, Brevo), and problems that need someone to already have
+sending providers (Resend, SMTP2GO, Brevo, Postmark, Mailgun, Amazon SES, your SMTP server or
+custom endpoint), and problems that need someone to already have
 access to your Cloudflare account or your passkey.
 
 When testing, use your own deployment and your own addresses. Do not send mail to or test

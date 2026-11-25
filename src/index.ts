@@ -197,6 +197,7 @@ async function rateLimited(c: C, bucket: "auth" | "ui" | "link" = "auth"): Promi
 
 const jsonError = (c: C, key: MessageKey, status: 400 | 401 | 403 | 409 | 429) => c.json({ error: c.get("t")(key) }, status);
 
+// Public on purpose, for uptime monitors: it tells only whether setup is complete, nothing else.
 app.get("/health", async (c) => c.json({ ok: missingConnection(await loadSettings(c.env.DB)).length === 0 }));
 
 app.get("/assets/passkey.js", (c) => {

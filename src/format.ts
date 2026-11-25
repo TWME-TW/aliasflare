@@ -239,9 +239,20 @@ export function replaceAddresses(body: string, replacements: Replacement[], opti
 export function findAddressesOnDomain(text: string, domain: string): string[] {
 	// Remaining %XX escapes (such as mailto%3A or %3C) act as delimiters, not local-part characters.
 	const cleaned = text.replace(/%[0-9a-f]{2}/gi, " ");
-	const pattern = new RegExp(`[A-Za-z0-9._+-]+@${escapeRegExp(domain)}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`, "gi");
-	return [...new Set((cleaned.match(pattern) ?? []).map(normalizeEmail))];
+	// Find "@domain" (a fixed string, so linear), then walk back over the local part. A pattern
+	// starting with the local part retries at every letter of a long run and takes seconds on a
+	// large body. The walk stops at the previous "@", so no character is walked twice.
+	const found = new Set<string>();
+	const pattern = new RegExp(`@${escapeRegExp(domain)}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`, "gi");
+	for (const match of cleaned.matchAll(pattern)) {
+		let start = match.index;
+		while (start > 0 && LOCAL_CHAR.test(cleaned[start - 1]!)) start -= 1;
+		if (start < match.index) found.add(normalizeEmail(cleaned.slice(start, match.index + match[0].length)));
+	}
+	return [...found];
 }
+
+const LOCAL_CHAR = /[A-Za-z0-9._+-]/;
 
 /** Message-IDs from an In-Reply-To or References header value: printable ASCII, no angle brackets, at most 250 characters each. */
 export function parseMessageIds(value: string | null | undefined): string[] {

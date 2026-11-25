@@ -24,9 +24,9 @@ On a phone:
 ## Features
 
 **Aliases and replies**
-- **Any number of alias domains.** Mail to any address on them arrives (an Email Routing catch-all), and you can create aliases ahead of time on the alias page or from the apps.
+- **Any number of alias domains.** Mail to any address on them arrives (an Email Routing catch-all), and you can create aliases ahead of time on the alias page or from the apps. Mail creates at most 200 new aliases a day, so mail to thousands of made-up addresses does not make thousands of aliases.
 - **Forward to your real inbox.** Every alias forwards to a default address, or to its own.
-- **Reply through reverse aliases.** Each correspondent gets a private address. Mail you send to it goes out from the alias.
+- **Reply through reverse aliases.** Each correspondent gets a private address. Mail you send to it goes out from the alias. Your real address is also replaced in calendar answers and in the headers of attached messages (not inside their encoded parts).
 - **One reverse-alias domain per alias domain.** Correspondents of `shop@a.com` write to `reply+…@r.a.com`, those of `me@b.net` to `reply+…@r.b.net`. Nothing a correspondent sees ties your domains together, and a reverse alias only works on its own domain.
 - **Write to someone new.** Create a reverse alias for any address and start the conversation from your real inbox.
 - **Threading.** Message-IDs are mapped both ways, so conversations stay threaded on both sides.
@@ -239,7 +239,7 @@ What it cannot do, on purpose: read mail, senders, contacts or activity (text wr
 
 ### Environment overrides
 
-These variables or secrets win over the dashboard: `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`, `MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `OUTBOUND_PROVIDER` (`cloudflare`, `resend`, `smtp2go` or `brevo`), `OUTBOUND_API_KEY`, `WORKERS_PLAN` (`free` or `paid`).
+These variables or secrets win over the dashboard: `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`, `MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `OUTBOUND_PROVIDER` (`cloudflare`, `resend`, `smtp2go`, `brevo`, `postmark`, `mailgun`, `ses`, `smtp` or `custom`), `OUTBOUND_API_KEY`, `OUTBOUND_OPTIONS` (a JSON object with the provider's other fields, such as the SMTP server or the Mailgun region), `WORKERS_PLAN` (`free` or `paid`).
 
 ## Security model
 
