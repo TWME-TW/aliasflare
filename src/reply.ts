@@ -21,9 +21,10 @@ import { aliasDomainOfReverse } from "./domains";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
-import { FREE_PLAN_REWRITE_BYTES } from "./forward";
+import { FREE_PLAN_REWRITE_BYTES, LOOP_HEADER } from "./forward";
 import { readLimited } from "./streams";
-import { carriesAddresses, rewriteAttachment } from "./attachments";
+import { attachmentSearchText, carriesAddresses, rewriteAttachment, scrubAttachedMessage } from "./attachments";
+import { listDestinations } from "./compat/aliases";
 import { ruleForwardAddresses, runRules } from "./rules";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
 
@@ -199,9 +200,23 @@ async function removeBanner(html: string): Promise<string> {
  * a second From or Sender past the cut would be seen by the parser but not by the checks.
  */
 function headerSection(raw: Uint8Array): string | null {
-	const head = new TextDecoder().decode(raw.subarray(0, 65536));
+	const head = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(raw.subarray(0, 65536));
 	const end = head.search(/\r?\n\r?\n/);
 	return end >= 0 ? head.slice(0, end) : null;
+}
+
+/** True for automatic replies (out-of-office, DSN, or already sent by this Worker) that must not loop. */
+function isAutoReply(headers: { key: string; value: string }[] | undefined): boolean {
+	if (!headers?.length) return false;
+	return headers.some(({ key, value }) => {
+		const name = key.toLowerCase();
+		const trimmed = value.trim().toLowerCase();
+		if (name === LOOP_HEADER.toLowerCase()) return true;
+		if (name === "auto-submitted") return !!trimmed && trimmed !== "no";
+		if (name === "precedence") return /^auto[-_]?reply$/i.test(trimmed);
+		if (name === "x-autoreply") return /^(yes|true|1)$/i.test(trimmed);
+		return false;
+	});
 }
 
 /**
@@ -233,10 +248,10 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	}
 	const settings = await loadSettings(db);
 	// The owner writes from the alias's address, or from the one this sender's mail goes to.
-	// A rule may forward the alias's mail to another of the owner's mailboxes, so they count too.
-	const owners = [
-		...new Set([alias.destination || settings.defaultDestination, contact.destination, ...(await ruleForwardAddresses(db))].filter((value): value is string => !!value)),
-	];
+	// A rule may forward the alias's mail to another of the owner's known mailboxes, so those count too.
+	const knownDestinations = new Set((await listDestinations(db, settings)).map((d) => normalizeEmail(d.email)));
+	const ruleOwners = (await ruleForwardAddresses(db)).filter((address) => knownDestinations.has(normalizeEmail(address)));
+	const owners = [...new Set([alias.destination || settings.defaultDestination, contact.destination, ...ruleOwners].filter((value): value is string => !!value))];
 
 	// A reply always has to be rewritten (it goes out as the alias), so on the Free plan, with
 	// 10 ms of CPU, a large one is refused with a clear reason rather than cut off midway.
@@ -268,6 +283,11 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			detail: `Not accepted from ${headerFrom ?? "unknown sender"} (DMARC: ${dmarcPass ? "pass" : "not pass"})`,
 		});
 		message.setReject("Only the owner of this alias can send through this address");
+		return;
+	}
+	// Drop automatic replies silently (no bounce, per RFC 3834) to prevent vacation/auto-responder loops.
+	if (isAutoReply(headerOnly?.headers)) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: "Not sent: automatic reply" });
 		return;
 	}
 	// The owner turned this alias or this correspondent off: an auto-reply or a stray reply
@@ -310,9 +330,9 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return carriesAddresses(type, filename);
 	});
 	if (settings.reverseAliasReplacement) {
-		const partTexts = email.attachments
-			.filter((_, index) => addressParts[index])
-			.map((attachment) => new TextDecoder("latin1").decode(attachment.content as ArrayBuffer));
+		const partTexts = await Promise.all(
+			email.attachments.map((attachment, index) => (addressParts[index] ? attachmentSearchText(attachment.content as ArrayBuffer, addressParts[index]!) : "")),
+		);
 		const body = [html ?? "", text ?? "", ...partTexts].join("\n");
 		// mailto: links and HTML bodies may encode "+" as %2B and "@" as %40 / &#64;.
 		const normalizedBody = body.replace(ENCODED_PLUS_PATTERN, "+").replace(ENCODED_AT_PATTERN, "@");
@@ -352,11 +372,18 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(`Too many attachments: at most ${limit} per message`);
 		return;
 	}
-	const files = email.attachments.map((attachment, index) => ({
-		...cleanAttachment(attachment, index),
-		inline: attachment.disposition === "inline" || !!attachment.related,
-		content: addressParts[index] ? rewriteAttachment(attachment.content as ArrayBuffer, addressParts[index]!, replacements) : (attachment.content as ArrayBuffer),
-	}));
+	const files = await Promise.all(
+		email.attachments.map(async (attachment, index) => ({
+			...cleanAttachment(attachment, index),
+			inline: attachment.disposition === "inline" || !!attachment.related,
+			content:
+				addressParts[index] === "message"
+					? await scrubAttachedMessage(attachment.content as ArrayBuffer, replacements, stripSignedLinks)
+					: addressParts[index] === "calendar"
+						? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", replacements, { stripLinks: stripSignedLinks })
+						: (attachment.content as ArrayBuffer),
+		})),
+	);
 	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, files.map((file) => file.filename));
 	if (refused) {
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: refused });

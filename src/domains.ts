@@ -26,7 +26,7 @@ export function contactReverseAddress(contact: { reverse_local: string; alias_ad
 /** True when the domain is the reverse-alias domain of one of these alias domains. */
 export function isReverseDomainOf(domain: string, aliasDomains: string[]): boolean {
 	const owner = aliasDomainOfReverse(domain);
-	return owner !== null && aliasDomains.includes(owner);
+	return owner !== null && aliasDomains.some((entry) => entry.toLowerCase() === owner);
 }
 
 /**
@@ -35,7 +35,7 @@ export function isReverseDomainOf(domain: string, aliasDomains: string[]): boole
  */
 export function isOwnAddress(email: string, aliasDomains: string[]): boolean {
 	const domain = domainOf(email);
-	return aliasDomains.includes(domain) || isReverseDomainOf(domain, aliasDomains);
+	return aliasDomains.some((entry) => entry.toLowerCase() === domain) || isReverseDomainOf(domain, aliasDomains);
 }
 
 /** A domain that cannot be an alias domain: the reverse-alias domain of another alias domain, or one whose own would be. */

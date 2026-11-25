@@ -111,10 +111,12 @@ export function cleanRule(raw: Record<string, unknown>): RuleInput {
 	const conditions = rawConditions.map(cleanCondition).filter((c): c is Condition => !!c);
 	const actions = rawActions.map(cleanAction).filter((a): a is Action => !!a);
 	if (!name || !conditions.length || !actions.length) throw new RuleError("invalid");
+	const rawOp = raw.operator === undefined || raw.operator === null || raw.operator === "" ? "AND" : String(raw.operator).trim().toUpperCase();
+	if (rawOp !== "AND" && rawOp !== "OR") throw new RuleError("invalid");
 	const flag = (value: unknown, fallback: boolean) => (value === undefined ? fallback : value === true || value === 1 || value === "1" || value === "true" || value === "on");
 	return {
 		name,
-		operator: String(raw.operator).toUpperCase() === "OR" ? "OR" : "AND",
+		operator: rawOp,
 		conditions,
 		actions,
 		forwards: flag(raw.forwards, true),
@@ -219,11 +221,16 @@ function test(match: Match, subject: string, value: string): boolean {
 	}
 }
 
-export type RuleMessage = { sender: string; subject: string; alias: string };
+export type RuleMessage = { sender: string; senders?: string[]; spoofed?: boolean; subject: string; alias: string };
 
 /** Whether the message meets the condition: any of its values for a positive match, all of them for a negative one ("is not a or b"). */
 function meets(condition: Condition, message: RuleMessage): boolean {
-	const field = (condition.type === "sender" ? normalizeEmail(message.sender) : condition.type === "alias" ? normalizeEmail(message.alias) : message.subject.toLowerCase());
+	const field =
+		condition.type === "sender"
+			? normalizeEmail(message.sender)
+			: condition.type === "alias"
+				? normalizeEmail(message.alias)
+				: message.subject.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().toLowerCase();
 	const negative = condition.match.startsWith("is not") || condition.match.startsWith("does not");
 	return negative ? condition.values.every((value) => test(condition.match, field, value)) : condition.values.some((value) => test(condition.match, field, value));
 }
@@ -255,18 +262,39 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 		.prepare(`SELECT * FROM rules WHERE active = 1 AND ${kind === "forwards" ? "forwards = 1" : "(replies = 1 OR sends = 1)"} ORDER BY position, created_at`)
 		.all<RuleRow>();
 	const outcome: RuleOutcome = { applied: [] };
+	const candidates = [...new Set([message.sender, ...(message.senders ?? [])].filter(Boolean))];
 	for (const rule of results.map(parse)) {
-		if (!ruleMatches(rule, message)) continue;
-		outcome.applied.push(rule.id);
-		for (const action of rule.actions) {
-			if (kind === "replies" && !REPLY_ACTIONS.includes(action.type)) continue;
-			if (action.type === "block") outcome.block ??= rule.name;
-			else if (action.type === "subject") outcome.subject = action.value;
+		const actions = kind === "replies" ? rule.actions.filter((action) => REPLY_ACTIONS.includes(action.type)) : rule.actions;
+		if (!actions.length) continue;
+		const hasBlock = actions.some((action) => action.type === "block");
+		// Block rules test every candidate sender (envelope and From), so spoofing From cannot evade a
+		// block. A rule with a negative sender condition ("does not end with @work.test") has to hold for
+		// all of them: a newsletter's bounce address must not block mail whose From the rule allows.
+		const negativeSender = rule.conditions.some((condition) => condition.type === "sender" && (condition.match.startsWith("is not") || condition.match.startsWith("does not")));
+		const blockMatched =
+			hasBlock && (negativeSender ? candidates.every((sender) => ruleMatches(rule, { ...message, sender })) : candidates.some((sender) => ruleMatches(rule, { ...message, sender })));
+		// A spoofed From address must not trigger positive sender rules (forwardTo, displayFrom, subject, banner).
+		const hasSenderCondition = rule.conditions.some((condition) => condition.type === "sender");
+		const normalMatched = !(message.spoofed && hasSenderCondition) && ruleMatches(rule, message);
+		if (!blockMatched && !normalMatched) continue;
+		let applied = false;
+		for (const action of actions) {
+			if (action.type === "block") {
+				if (blockMatched) {
+					outcome.block ??= rule.name;
+					applied = true;
+				}
+				continue;
+			}
+			if (!normalMatched) continue;
+			applied = true;
+			if (action.type === "subject") outcome.subject = action.value;
 			else if (action.type === "displayFrom") outcome.displayFrom = action.value;
 			else if (action.type === "forwardTo") outcome.forwardTo = action.value;
 			else if (action.type === "removeAttachments") outcome.removeAttachments = true;
 			else if (action.type === "banner") outcome.hideBanner = true;
 		}
+		if (applied) outcome.applied.push(rule.id);
 	}
 	if (outcome.applied.length) {
 		const timestamp = now();

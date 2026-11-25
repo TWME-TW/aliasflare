@@ -77,8 +77,8 @@ export function normalizeOutboundOptions(raw: unknown): OutboundOptions {
 		mailgunRegion: value.mailgunRegion === "eu" ? "eu" : "us",
 		sesRegion: SES_REGION.test(region) ? region : DEFAULT_OUTBOUND_OPTIONS.sesRegion,
 		sesAccessKeyId: (str("sesAccessKeyId", 128) ?? "").replace(/[^A-Z0-9]/g, ""),
-		// Checked whole (not cut first), and short enough to stay exact as a JSON number.
-		mailbabyOrderId: typeof value.mailbabyOrderId === "string" && /^\d{1,15}$/.test(value.mailbabyOrderId.trim()) ? value.mailbabyOrderId.trim() : "",
+		// Checked whole (not cut first), positive, and short enough to stay exact as a JSON number.
+		mailbabyOrderId: typeof value.mailbabyOrderId === "string" && /^[1-9]\d{0,14}$/.test(value.mailbabyOrderId.trim()) ? value.mailbabyOrderId.trim() : "",
 		customUrl: str("customUrl", 2000) ?? "",
 		customHeaders: str("customHeaders", 4000) ?? DEFAULT_OUTBOUND_OPTIONS.customHeaders,
 		customBody: str("customBody", 20_000) ?? DEFAULT_OUTBOUND_OPTIONS.customBody,
@@ -127,29 +127,47 @@ function mailbox(from: OutboundMessage["from"]): string {
 	return name ? `"${name}" <${from.email}>` : from.email;
 }
 
-async function post(url: string, headers: Record<string, string>, body: unknown, secret = ""): Promise<{ status: number; json: unknown }> {
-	return request(url, { "Content-Type": "application/json", Accept: "application/json", ...headers }, JSON.stringify(body), secret);
+async function post(url: string, headers: Record<string, string>, body: unknown, secret: string | string[] = ""): Promise<{ status: number; json: unknown }> {
+	return request(url, { "Content-Type": "application/json", Accept: "application/json", ...headers }, JSON.stringify(body), secret, true);
 }
 
-/** Text from a provider's answer, without the key in case the provider echoes it. */
-function redact(text: string, secret: string): string {
-	return secret.length >= 6 ? text.replaceAll(secret, "[redacted]") : text;
+/** Text from a provider's answer, without any key/token in case the provider echoes it. */
+export function redact(text: string, secret: string | string[]): string {
+	let out = text;
+	for (const item of Array.isArray(secret) ? secret : [secret]) {
+		if (item.length >= 6) out = out.replaceAll(item, "[redacted]");
+	}
+	return out;
 }
 
 /** POSTs a body as it is; a status of 300 or more is an error, with the start of the answer. */
-async function request(url: string, headers: Record<string, string>, body: string | FormData, secret = ""): Promise<{ status: number; json: unknown }> {
+async function request(
+	url: string,
+	headers: Record<string, string>,
+	body: string | FormData,
+	secret: string | string[] = "",
+	expectJson = true,
+): Promise<{ status: number; json: unknown }> {
 	const response = await fetch(url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers, body });
-	const text = (await readTextLimited(response, 64 * 1024).catch(() => null)) ?? "";
+	const raw = await readTextLimited(response, 64 * 1024).catch(() => null);
+	const text = raw ?? "";
 	let json: unknown = null;
-	try {
-		json = text ? JSON.parse(text) : null;
-	} catch {
-		// Reported with the status below.
+	let invalidJson = false;
+	if (text) {
+		try {
+			json = JSON.parse(text);
+		} catch {
+			invalidJson = true;
+		}
 	}
 	if (response.status >= 300) {
 		throw new OutboundError(`${new URL(url).hostname} answered ${response.status}: ${redact(text, secret).slice(0, 300)}`);
 	}
-	return { status: response.status, json };
+	// A 2xx answer means the provider accepted the message, so an unreadable body (not JSON, or over
+	// 64 KiB) is not a failure: bouncing would make the owner send a reply that already went out.
+	// It only has no message id; providers whose 200 can still mean "not sent" (SMTP2GO, Mail.baby)
+	// check their answer's fields and fail when those are missing.
+	return { status: response.status, json: raw === null || (expectJson && invalidJson) ? null : json };
 }
 
 async function viaResend(apiKey: string, message: OutboundMessage): Promise<string | undefined> {
@@ -293,7 +311,7 @@ async function viaMailgun(apiKey: string, options: OutboundOptions, message: Out
 	}
 	const host = options.mailgunRegion === "eu" ? "api.eu.mailgun.net" : "api.mailgun.net";
 	const auth = bytesToBase64(new TextEncoder().encode(`api:${apiKey}`));
-	const { json } = await request(`https://${host}/v3/${encodeURIComponent(domain)}/messages`, { Authorization: `Basic ${auth}`, Accept: "application/json" }, form, apiKey);
+	const { json } = await request(`https://${host}/v3/${encodeURIComponent(domain)}/messages`, { Authorization: `Basic ${auth}`, Accept: "application/json" }, form, [apiKey, auth]);
 	const id = (json as { id?: unknown } | null)?.id;
 	return typeof id === "string" ? id : undefined;
 }
@@ -412,7 +430,11 @@ export function parseHeaderLines(lines: string): [string, string][] {
 		if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(name) || FORBIDDEN_HEADER_NAMES.has(name.toLowerCase())) {
 			throw new OutboundError(`Not a header line: ${line.slice(0, 60)}`);
 		}
-		out.push([name, line.slice(at + 1).trim()]);
+		const value = line.slice(at + 1).trim();
+		if (/[\u0000-\u001f\u007f]/.test(value)) {
+			throw new OutboundError(`Header value contains control characters: ${name}`);
+		}
+		out.push([name, value]);
 	}
 	return out;
 }
@@ -430,7 +452,7 @@ async function viaCustom(apiKey: string, options: OutboundOptions, message: Outb
 		}
 		headers[name] = fillTemplate(value, values, "text");
 	}
-	const { json } = await request(safeUrl.href, headers, fillTemplate(options.customBody, values, "json"), apiKey);
+	const { json } = await request(safeUrl.href, headers, fillTemplate(options.customBody, values, "json"), apiKey, false);
 	if (!options.customIdPath) return undefined;
 	let found: unknown = json;
 	for (const key of options.customIdPath.split(".")) found = found && typeof found === "object" && Object.hasOwn(found, key) ? (found as Record<string, unknown>)[key] : undefined;
@@ -485,5 +507,7 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 			return { messageId: await viaSmtp(key, options, message, blockedHosts) };
 		case "custom":
 			return { messageId: await viaCustom(key, options, message, blockedHosts) };
+		default:
+			throw new OutboundError(`Unknown outbound provider: ${String(provider)}`);
 	}
 }

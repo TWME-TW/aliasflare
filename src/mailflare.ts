@@ -6,6 +6,7 @@
 
 import type { AppConfig } from "./config";
 import { hostnameOf } from "./format";
+import { redact } from "./outbound";
 import { discard, readLimited, readTextLimited } from "./streams";
 
 /** JMAP answers here are a few small objects; a larger one is refused rather than buffered. */
@@ -99,7 +100,7 @@ async function call(config: MailflareConfig, path: string, init: RequestInit = {
 		const body = (await readTextLimited(response, 4096).catch(() => null)) ?? "";
 		// Only a missing message/blob should surface as 404 (skipped); a 404 on /jmap/session or /jmap/api must retry.
 		const status = response.status === 404 && !allowNotFound ? 502 : response.status;
-		throw new MailflareError(`Mailflare ${path.split("?")[0]} answered ${response.status}: ${body.slice(0, 300)}`, status);
+		throw new MailflareError(`Mailflare ${path.split("?")[0]} answered ${response.status}: ${redact(body, config.apiKey).slice(0, 300)}`, status);
 	}
 	return response;
 }
@@ -135,7 +136,7 @@ export async function getStoredMessage(config: MailflareConfig, messageId: strin
 	});
 	const body = await readJson<{ methodResponses?: [string, Record<string, unknown>, string][] }>(response);
 	const [name, result] = body.methodResponses?.[0] ?? [];
-	if (name !== "Email/get" || !result) throw new Error(`Mailflare JMAP Email/get failed: ${JSON.stringify(result ?? body).slice(0, 300)}`);
+	if (name !== "Email/get" || !result) throw new MailflareError(`Mailflare JMAP Email/get failed: ${redact(JSON.stringify(result ?? body), config.apiKey).slice(0, 300)}`, 502);
 	const email = (result.list as { mailboxIds?: Record<string, boolean>; blobId?: string; size?: number }[] | undefined)?.[0];
 	if (!email?.blobId) throw new MailflareError(`Message ${messageId} was not found in Mailflare`, 404);
 	if (!validJmapSegment(email.blobId)) throw new MailflareError("Mailflare returned an invalid blob id", 502);

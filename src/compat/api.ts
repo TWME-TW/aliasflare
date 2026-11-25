@@ -16,7 +16,7 @@ import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from ".
 import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
-import { createLabel, deleteLabel, getLabel, LabelError, labelsOf, listLabels, setAliasLabels, updateLabel, type LabelRow } from "../labels";
+import { createLabel, deleteLabel, getLabelWithCount, LabelError, labelsOf, listLabels, setAliasLabels, updateLabel, type LabelRow } from "../labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, reorderRules, RuleError, setRuleActive, updateRule, type Rule } from "../rules";
 import {
 	ClientError,
@@ -24,18 +24,23 @@ import {
 	createAlias,
 	createRandomAlias,
 	deleteAlias,
+	deleteAliases,
 	destinationOf,
 	destinationIds,
 	forgetAlias,
+	forgetAliases,
 	getAliasView,
+	getAliasViewsByUids,
 	latestContact,
 	latestContacts,
 	listAliasViews,
 	listDestinations,
 	resolveDestination,
 	restoreAlias,
+	restoreAliases,
 	totals,
 	updateAlias,
+	updateAliases,
 	type AliasView,
 } from "./aliases";
 
@@ -86,12 +91,15 @@ const isAddy = (c: C) => c.req.path.startsWith("/api/v1/");
  */
 export async function apiThrottled(env: Env, ip: string | undefined): Promise<Response | null> {
 	const client = clientKey(ip);
+	const headers = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" };
 	if (env.API_RATE_LIMIT && !(await env.API_RATE_LIMIT.limit({ key: `api:${client}` })).success) {
-		return Response.json({ error: "Too many requests", message: "Too Many Attempts." }, { status: 429 });
+		return Response.json({ error: "Too many requests", message: "Too Many Attempts." }, { status: 429, headers });
 	}
 	// An address over the failed-key limit is turned away here, before any key is looked up.
 	const cache = lockoutCache();
-	if (cache && (await cache.match(lockoutUrl(client)).catch(() => undefined))) return Response.json({ error: "Too many attempts", message: "Too Many Attempts." }, { status: 429 });
+	if (cache && (await cache.match(lockoutUrl(client)).catch(() => undefined))) {
+		return Response.json({ error: "Too many attempts", message: "Too Many Attempts." }, { status: 429, headers });
+	}
 	return null;
 }
 
@@ -206,18 +214,25 @@ async function slAlias(c: C, alias: AliasView, preloadedContact?: ContactRow | n
 	};
 }
 
+function positiveIntParam(raw: string | undefined): number | null {
+	if (!raw || !/^[1-9]\d*$/.test(raw)) return null;
+	const id = Number(raw);
+	return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
 async function slFindAlias(c: C): Promise<AliasView> {
-	const id = Number(c.req.param("id"));
-	const alias = Number.isInteger(id) ? await getAliasView(c.env.DB, { numId: id }) : null;
+	const id = positiveIntParam(c.req.param("id"));
+	const alias = id !== null ? await getAliasView(c.env.DB, { numId: id }) : null;
 	if (!alias || alias.deleted_at) throw new ClientError(404, "Alias not found");
 	return alias;
 }
 
 async function slFindContact(c: C): Promise<ContactRow> {
-	const id = Number(c.req.param("id"));
-	const contact = Number.isInteger(id)
-		? await c.env.DB.prepare("SELECT c.* FROM contacts c JOIN aliases a ON a.address = c.alias_address WHERE c.num_id = ? AND a.deleted_at IS NULL").bind(id).first<ContactRow>()
-		: null;
+	const id = positiveIntParam(c.req.param("id"));
+	const contact =
+		id !== null
+			? await c.env.DB.prepare("SELECT c.* FROM contacts c JOIN aliases a ON a.address = c.alias_address WHERE c.num_id = ? AND a.deleted_at IS NULL").bind(id).first<ContactRow>()
+			: null;
 	if (!contact) throw new ClientError(404, "Contact not found");
 	return contact;
 }
@@ -832,15 +847,20 @@ api.get("/v1/aliases", async (c) => {
 api.post("/v1/aliases", async (c) => {
 	const input = await body(c);
 	const settings = c.get("settings");
-	const domain = str(input.domain, 253) || settings.aliasDomains[0] || "";
+	const domain = str(input.domain, 253)?.trim() || settings.aliasDomains[0] || "";
 	const format = str(input.format, 40) ?? settings.randomAliasFormat;
 	const recipientIds = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
 	const destination = (await resolveDestination(c.env.DB, settings, recipientIds[0] as string | undefined)) ?? null;
 	const note = str(input.description) ?? null;
-	const alias =
-		format === "custom"
-			? await createAlias(c.env.DB, settings, { localPart: cleanPrefix(str(input.local_part, 64) ?? ""), domain, note, destination })
-			: await createRandomAlias(c.env.DB, settings, { domain, format, note, destination });
+	let alias: AliasView;
+	if (format === "custom") {
+		const rawLocal = str(input.local_part, 64)?.trim() ?? "";
+		const cleaned = cleanPrefix(rawLocal);
+		if (!cleaned || cleaned !== rawLocal.toLowerCase()) throw new ClientError(422, "Invalid local part.");
+		alias = await createAlias(c.env.DB, settings, { localPart: cleaned, domain, note, destination });
+	} else {
+		alias = await createRandomAlias(c.env.DB, settings, { domain, format, note, destination });
+	}
 	if (Array.isArray(input.label_ids) && input.label_ids.length) await setAliasLabels(c.env.DB, [alias.address], input.label_ids);
 	return c.json({ data: await addyAlias(c, alias) }, 201);
 });
@@ -949,11 +969,8 @@ async function bulkAliases(c: C, includeDeleted: boolean): Promise<{ input: Reco
 	const input = await body(c);
 	const ids = Array.isArray(input.ids) ? input.ids.filter((id): id is string => typeof id === "string").slice(0, BULK_LIMIT) : [];
 	if (!ids.length) throw new ClientError(422, "The ids field is required.");
-	const aliases: AliasView[] = [];
-	for (const id of new Set(ids)) {
-		const alias = await getAliasView(c.env.DB, { uid: id });
-		if (alias && (includeDeleted || !alias.deleted_at)) aliases.push(alias);
-	}
+	const found = await getAliasViewsByUids(c.env.DB, ids);
+	const aliases = includeDeleted ? found : found.filter((alias) => !alias.deleted_at);
 	if (!aliases.length) throw new ClientError(404, "No aliases found");
 	return { input, aliases };
 }
@@ -968,18 +985,18 @@ api.post("/v1/aliases/get/bulk", async (c) => {
 });
 
 for (const [action, verb, includeDeleted, run] of [
-	["activate", "activated", false, (db: D1Database, address: string) => updateAlias(db, address, { enabled: true })],
-	["deactivate", "deactivated", false, (db: D1Database, address: string) => updateAlias(db, address, { enabled: false })],
-	["pin", "pinned", false, (db: D1Database, address: string) => updateAlias(db, address, { pinned: true })],
-	["unpin", "unpinned", false, (db: D1Database, address: string) => updateAlias(db, address, { pinned: false })],
-	["delete", "deleted", false, deleteAlias],
-	["restore", "restored", true, restoreAlias],
-	["forget", "forgotten", true, forgetAlias],
+	["activate", "activated", false, (db: D1Database, addresses: string[]) => updateAliases(db, addresses, { enabled: true })],
+	["deactivate", "deactivated", false, (db: D1Database, addresses: string[]) => updateAliases(db, addresses, { enabled: false })],
+	["pin", "pinned", false, (db: D1Database, addresses: string[]) => updateAliases(db, addresses, { pinned: true })],
+	["unpin", "unpinned", false, (db: D1Database, addresses: string[]) => updateAliases(db, addresses, { pinned: false })],
+	["delete", "deleted", false, deleteAliases],
+	["restore", "restored", true, restoreAliases],
+	["forget", "forgotten", true, forgetAliases],
 ] as const) {
 	api.post(`/v1/aliases/${action}/bulk`, async (c) => {
 		const { aliases } = await bulkAliases(c, includeDeleted);
 		const changed = action === "restore" ? aliases.filter((alias) => alias.deleted_at) : aliases;
-		for (const alias of changed) await run(c.env.DB, alias.address);
+		await run(c.env.DB, changed.map((alias) => alias.address));
 		return bulkDone(c, changed, verb);
 	});
 }
@@ -989,7 +1006,7 @@ api.post("/v1/aliases/recipients/bulk", async (c) => {
 	const ids = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
 	if (ids.length && typeof ids[0] !== "string") throw new ClientError(400, "Unknown mailbox");
 	const destination = ids.length ? await resolveDestination(c.env.DB, c.get("settings"), ids[0] as string) : null;
-	for (const alias of aliases) await updateAlias(c.env.DB, alias.address, { destination: destination ?? null });
+	await updateAliases(c.env.DB, aliases.map((alias) => alias.address), { destination: destination ?? null });
 	return bulkDone(c, aliases, "updated");
 });
 
@@ -1035,7 +1052,7 @@ async function labelCall<T>(run: () => Promise<T>): Promise<T> {
 
 api.get("/v1/labels", async (c) => c.json({ data: (await listLabels(c.env.DB)).map((label) => addyLabel(label, label.aliases)) }));
 api.get("/v1/labels/:id", async (c) => {
-	const label = (await listLabels(c.env.DB)).find((row) => row.id === c.req.param("id"));
+	const label = await getLabelWithCount(c.env.DB, c.req.param("id"));
 	if (!label) throw new ClientError(404, "Not found");
 	return c.json({ data: addyLabel(label, label.aliases) });
 });
@@ -1137,27 +1154,33 @@ api.get("/v1/rules", async (c) => {
 });
 api.get("/v1/rules/:id", async (c) => c.json({ data: await addyRule(c, await findRule(c, c.req.param("id"))) }));
 api.post("/v1/rules", async (c) => {
+	requireAppSettings(c);
 	const input = await ruleInput(c);
 	return c.json({ data: await addyRule(c, await ruleCall(() => createRule(c.env.DB, input))) }, 201);
 });
 api.patch("/v1/rules/:id", async (c) => {
+	requireAppSettings(c);
 	const input = await ruleInput(c, await findRule(c, c.req.param("id")));
 	return c.json({ data: await addyRule(c, await ruleCall(() => updateRule(c.env.DB, c.req.param("id"), input))) });
 });
 api.delete("/v1/rules/:id", async (c) => {
+	requireAppSettings(c);
 	if (!(await deleteRule(c.env.DB, c.req.param("id")))) throw new ClientError(404, "Not found");
 	return c.body(null, 204);
 });
 api.post("/v1/active-rules", async (c) => {
+	requireAppSettings(c);
 	const id = str((await body(c)).id, 64) ?? "";
 	if (!(await setRuleActive(c.env.DB, id, true))) throw new ClientError(404, "Not found");
 	return c.json({ data: await addyRule(c, await findRule(c, id)) });
 });
 api.delete("/v1/active-rules/:id", async (c) => {
+	requireAppSettings(c);
 	if (!(await setRuleActive(c.env.DB, c.req.param("id"), false))) throw new ClientError(404, "Not found");
 	return c.body(null, 204);
 });
 api.post("/v1/reorder-rules", async (c) => {
+	requireAppSettings(c);
 	const ids = (await body(c)).ids;
 	await reorderRules(c.env.DB, Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string").slice(0, 100) : []);
 	return c.json({ success: true });

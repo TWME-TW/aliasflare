@@ -124,8 +124,10 @@ app.use("*", async (c, next) => {
 	);
 	// The client APIs and public endpoints are open to anyone with the URL: their limits come before any D1 read.
 	if (c.req.path === "/api" || c.req.path.startsWith("/api/") || c.req.path === "/mcp" || c.req.path.startsWith("/mcp/")) {
-		const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
-		if (throttled) return throttled;
+		if (!(c.req.method === "OPTIONS" && (c.req.path === "/api" || c.req.path.startsWith("/api/")))) {
+			const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
+			if (throttled) return throttled;
+		}
 	} else if (c.env.API_RATE_LIMIT) {
 		const client = clientKey(c.req.header("CF-Connecting-IP"));
 		if (!(await c.env.API_RATE_LIMIT.limit({ key: `pub:${client}` })).success) {
@@ -774,8 +776,11 @@ app.post("/connection", async (c) => {
 			customIdPath: raw("customIdPath"),
 		});
 		if (raw("smtpHost").trim() && !options.smtpHost) return redirectWithNotice(c, "/connection", "notice.badSmtp");
-		if (Number(raw("smtpPort")) === 25) return redirectWithNotice(c, "/connection", "notice.badSmtp");
+		const rawPort = raw("smtpPort").trim();
+		const parsedPort = Number(rawPort);
+		if (rawPort && (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535 || parsedPort === 25)) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		if (raw("sesRegion").trim() && !SES_REGION.test(raw("sesRegion").trim().toLowerCase())) return redirectWithNotice(c, "/connection", "notice.badSes");
+		if (raw("mailbabyOrderId").trim() && !options.mailbabyOrderId) return redirectWithNotice(c, "/connection", "notice.badProvider");
 		if (options.customUrl) {
 			// The key and messages go to this URL: a public https host, not this Worker or Mailflare.
 			const blocked = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin, config.mailflareUrl, values.mailflareUrl].map(hostnameOf)].filter((h): h is string => !!h);
@@ -899,9 +904,12 @@ async function saveRule(c: C, id: string | null): Promise<Response> {
 		if (id && !existing) return redirectWithNotice(c, "/rules", "notice.ruleMissing");
 		const input = cleanRule(ruleFromForm(await c.req.parseBody(), existing));
 		// Mail goes only to the owner's own forwarding addresses, as in the apps: it carries the
-		// banner's signed links, which should not reach anyone else.
-		const forwardTo = input.actions.find((action) => action.type === "forwardTo");
-		if (forwardTo && !(await ruleDestinations(c)).includes(forwardTo.value)) return redirectWithNotice(c, back, "notice.ruleForwardTo");
+		// banner's signed links, which should not reach anyone else. Check every forwardTo action.
+		const forwardTos = input.actions.filter((action) => action.type === "forwardTo");
+		if (forwardTos.length) {
+			const allowed = await ruleDestinations(c);
+			if (forwardTos.some((action) => !allowed.includes(action.value))) return redirectWithNotice(c, back, "notice.ruleForwardTo");
+		}
 		if (id) await updateRule(c.env.DB, id, input);
 		else await createRule(c.env.DB, input);
 	} catch (error) {
@@ -1235,7 +1243,9 @@ app.post("/aliases/:address/note", async (c) => {
 	const result = await c.env.DB.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL").bind(note, now(), address).run();
 	if (c.req.header("X-Autosave") === "1") {
 		// Saved in place from the alias list or alias page.
-		return result.meta.changes > 0 ? c.json({ ok: true, message: c.get("t")("notice.noteSaved") }) : c.json({ ok: false, message: c.get("t")("link.error") }, 404);
+		return result.meta.changes > 0
+			? c.json({ ok: true, message: c.get("t")("notice.noteSaved") })
+			: c.json({ ok: false, message: c.get("t")("notice.aliasMissing") }, 404);
 	}
 	const back = form.back === "list" ? "/" : `/aliases/${encodeURIComponent(address)}`;
 	return redirectWithNotice(c, back, result.meta.changes > 0 ? "notice.noteSaved" : "notice.aliasMissing");
@@ -1258,7 +1268,7 @@ app.get("/aliases/:address", async (c) => {
 app.post("/aliases/:address/labels", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
 	const alias = await getAlias(c.env.DB, address);
-	if (!alias) return c.notFound();
+	if (!alias || alias.deleted_at) return c.notFound();
 	const form = await c.req.parseBody({ all: true });
 	const chosen = (Array.isArray(form.labels) ? form.labels : [form.labels]).filter((id): id is string => typeof id === "string");
 	await setAliasLabels(c.env.DB, [address], chosen);
@@ -1313,10 +1323,10 @@ export { app };
 
 export default {
 	fetch(request, env, ctx) {
-		// An API URL saved with a trailing slash ("https://host/") makes apps call "//api/…".
+		// An API URL saved with a trailing slash ("https://host/") makes apps call "//api/…" or "/api//v1/…".
 		const url = new URL(request.url);
-		if (url.pathname.startsWith("//")) {
-			url.pathname = url.pathname.replace(/^\/+/, "/");
+		if (url.pathname.includes("//")) {
+			url.pathname = url.pathname.replace(/\/{2,}/g, "/");
 			return app.fetch(new Request(url, request), env, ctx);
 		}
 		return app.fetch(request, env, ctx);

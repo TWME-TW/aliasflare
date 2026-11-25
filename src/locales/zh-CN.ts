@@ -279,7 +279,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "来源中的 ID",
 	"set.appSettings": "允许应用更改设置",
-	"set.appSettingsHelp": "SimpleLogin 和 addy.io 的应用可以更改其设置界面中显示的项目：别名格式、默认别名域名、发件人地址格式、默认转发地址和屏蔽列表。连接、API 和密钥的设置只能在这里更改。",
+	"set.appSettingsHelp": "SimpleLogin 和 addy.io 的应用可以更改其设置界面中显示的项目：别名格式、默认别名域名、发件人地址格式、默认转发地址、屏蔽列表和规则。连接、API 和密钥的设置只能在这里更改。",
 	"set.uiLanguage": "管理界面语言",
 	"set.uiLanguageHelp": "保存在此浏览器中。在你选择之前，管理界面会跟随浏览器的语言。",
 	"dash.search": "搜索别名",

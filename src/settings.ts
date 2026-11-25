@@ -119,7 +119,7 @@ function normalizeRules(raw: unknown, domains: string[]): Record<string, Unsubsc
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return rules;
 	for (const domain of domains) {
 		const rule: unknown = Object.hasOwn(raw, domain) ? (raw as Record<string, unknown>)[domain] : null;
-		if (!rule || typeof rule !== "object") continue;
+		if (!rule || typeof rule !== "object" || Array.isArray(rule)) continue;
 		const { behavior, fallback, redirect } = rule as Record<string, unknown>;
 		const validBehavior = isUnsubscribeBehavior(behavior) ? behavior : undefined;
 		const validFallback = isUnsubscribeFallback(fallback) ? fallback : undefined;
@@ -164,7 +164,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		unsubscribeFallback: isUnsubscribeFallback(raw.unsubscribeFallback) ? raw.unsubscribeFallback : DEFAULT_SETTINGS.unsubscribeFallback,
 		unsubscribeRedirect: cleanAddress(raw.unsubscribeRedirect),
 		unsubscribeDomains: normalizeRules(raw.unsubscribeDomains, aliasDomains),
-		defaultDestination: typeof raw.defaultDestination === "string" ? raw.defaultDestination.trim().toLowerCase() : "",
+		defaultDestination: cleanAddress(raw.defaultDestination),
 		autoForwardNewAliases:
 			typeof raw.autoForwardNewAliases === "boolean" ? raw.autoForwardNewAliases : DEFAULT_SETTINGS.autoForwardNewAliases,
 		createAliasesFromMail: typeof raw.createAliasesFromMail === "boolean" ? raw.createAliasesFromMail : DEFAULT_SETTINGS.createAliasesFromMail,
@@ -182,7 +182,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 
 export async function loadSettings(db: D1Database): Promise<Settings> {
 	const { results } = await db.prepare("SELECT key, value FROM settings").all<{ key: string; value: string }>();
-	const raw: Record<string, unknown> = {};
+	const raw: Record<string, unknown> = Object.create(null);
 	for (const row of results) {
 		try {
 			raw[row.key] = JSON.parse(row.value);

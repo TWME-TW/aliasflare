@@ -45,7 +45,8 @@ export function sanitizeDisplayName(name: string | null | undefined): string {
 		.replace(/[<>"@]/g, "")
 		.replace(/\s+/g, " ")
 		.trim()
-		.slice(0, 120);
+		.slice(0, 120)
+		.replace(/[\uD800-\uDBFF]$/, "");
 }
 
 const RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -159,7 +160,7 @@ export function safeHttpsUrl(value: string, blockedHosts: string[] = []): URL | 
 
 /** Strips control characters, quotes, backslashes and angle brackets from a stored display name. */
 export function cleanDisplayName(value: string | null | undefined, max = 100): string | null {
-	return (value ?? "").replace(/[\u0000-\u001f\u007f"<>\\]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max) || null;
+	return (value ?? "").replace(/[\u0000-\u001f\u007f"<>\\]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max).replace(/[\uD800-\uDBFF]$/, "") || null;
 }
 
 /**
@@ -189,9 +190,9 @@ export function extractEmail(value: string | null | undefined): string | null {
 	return named ? parseBareEmail(named[1]) : null;
 }
 
-/** Drops control characters (a decoded CR or LF among them) from a subject. */
+/** Drops control characters (a decoded CR or LF among them) from a subject and caps at RFC 5322 line limit. */
 export function cleanSubjectLine(value: string | null | undefined): string {
-	return (value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+	return (value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, 998).replace(/[\uD800-\uDBFF]$/, "");
 }
 
 /** The longest note an alias keeps, wherever it is set (dashboard, apps or import). */
@@ -213,24 +214,40 @@ function escapeRegExp(value: string): string {
 
 export type Replacement = { from: string; to: string };
 
+const ENCODED_PLUS_DECODE = /%2b|&#0*43;|&#x0*2b;|&plus;/gi;
+const ENCODED_AT_DECODE = /%40|&#0*64;|&#x0*40;|&commat;/gi;
+
 /**
  * Replaces addresses inside a reply body, case-insensitively: each reverse alias with
  * the real correspondent address, and the user's own address with the alias. This keeps
  * the quoted "On …, X <reverse alias> wrote:" line from leaking either side.
+ * Combines entries into batched alternation patterns so large contact sets stay linear.
  */
 export function replaceAddresses(body: string, replacements: Replacement[], options: { encodedPlus?: boolean } = {}): string {
-	let out = body;
+	const map = new Map<string, string>();
 	for (const { from, to } of replacements) {
 		if (!from) continue;
-		const escaped = options.encodedPlus
+		const key = from.toLowerCase();
+		if (!map.has(key)) map.set(key, to);
+	}
+	if (!map.size) return body;
+	const entries = [...map.keys()].sort((a, b) => b.length - a.length);
+	const prefix = options.encodedPlus ? "(?:(?<![A-Za-z0-9._%+-])|(?<=%[0-9a-f]{2}))" : "(?<![A-Za-z0-9._%+-])";
+	const suffix = "(?![A-Za-z0-9.-]*[A-Za-z0-9])";
+	const encode = (from: string) =>
+		options.encodedPlus
 			? escapeRegExp(from)
 					.replaceAll("\\+", "(?:\\+|%2b|&#0*43;|&#x0*2b;|&plus;)")
 					.replaceAll("@", "(?:@|%40|&#0*64;|&#x0*40;|&commat;)")
 			: escapeRegExp(from);
-		const prefix = options.encodedPlus ? "(?:(?<![A-Za-z0-9._%+-])|(?<=%[0-9a-f]{2}))" : "(?<![A-Za-z0-9._%+-])";
-		const pattern = new RegExp(`${prefix}${escaped}(?![A-Za-z0-9.-]*[A-Za-z0-9])`, "gi");
-		// A function, so "$&" or "$`" in an address is inserted as text, not as a pattern.
-		out = out.replace(pattern, () => to);
+	let out = body;
+	for (let i = 0; i < entries.length; i += 500) {
+		const chunk = entries.slice(i, i + 500);
+		const pattern = new RegExp(`${prefix}(?:${chunk.map(encode).join("|")})${suffix}`, "gi");
+		out = out.replace(pattern, (matched) => {
+			const normalized = (options.encodedPlus ? matched.replace(ENCODED_PLUS_DECODE, "+").replace(ENCODED_AT_DECODE, "@") : matched).toLowerCase();
+			return map.get(normalized) ?? matched;
+		});
 	}
 	return out;
 }

@@ -192,13 +192,14 @@ export async function fetchSimpleLogin(base: string, apiKey: string, budget: Fet
 		for (const raw of body.aliases.filter(isRecord)) {
 			const email = extractEmail(text(raw.email));
 			if (!email) continue;
-			const mailboxes = (Array.isArray(raw.mailboxes) ? (raw.mailboxes as { email?: unknown }[]) : [])
+			const mailboxes = (Array.isArray(raw.mailboxes) ? (raw.mailboxes as { email?: unknown }[]).slice(0, 50) : [])
 				.map((mailbox) => extractEmail(text(mailbox?.email)))
 				.filter((value): value is string => !!value);
 			const fallback = extractEmail(text((raw.mailbox as { email?: unknown } | undefined)?.email));
 			const latest = raw.latest_activity as { action?: unknown; timestamp?: unknown; contact?: { email?: unknown; name?: unknown } } | null | undefined;
 			const latestAt = toTimestamp(latest?.timestamp);
 			const action = text(latest?.action);
+			const safeId = typeof raw.id === "number" && Number.isFinite(raw.id) ? raw.id : typeof raw.id === "string" ? raw.id.slice(0, 64) : undefined;
 			out.push({
 				...empty(email),
 				note: text(raw.note),
@@ -214,9 +215,9 @@ export async function fetchSimpleLogin(base: string, apiKey: string, budget: Fet
 				lastForwardAt: action === "forward" ? latestAt : null,
 				lastBlockAt: action === "block" ? latestAt : null,
 				lastReplyAt: action === "reply" ? latestAt : null,
-				sourceId: Number.isInteger(raw.id) ? (raw.id as number) : undefined,
+				sourceId: typeof raw.id === "number" && Number.isSafeInteger(raw.id) && raw.id > 0 ? raw.id : undefined,
 				details: clean({
-					id: raw.id,
+					id: safeId,
 					mailboxes: mailboxes.length > 1 ? mailboxes : undefined,
 					pgp: raw.support_pgp === true ? (raw.disable_pgp === true ? "off" : "on") : undefined,
 					latest_activity:
@@ -251,7 +252,8 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 				const display = text(raw.contact, 1000);
 				const email = extractEmail(display);
 				if (!email) continue;
-				const rawName = display?.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]?.trim() ?? null;
+				const lt = display ? display.indexOf("<") : -1;
+				const rawName = lt > 0 ? display!.slice(0, lt).trim().replace(/^"(.*)"$/, "$1").trim() : null;
 				const name = cleanDisplayName(rawName);
 				contacts.push({
 					email,
@@ -279,10 +281,11 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 		for (const raw of body.data.filter(isRecord)) {
 			const email = extractEmail(text(raw.email));
 			if (!email || raw.deleted_at) continue;
-			const recipients = (Array.isArray(raw.recipients) ? (raw.recipients as { email?: unknown }[]) : [])
+			const recipients = (Array.isArray(raw.recipients) ? (raw.recipients as { email?: unknown }[]).slice(0, 50) : [])
 				.map((recipient) => extractEmail(text(recipient?.email)))
 				.filter((value): value is string => !!value);
-			const labels = (Array.isArray(raw.labels) ? (raw.labels as { name?: unknown }[]) : []).map((label) => text(label?.name, 60)).filter(Boolean);
+			const labels = (Array.isArray(raw.labels) ? (raw.labels as { name?: unknown }[]).slice(0, 50) : []).map((label) => text(label?.name, 60)).filter(Boolean);
+			const safeId = typeof raw.id === "number" && Number.isFinite(raw.id) ? raw.id : typeof raw.id === "string" ? raw.id.slice(0, 64) : undefined;
 			out.push({
 				...empty(email),
 				note: text(raw.description),
@@ -300,7 +303,7 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 				lastReplyAt: toTimestamp(raw.last_replied),
 				lastSentAt: toTimestamp(raw.last_sent),
 				details: clean({
-					id: raw.id,
+					id: safeId,
 					recipients: recipients.length > 1 ? recipients : undefined,
 					labels: labels.length ? labels : undefined,
 					extension: text(raw.extension, 64),

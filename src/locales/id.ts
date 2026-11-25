@@ -285,7 +285,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID di sumber",
 	"set.appSettings": "Izinkan aplikasi mengubah pengaturan",
-	"set.appSettingsHelp": "Aplikasi SimpleLogin dan addy.io dapat mengubah apa yang ditampilkan layar pengaturan mereka: format alias, domain alias default, format alamat pengirim, alamat penerusan default, dan daftar blokir. Pengaturan koneksi, API, dan kunci hanya dapat diubah di sini.",
+	"set.appSettingsHelp": "Aplikasi SimpleLogin dan addy.io dapat mengubah apa yang ditampilkan layar pengaturan mereka: format alias, domain alias default, format alamat pengirim, alamat penerusan default, daftar blokir, dan aturan. Pengaturan koneksi, API, dan kunci hanya dapat diubah di sini.",
 	"set.uiLanguage": "Bahasa dasbor",
 	"set.uiLanguageHelp": "Disimpan di browser ini. Sebelum Anda memilih, dasbor mengikuti bahasa browser Anda.",
 	"dash.search": "Cari alias",
