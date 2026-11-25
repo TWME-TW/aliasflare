@@ -4,8 +4,6 @@ SimpleLogin-style **email aliases with reverse aliases**, on one Cloudflare Work
 
 Give every site its own address on your domains. aliasflare forwards their mail to the inbox you already use, like Gmail. When you reply there, the reply goes out from the alias, so the other side never sees your real address.
 
-[繁體中文說明](README.zh-TW.md)
-
 ## Screenshots
 
 ![The alias list](docs/screenshots/dashboard.png)
@@ -15,7 +13,13 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 | ![An alias and its contacts](docs/screenshots/alias.png) | ![Activity](docs/screenshots/activity.png) |
 | ![Settings](docs/screenshots/settings.png) | ![Dark mode](docs/screenshots/dashboard-dark.png) |
 
-<p align="center"><img src="docs/screenshots/mobile.png" width="300" alt="On a phone"></p>
+On a phone:
+
+<p align="center">
+<img src="docs/screenshots/mobile.png" width="220" alt="The alias list on a phone">
+&nbsp;
+<img src="docs/screenshots/mobile-activity.png" width="220" alt="Activity on a phone">
+</p>
 
 ## Features
 
