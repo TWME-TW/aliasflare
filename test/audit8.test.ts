@@ -232,6 +232,23 @@ describe("3. Forward & reply security: auto-responder loop, >20 From passThrough
 		expect(await db.prepare("SELECT status, detail FROM events WHERE kind = 'reply'").first()).toEqual({ status: "rejected", detail: "Not sent: automatic reply" });
 	});
 
+	it("sends automatic replies when the owner allows it, but never a message aliasflare sent itself", async () => {
+		await db.prepare("INSERT INTO contacts (id, alias_address, email, reverse_local, created_at) VALUES ('c1', 'shop@a.test', 'bob@store.test', 'rbob', 1)").run();
+		await saveSettings(db, { ...(await loadSettings(db)), sendAutoReplies: true });
+		const config = { outboundProvider: "cloudflare", workersPlan: "paid" } as AppConfig;
+		const send = async (extra: string) => {
+			const raw = `${PASS}\r\nFrom: me@home.test\r\nTo: reply+rbob@r.a.test\r\n${extra}\r\nSubject: Out of Office\r\nContent-Type: text/plain\r\n\r\nAway\r\n`;
+			let rejected: string | null = null;
+			await handleReverseAliasMail({ to: "reply+rbob@r.a.test", raw: new Response(raw).body, rawSize: raw.length, setReject: (why: string) => void (rejected = why) } as never, env, config);
+			return rejected;
+		};
+		expect(await send("Auto-Submitted: auto-replied")).toBeNull();
+		expect(sent).toHaveLength(1);
+		expect(await send("X-Aliasflare: shop@a.test")).toBeNull();
+		expect(sent).toHaveLength(1);
+		expect(await db.prepare("SELECT detail FROM events WHERE kind = 'reply' AND status = 'rejected'").first()).toEqual({ detail: "Not sent: a message aliasflare sent itself" });
+	});
+
 	it("skips passThrough messages with >20 From addresses instead of truncating blocklist checks", async () => {
 		await saveSettings(db, { ...(await loadSettings(db)), forwardMethod: "direct" });
 		const manyFrom = [...Array.from({ length: 20 }, (_, i) => `a${i}@ok.test`), "blocked@evil.test"].join(", ");

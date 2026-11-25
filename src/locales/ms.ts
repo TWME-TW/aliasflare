@@ -71,6 +71,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Apabila anda membalas, alias terbalik dalam isi mel (seperti dalam baris petikan \"… menulis:\") menjadi alamat sebenar, dan alamat sebenar anda menjadi alias.",
 	"settings.includeSender": "Sertakan alamat penghantar dalam alias terbalik",
+	"settings.autoReplies": "Hantar balasan automatik",
+	"settings.autoRepliesHelp": "Balasan automatik seperti notis luar pejabat dan balasan automatik lain yang dihantar oleh peti mel anda ke alias terbalik akan disampaikan kepada pihak yang berkomunikasi. Apabila dimatikan, balasan tersebut dibuang (dan dipaparkan dalam Aktiviti), supaya dua penjawab automatik tidak dapat menjawab antara satu sama lain tanpa henti. Mesej yang dihantar oleh aliasflare sendiri sentiasa dibuang.",
 	"settings.includeSenderHelp":
 		"Alias terbalik baharu berbentuk john_at_wick_com_x7k2p9@… dan bukannya rentetan rawak. Alias terbalik sedia ada tidak berubah.",
 	"settings.trackers": "Buang penjejak e-mel",

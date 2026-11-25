@@ -55,6 +55,27 @@ describe("alias list", () => {
 		expect([...unknown.matchAll(/data-copy="/g)]).toHaveLength(34);
 	});
 
+	it("puts a pager above and below the list, keeping a greyed-out button where there is no page to go to", async () => {
+		const cookie = await signIn(db);
+		for (let i = 0; i < 30; i += 1) {
+			await db.prepare("INSERT INTO aliases (address, num_id, uid, created_at, updated_at) VALUES (?, ?, ?, 1, 1)").bind(`bulk${i}@me.test`, 100 + i, `b${i}`).run();
+		}
+		const first = await (await app.fetch(new Request("https://alias.test/?per=25", { headers: { cookie } }), env)).text();
+		expect([...first.matchAll(/<nav class="pager"/g)]).toHaveLength(2);
+		expect([...first.matchAll(/<span class="pg" aria-disabled="true">/g)]).toHaveLength(2);
+		expect([...first.matchAll(/<a class="pg" href="\/\?per=25&amp;page=2">/g)]).toHaveLength(2);
+		const last = await (await app.fetch(new Request("https://alias.test/?per=25&page=2", { headers: { cookie } }), env)).text();
+		expect([...last.matchAll(/<a class="pg" href="\/\?per=25">/g)]).toHaveLength(2);
+		expect(last).toContain('<span class="at">2 / 2</span>');
+		// Past the end: one pager whose way back goes to the last page.
+		const past = await (await app.fetch(new Request("https://alias.test/?per=25&page=9", { headers: { cookie } }), env)).text();
+		expect([...past.matchAll(/<nav class="pager"/g)]).toHaveLength(1);
+		expect(past).toContain('<a class="pg" href="/?per=25&amp;page=2">');
+		// One page: no pager.
+		const all = await (await app.fetch(new Request("https://alias.test/?per=100", { headers: { cookie } }), env)).text();
+		expect(all).not.toContain('class="pager"');
+	});
+
 	it("shows how long ago each alias was last used, or that it never was", async () => {
 		const page = await dashboard();
 		const row = (address: string) => page.slice(page.indexOf(`data-copy="${address}"`)).split("</tr>")[0]!;

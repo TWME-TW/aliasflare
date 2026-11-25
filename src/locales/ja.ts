@@ -69,6 +69,8 @@ const dictionary: Dictionary = {
 	"settings.replacement": "リバースエイリアスの置換（Reverse Alias Replacement）",
 	"settings.replacementHelp": "返信時、本文中のリバースエイリアス（引用部分の「… wrote:」行など）を相手の本当のアドレスに、あなたの本当のアドレスをエイリアスに置き換えます。",
 	"settings.includeSender": "リバースエイリアスに差出人アドレスを含める",
+	"settings.autoReplies": "自動返信を送信する",
+	"settings.autoRepliesHelp": "メールボックスがリバースエイリアスに送信する不在通知などの自動返信は、相手に届きます。オフにすると破棄され（アクティビティに表示されます）、2つの自動返信が無限に応答し合うことを防ぎます。aliasflare 自身が送信したメールは常に破棄されます。",
 	"settings.includeSenderHelp": "新しいリバースエイリアスがランダムな文字列ではなく john_at_wick_com_x7k2p9@… のようになります。既存のものは変わりません。",
 	"settings.trackers": "メールトラッカーを削除",
 	"settings.trackersHelp": "転送メールからトラッキングピクセルを削除し、リンクの追跡パラメータ（utm_*、fbclid、mc_eid など）を除去します。一部の画像が表示されなくなる場合があります。",

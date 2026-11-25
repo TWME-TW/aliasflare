@@ -43,6 +43,8 @@ export type Settings = {
 	forwardMethod: ForwardMethod;
 	senderFormat: SenderFormat;
 	reverseAliasReplacement: boolean;
+	/** Whether automatic replies (out of office and the like) the owner sends to a reverse alias go out. */
+	sendAutoReplies: boolean;
 	includeSenderInReverseAlias: boolean;
 	unsubscribeBehavior: UnsubscribeBehavior;
 	/** When the sender's own unsubscribe cannot be used. */
@@ -82,6 +84,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	forwardMethod: "rewrite",
 	senderFormat: "AT",
 	reverseAliasReplacement: true,
+	sendAutoReplies: false,
 	includeSenderInReverseAlias: false,
 	unsubscribeBehavior: "disable_alias",
 	unsubscribeFallback: "block_contact",
@@ -156,6 +159,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		senderFormat: isSenderFormat(raw.senderFormat) ? raw.senderFormat : DEFAULT_SETTINGS.senderFormat,
 		reverseAliasReplacement:
 			typeof raw.reverseAliasReplacement === "boolean" ? raw.reverseAliasReplacement : DEFAULT_SETTINGS.reverseAliasReplacement,
+		sendAutoReplies: typeof raw.sendAutoReplies === "boolean" ? raw.sendAutoReplies : DEFAULT_SETTINGS.sendAutoReplies,
 		includeSenderInReverseAlias:
 			typeof raw.includeSenderInReverseAlias === "boolean"
 				? raw.includeSenderInReverseAlias

@@ -71,6 +71,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Gdy odpowiadasz, aliasy zwrotne w treści (np. w cytowanym wierszu „… napisał(a):”) zamieniają się w prawdziwy adres, a Twój prawdziwy adres w alias.",
 	"settings.includeSender": "Umieszczaj adres nadawcy w aliasie zwrotnym",
+	"settings.autoReplies": "Wysyłaj automatyczne odpowiedzi",
+	"settings.autoRepliesHelp": "Automatyczne odpowiedzi, np. o nieobecności, które skrzynka wysyła na alias zwrotny, trafiają do korespondenta. Gdy opcja jest wyłączona, są odrzucane (i pokazywane w Aktywności), aby dwie automatyczne odpowiedzi nie mogły odpowiadać sobie w nieskończoność. Wiadomość wysłana przez samego aliasflare jest zawsze odrzucana.",
 	"settings.includeSenderHelp":
 		"Nowe aliasy zwrotne wyglądają jak john_at_wick_com_x7k2p9@… zamiast losowego ciągu znaków. Istniejące aliasy zwrotne się nie zmieniają.",
 	"settings.trackers": "Usuwaj trackery z e-maili",

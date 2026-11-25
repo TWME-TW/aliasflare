@@ -78,6 +78,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Lorsque vous répondez, les alias inversés dans le corps du message (par exemple dans la ligne citée « … a écrit : ») deviennent la vraie adresse, et votre vraie adresse devient l'alias.",
 	"settings.includeSender": "Inclure l'adresse de l'expéditeur dans l'alias inversé",
+	"settings.autoReplies": "Envoyer les réponses automatiques",
+	"settings.autoRepliesHelp": "Les réponses automatiques (absence du bureau et autres) que votre boîte envoie à un alias inversé sont transmises au correspondant. Désactivées, elles sont ignorées (et affichées dans Activité), afin que deux répondeurs automatiques ne puissent pas se répondre indéfiniment. Un message envoyé par aliasflare lui-même est toujours ignoré.",
 	"settings.includeSenderHelp":
 		"Les nouveaux alias inversés ressemblent à john_at_wick_com_x7k2p9@… au lieu d'une chaîne aléatoire. Les alias inversés existants ne changent pas.",
 	"settings.trackers": "Supprimer les traqueurs d'e-mails",

@@ -78,6 +78,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"답장할 때 본문의 역방향 별칭(예: 인용된 “… 님이 작성:” 줄)은 실제 주소로, 사용자의 실제 주소는 별칭으로 바뀝니다.",
 	"settings.includeSender": "역방향 별칭에 보낸 사람 주소 포함",
+	"settings.autoReplies": "자동 회신 보내기",
+	"settings.autoRepliesHelp": "사서함이 역방향 별칭으로 보내는 부재중 메시지 등 자동 회신은 상대방에게 전달됩니다. 끄면 해당 회신은 버려지고(활동에 표시됨), 두 자동 응답기가 끝없이 서로에게 회신하는 것을 막습니다. aliasflare가 직접 보낸 메시지는 항상 버려집니다.",
 	"settings.includeSenderHelp":
 		"새 역방향 별칭이 무작위 문자열 대신 john_at_wick_com_x7k2p9@… 형태로 만들어집니다. 기존 역방향 별칭은 바뀌지 않습니다.",
 	"settings.trackers": "이메일 추적기 제거",

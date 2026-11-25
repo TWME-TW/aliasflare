@@ -71,6 +71,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Als je antwoordt, worden omgekeerde aliassen in de tekst (zoals in de geciteerde regel „… schreef:”) het echte adres, en wordt je echte adres het alias.",
 	"settings.includeSender": "Afzenderadres opnemen in het omgekeerde alias",
+	"settings.autoReplies": "Automatische antwoorden versturen",
+	"settings.autoRepliesHelp": "Automatische antwoorden, zoals afwezigheidsmeldingen en andere die je postvak naar een omgekeerd alias stuurt, gaan door naar de correspondent. Uitgeschakeld worden ze weggegooid (en getoond onder Activiteit), zodat twee automatische antwoordfuncties elkaar niet eindeloos kunnen beantwoorden. Een bericht dat aliasflare zelf verstuurt, wordt altijd weggegooid.",
 	"settings.includeSenderHelp":
 		"Nieuwe omgekeerde aliassen zien eruit als john_at_wick_com_x7k2p9@… in plaats van een willekeurige reeks. Bestaande omgekeerde aliassen veranderen niet.",
 	"settings.trackers": "E-mailtrackers verwijderen",

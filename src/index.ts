@@ -659,6 +659,7 @@ app.post("/settings", async (c) => {
 		appSettings: form.appSettings === "1",
 		senderFormat: form.senderFormat,
 		reverseAliasReplacement: form.reverseAliasReplacement === "1",
+		sendAutoReplies: form.sendAutoReplies === "1",
 		includeSenderInReverseAlias: form.includeSenderInReverseAlias === "1",
 		autoForwardNewAliases: form.autoForwardNewAliases === "1",
 		createAliasesFromMail: form.createAliasesFromMail === "1",

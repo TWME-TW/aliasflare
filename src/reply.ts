@@ -205,13 +205,22 @@ function headerSection(raw: Uint8Array): string | null {
 	return end >= 0 ? head.slice(0, end) : null;
 }
 
-/** True for automatic replies (out-of-office, DSN, or already sent by this Worker) that must not loop. */
-function isAutoReply(headers: { key: string; value: string }[] | undefined): boolean {
-	if (!headers?.length) return false;
+/**
+ * Why a message to a reverse alias is not sent on: one this Worker sent itself (a real loop, always
+ * dropped), or an automatic reply (out of office, a delivery report) unless the owner lets those go
+ * out. Null when it is sent.
+ */
+function automaticReason(headers: { key: string; value: string }[] | undefined, sendAutoReplies: boolean): string | null {
+	if (!headers?.length) return null;
+	if (headers.some(({ key }) => key.toLowerCase() === LOOP_HEADER.toLowerCase())) return "Not sent: a message aliasflare sent itself";
+	return !sendAutoReplies && isAutoReply(headers) ? "Not sent: automatic reply" : null;
+}
+
+/** True for automatic replies (out of office, delivery reports), per RFC 3834 and common headers. */
+function isAutoReply(headers: { key: string; value: string }[]): boolean {
 	return headers.some(({ key, value }) => {
 		const name = key.toLowerCase();
 		const trimmed = value.trim().toLowerCase();
-		if (name === LOOP_HEADER.toLowerCase()) return true;
 		if (name === "auto-submitted") return !!trimmed && trimmed !== "no";
 		if (name === "precedence") return /^auto[-_]?reply$/i.test(trimmed);
 		if (name === "x-autoreply") return /^(yes|true|1)$/i.test(trimmed);
@@ -286,8 +295,9 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	// Drop automatic replies silently (no bounce, per RFC 3834) to prevent vacation/auto-responder loops.
-	if (isAutoReply(headerOnly?.headers)) {
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: "Not sent: automatic reply" });
+	const automatic = automaticReason(headerOnly?.headers, settings.sendAutoReplies);
+	if (automatic) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: automatic });
 		return;
 	}
 	// The owner turned this alias or this correspondent off: an auto-reply or a stray reply

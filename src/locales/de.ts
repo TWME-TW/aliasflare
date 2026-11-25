@@ -71,6 +71,8 @@ const dictionary: Dictionary = {
 	"settings.replacementHelp":
 		"Wenn du antwortest, werden Reverse-Aliasse im Text (etwa in der zitierten Zeile „… schrieb:“) zur echten Adresse, und deine echte Adresse wird zum Alias.",
 	"settings.includeSender": "Absenderadresse im Reverse-Alias aufnehmen",
+	"settings.autoReplies": "Automatische Antworten senden",
+	"settings.autoRepliesHelp": "Abwesenheitsnotizen und andere automatische Antworten, die dein Postfach an einen Reverse-Alias sendet, gehen an den Korrespondenten weiter. Ist die Option aus, werden sie verworfen (und unter Aktivität angezeigt), damit sich zwei automatische Antwortfunktionen nicht endlos gegenseitig antworten können. Eine von aliasflare selbst gesendete Nachricht wird immer verworfen.",
 	"settings.includeSenderHelp":
 		"Neue Reverse-Aliasse sehen aus wie john_at_wick_com_x7k2p9@… statt wie eine zufällige Zeichenfolge. Bestehende Reverse-Aliasse ändern sich nicht.",
 	"settings.trackers": "E-Mail-Tracker entfernen",
