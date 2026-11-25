@@ -15,8 +15,8 @@ import {
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
 import { setUpCloudflare, type DomainSetup } from "./cloudflare";
-import { api } from "./compat/api";
-import { ClientError, cleanPrefix, createAlias, createRandomAlias } from "./compat/aliases";
+import { api, apiThrottled } from "./compat/api";
+import { ClientError, cleanPrefix, createAlias, createRandomAlias, forgetStatements } from "./compat/aliases";
 import { ConfigError, DOMAIN_PATTERN, envOverrides, isWorkersPlan, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
 import { isOutboundProvider } from "./outbound";
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
@@ -50,7 +50,7 @@ import {
 	relyingParty,
 } from "./passkeys";
 import { handleReverseAliasMail } from "./reply";
-import { isRandomAliasFormat, loadSettings, normalizeSettings, saveSettings } from "./settings";
+import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings } from "./settings";
 import {
 	aliasPage,
 	apiKeysPage,
@@ -71,6 +71,8 @@ import {
 	type ActivityItem,
 } from "./ui";
 import { readTextLimited } from "./streams";
+import { clientKey } from "./ratelimit";
+import { cleanUp } from "./cleanup";
 import { claimLink, describeAction, performAction, releaseLink, resolveLink, safeHttpsUrl } from "./unsubscribe";
 
 const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -83,11 +85,19 @@ app.use("*", async (c, next) => {
 	c.header("X-Content-Type-Options", "nosniff");
 	c.header("Referrer-Policy", "same-origin");
 	c.header("X-Frame-Options", "DENY");
+	if (new URL(c.req.url).protocol === "https:") c.header("Strict-Transport-Security", "max-age=31536000");
+	if (NO_STORE.test(c.req.path)) c.header("Cache-Control", "no-store");
 	c.header(
 		"Content-Security-Policy",
 		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	);
 });
+
+/** A CSV import of at most 5 MB, with room for the rest of the form. */
+const MAX_IMPORT_UPLOAD = 5_100_000;
+
+/** Pages that show addresses, codes or one-time links, which no cache should keep. */
+const NO_STORE = /^\/(?:unsubscribe|action|setup|login)(?:\/|$)/;
 
 /** Static files: they need neither the configuration (a D1 read) nor a language. */
 const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/app.css", "/favicon.svg"]);
@@ -96,6 +106,11 @@ const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immu
 
 app.use("*", async (c, next) => {
 	if (STATIC_PATHS.has(c.req.path)) return next();
+	// The client APIs are open to anyone with the URL: their limits come before any D1 read.
+	if (c.req.path.startsWith("/api/")) {
+		const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
+		if (throttled) return throttled;
+	}
 	try {
 		c.set("config", await loadConfig(c.env));
 	} catch (error) {
@@ -135,6 +150,9 @@ function noticeFrom(c: C): string | undefined {
 	if (!isNoticeKey(key)) return undefined;
 	const params: Record<string, string> = {};
 	for (const [name, value] of Object.entries(c.req.query())) if (name.startsWith("n.")) params[name.slice(2)] = value.slice(0, 200);
+	// Values come from this site's redirects. A link from elsewhere (Sec-Fetch-Site is
+	// cross-site or none) could put its own words into them, so such a notice is not shown.
+	if (Object.keys(params).length && c.req.header("Sec-Fetch-Site") !== "same-origin") return undefined;
 	return c.get("t")(key, params);
 }
 
@@ -153,7 +171,7 @@ async function readJson<T>(c: C): Promise<T | null> {
 }
 
 async function rateLimited(c: C): Promise<boolean> {
-	const key = c.req.header("CF-Connecting-IP") ?? "unknown";
+	const key = clientKey(c.req.header("CF-Connecting-IP"));
 	return !!c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key })).success;
 }
 
@@ -197,12 +215,14 @@ export function safeLocalPath(value: string | undefined | null): string {
 	}
 }
 
-app.get("/lang/:locale?", (c) => {
-	const locale = c.req.param("locale") ?? c.req.query("locale");
-	if (isLocale(locale)) {
-		setCookie(c, LANG_COOKIE, locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+// A POST from this site only: another site cannot switch the dashboard's language.
+app.post("/lang", async (c) => {
+	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
+	const form = await c.req.parseBody();
+	if (isLocale(form.locale)) {
+		setCookie(c, LANG_COOKIE, form.locale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
 	}
-	return c.redirect(safeLocalPath(c.req.query("next")));
+	return c.redirect(safeLocalPath(typeof form.next === "string" ? form.next : undefined), 303);
 });
 
 // SimpleLogin and addy.io client APIs (off until enabled in Settings).
@@ -283,7 +303,7 @@ app.post("/setup/code", async (c) => {
 	if (!sameOrigin(c)) return c.text(c.get("t")("err.crossSite"), 403);
 	if (await hasPasskeys(c.env.DB)) return c.redirect("/login");
 	if (await rateLimited(c)) return c.text(c.get("t")("err.rateLimited"), 429);
-	if (!c.env.SETUP_CODE?.trim()) await issueSetupCode(c.env.DB, true);
+	if (!c.env.SETUP_CODE?.trim() && !(await issueSetupCode(c.env.DB, true)).created) return redirectWithNotice(c, "/setup", "notice.setupCodeWait");
 	return redirectWithNotice(c, "/setup", "notice.setupCodeIssued");
 });
 
@@ -291,8 +311,8 @@ app.post("/setup/options", async (c) => {
 	if (!sameOrigin(c)) return jsonError(c, "err.crossSite", 403);
 	if (await hasPasskeys(c.env.DB)) return jsonError(c, "err.setupDone", 409);
 	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
-	const body = await readJson<{ code?: string }>(c);
-	if (!body?.code || !(await checkSetupCode(c.env, body.code))) return jsonError(c, "err.badCode", 401);
+	const body = await readJson<{ code?: unknown }>(c);
+	if (typeof body?.code !== "string" || !body.code || !(await checkSetupCode(c.env, body.code))) return jsonError(c, "err.badCode", 401);
 	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url), "setup_register");
 	setChallengeCookie(c, challengeId);
 	return c.json({ options });
@@ -466,16 +486,18 @@ app.post("/settings", async (c) => {
 	const form = await c.req.parseBody();
 	// The page saves each change as it happens (X-Autosave) and expects JSON; without script it posts the form.
 	// The dashboard language lives in a cookie in this browser; the page reloads to show it.
+	// The language only changes once everything else is valid, so an error is not lost to a reload.
 	const uiLocale = form.uiLocale;
 	const localeChanged = isLocale(uiLocale) && uiLocale !== c.get("t").locale;
-	if (localeChanged) {
-		setCookie(c, LANG_COOKIE, uiLocale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
-		c.set("t", translator(uiLocale));
-	}
-	const reply = (key: MessageKey, ok: boolean, params?: Record<string, string>) =>
-		c.req.header("X-Autosave") === "1"
-			? c.json({ ok, message: c.get("t")(key, params), reload: localeChanged }, ok ? 200 : 400)
+	const reply = (key: MessageKey, ok: boolean, params?: Record<string, string>) => {
+		if (ok && localeChanged) {
+			setCookie(c, LANG_COOKIE, uiLocale, { path: "/", secure: true, sameSite: "Lax", maxAge: 60 * 60 * 24 * 365 });
+			c.set("t", translator(uiLocale));
+		}
+		return c.req.header("X-Autosave") === "1"
+			? c.json({ ok, message: c.get("t")(key, params), reload: ok && localeChanged }, ok ? 200 : 400)
 			: redirectWithNotice(c, "/settings", key, params);
+	};
 	const destination = typeof form.defaultDestination === "string" ? form.defaultDestination.trim() : "";
 	const aliasDomains = [
 		...new Set(
@@ -487,6 +509,7 @@ app.post("/settings", async (c) => {
 	];
 	const badDomain = aliasDomains.find((domain) => !DOMAIN_PATTERN.test(domain)) ?? clashingDomain(aliasDomains);
 	if (badDomain) return reply("notice.badAliasDomain", false, { value: badDomain });
+	if (aliasDomains.length > MAX_ALIAS_DOMAINS) return reply("notice.tooManyDomains", false, { count: String(MAX_ALIAS_DOMAINS) });
 	if (destination && !extractEmail(destination)) return reply("notice.badDestination", false);
 	if (destination && isOwnAddress(extractEmail(destination)!, aliasDomains)) return reply("notice.destinationOnReverse", false);
 	const settings = normalizeSettings({
@@ -571,6 +594,13 @@ app.post("/connection", async (c) => {
 	if (!fixed.has("mailflareUrl")) {
 		const origin = text("mailflareUrl") ? validOrigin(text("mailflareUrl")) : "";
 		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badMailflareUrl");
+		// The API key goes to this URL: not to an IP address, an internal name or this Worker
+		// itself (a port is fine). With a service binding the requests never leave Cloudflare.
+		if (origin && !c.env.MAILFLARE_SERVICE) {
+			const host = new URL(origin);
+			host.port = "";
+			if (!safeHttpsUrl(host.href, [new URL(c.req.url).hostname])) return redirectWithNotice(c, "/connection", "notice.badMailflareUrl");
+		}
 		values.mailflareUrl = origin;
 	}
 	if (!fixed.has("publicUrl")) {
@@ -635,11 +665,13 @@ app.post("/import/:source", async (c) => {
 	const sourceName = c.req.param("source");
 	if (!Object.hasOwn(IMPORT_SOURCES, sourceName)) return c.notFound();
 	const source = IMPORT_SOURCES[sourceName as keyof typeof IMPORT_SOURCES];
+	// A CSV file is at most 5 MB: a larger upload is turned away before it is read.
+	if (Number(c.req.header("Content-Length") ?? 0) > MAX_IMPORT_UPLOAD) return c.text(t("imp.err.format"), 413);
 	const settings = await loadSettings(c.env.DB);
 	const form = await c.req.parseBody();
 	const domains = (typeof form.domains === "string" ? form.domains : "")
 		.split(/[\s,]+/)
-		.map((domain) => domain.trim().toLowerCase())
+		.map((domain) => domain.trim().toLowerCase().replace(/\.$/, ""))
 		.filter((domain) => DOMAIN_PATTERN.test(domain));
 	const render = async (extra: { error?: string; result?: Awaited<ReturnType<typeof importAliases>> }) =>
 		c.html(
@@ -655,7 +687,12 @@ app.post("/import/:source", async (c) => {
 		if (source.fetch) {
 			const apiKey = typeof form.apiKey === "string" ? form.apiKey.trim() : "";
 			if (!apiKey) return render({ error: t("imp.err.auth") });
-			const url = new URL(typeof form.server === "string" && form.server.trim() ? form.server.trim() : source.server);
+			let url: URL;
+			try {
+				url = new URL(typeof form.server === "string" && form.server.trim() ? form.server.trim() : source.server);
+			} catch {
+				return render({ error: t("imp.err.badServer") });
+			}
 			if (url.protocol !== "https:") return render({ error: t("imp.err.badServer") });
 			// A public host only: not an IP address, an internal name or this service itself. A
 			// port is allowed, for self-hosted servers.
@@ -678,7 +715,6 @@ app.post("/import/:source", async (c) => {
 			selection = selectByDomain(aliases, domains);
 		}
 	} catch (error) {
-		if (error instanceof TypeError) return render({ error: t("imp.err.badServer") });
 		if (!(error instanceof ImportError)) throw error;
 		const message =
 			error.reason === "fetch"
@@ -789,16 +825,18 @@ app.post("/aliases/bulk", async (c) => {
 								)
 							: action === "restore"
 								? statement("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ? AND deleted_at IS NOT NULL", timestamp)
-								: // Permanently deleting is only offered for deleted aliases, and only removes those.
-									ids.flatMap((id) => [
-										db.prepare("DELETE FROM contacts WHERE alias_address = ? AND EXISTS (SELECT 1 FROM aliases WHERE address = ? AND deleted_at IS NOT NULL)").bind(id, id),
-										db.prepare("DELETE FROM aliases WHERE address = ? AND deleted_at IS NOT NULL").bind(id),
-									]);
+								: // Permanently deleting is only offered for deleted aliases, and only removes those,
+									// with everything recorded about them: contacts, forwards and other activity.
+									ids.flatMap((id) => forgetStatements(db, id));
+	// Only the last statement for each alias says whether that alias changed.
+	const perAlias = statements.length / ids.length;
 	let changed = 0;
 	for (let i = 0; i < statements.length; i += 100) {
-		for (const result of await db.batch(statements.slice(i, i + 100))) changed += result.meta.changes ?? 0;
+		const results = await db.batch(statements.slice(i, i + 100));
+		results.forEach((result, offset) => {
+			if ((i + offset) % perAlias === perAlias - 1) changed += result.meta.changes ?? 0;
+		});
 	}
-	if (action === "forget") changed = Math.min(changed, ids.length);
 	return done("notice.bulkDone", { count: String(Math.min(changed, ids.length)) });
 });
 
@@ -807,7 +845,7 @@ app.post("/aliases/:address/mode", async (c) => {
 	const form = await c.req.parseBody();
 	const back = aliasBack(form, address);
 	if (!isForwardMode(form.mode)) return redirectWithNotice(c, back, "notice.badMode");
-	await setForwardMode(c.env.DB, address, form.mode);
+	if (!(await setForwardMode(c.env.DB, address, form.mode))) return redirectWithNotice(c, back, "notice.aliasMissing");
 	return redirectWithNotice(c, back, "notice.modeSaved", { alias: address });
 });
 
@@ -856,7 +894,8 @@ app.post("/aliases/:address/destination", async (c) => {
 	if (destination && (isOwnAddress(destination, [...(await loadSettings(c.env.DB)).aliasDomains, domainOf(address)]) || destination === address)) {
 		return redirectWithNotice(c, back, "notice.loop");
 	}
-	await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?").bind(destination, now(), address).run();
+	const saved = await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?").bind(destination, now(), address).run();
+	if (!saved.meta.changes) return redirectWithNotice(c, back, "notice.aliasMissing");
 	return redirectWithNotice(c, back, "notice.aliasDestinationSaved", { alias: address });
 });
 
@@ -926,6 +965,9 @@ export default {
 		}
 		return app.fetch(request, env, ctx);
 	},
+	async scheduled(_controller, env, ctx) {
+		ctx.waitUntil(cleanUp(env.DB));
+	},
 	async email(message, env) {
 		const config = await loadConfig(env).catch((error) => {
 			console.error("Configuration error:", error instanceof Error ? error.message : error);
@@ -947,6 +989,10 @@ export default {
 		const outcome = await handleDirectInbound(message, env, config);
 		if (outcome.status === 404) {
 			message.setReject("This address does not exist");
+			return;
+		}
+		if (outcome.status === 413) {
+			message.setReject("Message too large");
 			return;
 		}
 		// A failure the next attempt may fix: throwing makes the sending server try again later.

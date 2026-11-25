@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email}ను తొలగించాలా? దాని రివర్స్ మారుపేరు పనిచేయడం ఆగిపోతుంది. వాళ్లు మళ్లీ రాస్తే, కొత్తది పొందుతారు.",
 	"notice.contactDeleted": "కాంటాక్ట్ తొలగించబడింది.",
 	"notice.contactMissing": "ఆ కాంటాక్ట్ ఇప్పుడు లేదు.",
+	"notice.tooManyDomains": "గరిష్టంగా {count} ఏలియాస్ డొమైన్‌లను మాత్రమే జోడించవచ్చు.",
+	"notice.setupCodeWait": "ఒక నిమిషం కంటే ముందే కొత్త కోడ్ రూపొందించబడింది. లాగ్‌లలో చూడండి, లేదా ఒక నిమిషం తర్వాత మళ్లీ ప్రయత్నించండి.",
+	"notice.aliasMissing": "ఆ ఏలియాస్ లేదు లేదా తొలగించబడింది.",
 };
 
 export default dictionary;

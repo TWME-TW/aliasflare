@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "ลบ {email} ใช่ไหม นามแฝงย้อนกลับของรายการนี้จะหยุดทำงาน หากผู้ติดต่อส่งอีเมลมาอีกครั้ง จะได้รับนามแฝงย้อนกลับใหม่",
 	"notice.contactDeleted": "ลบผู้ติดต่อแล้ว",
 	"notice.contactMissing": "ไม่พบผู้ติดต่อนี้แล้ว",
+	"notice.tooManyDomains": "เพิ่มโดเมนนามแฝงได้มากที่สุด {count} โดเมน",
+	"notice.setupCodeWait": "สร้างรหัสใหม่ไม่ถึงหนึ่งนาทีที่แล้ว ดูได้ในบันทึก (logs) หรือลองใหม่อีกครั้งในหนึ่งนาที",
+	"notice.aliasMissing": "ไม่มีนามแฝงนี้ หรือถูกลบไปแล้ว",
 };
 
 export default dictionary;

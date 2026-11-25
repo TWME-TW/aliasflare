@@ -388,6 +388,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "要刪除 {email} 嗎？它的反向別名將會失效。對方再次來信時會產生新的反向別名。",
 	"notice.contactDeleted": "已刪除聯絡人。",
 	"notice.contactMissing": "這個聯絡人已不存在。",
+	"notice.tooManyDomains": "最多只能加入 {count} 個別名網域。",
+	"notice.setupCodeWait": "不到一分鐘前才產生過新的代碼。請到記錄中查看，或一分鐘後再試。",
+	"notice.aliasMissing": "這個別名不存在或已被刪除。",
 };
 
 export default dictionary;

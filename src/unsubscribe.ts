@@ -107,13 +107,37 @@ export function safeHttpsUrl(value: string, blockedHosts: string[] = []): URL | 
 	return url;
 }
 
-/** The registrable part of a domain, roughly: example.com, or example.co.uk. */
+/** Second-level labels under a country code that are public suffixes (co.uk, gouv.fr, com.au). */
+const COUNTRY_SECOND_LEVELS = new Set(
+	"ac asso co com edu go gob gouv gov govt info ltd mil ne net nhs nom or org plc police priv sch".split(" "),
+);
+
+/** Suffixes under which every subdomain belongs to someone else. */
+const SHARED_SUFFIXES = new Set(
+	"github.io gitlab.io pages.dev workers.dev netlify.app vercel.app herokuapp.com web.app firebaseapp.com azurewebsites.net cloudfront.net blogspot.com wordpress.com substack.com".split(" "),
+);
+
+/**
+ * Mailbox providers whose addresses belong to unrelated people. A sender there shares its
+ * domain with everyone else's mailbox, so no address there counts as the sender's own site.
+ */
+const SHARED_MAILBOX_DOMAINS = new Set(
+	"gmail.com googlemail.com outlook.com hotmail.com live.com msn.com yahoo.com ymail.com rocketmail.com icloud.com me.com mac.com aol.com proton.me protonmail.com pm.me gmx.com gmx.de gmx.net web.de mail.com yandex.com yandex.ru mail.ru qq.com 163.com 126.com zoho.com fastmail.com hey.com tutanota.com tuta.io".split(" "),
+);
+
+/** The registrable part of a domain, roughly: example.com, example.co.uk or name.github.io. */
 export function siteOf(domain: string): string {
 	const labels = domain.toLowerCase().replace(/\.$/, "").split(".");
 	const last = labels.at(-1) ?? "";
 	const second = labels.at(-2) ?? "";
-	const keep = last.length === 2 && second.length <= 3 && labels.length > 2 ? 3 : 2;
-	return labels.slice(-keep).join(".");
+	const suffix = SHARED_SUFFIXES.has(labels.slice(-2).join(".")) || (last.length === 2 && COUNTRY_SECOND_LEVELS.has(second));
+	return labels.slice(-(suffix ? 3 : 2)).join(".");
+}
+
+/** Whether mail to `to` stays with the sender: the same site, and not a shared mailbox provider. */
+export function sameSenderSite(to: string, sender: string): boolean {
+	const site = siteOf(domainOf(sender));
+	return !SHARED_MAILBOX_DOMAINS.has(site) && siteOf(domainOf(to)) === site;
 }
 
 function cleanSubject(value: string | null): string {
@@ -134,13 +158,13 @@ export function unsubscribePlan(
 	const uris = parseUris(forward.original_unsubscribe ?? "");
 	const https = uris.map((uri) => (uri.toLowerCase().startsWith("https:") ? safeHttpsUrl(uri, limits.blockedHosts) : null)).find(Boolean);
 	if (https && forward.original_unsubscribe_post) return { kind: "post", url: https.href };
-	const mailto = uris.find((uri) => uri.toLowerCase().startsWith("mailto:"));
-	if (mailto && contactEmail) {
+	const owned = (domain: string) => limits.ownDomains.some((own) => domain === own || domain.endsWith(`.${own}`));
+	// Every mailto is tried in turn: the first usable one is taken.
+	for (const mailto of contactEmail ? uris.filter((uri) => uri.toLowerCase().startsWith("mailto:")) : []) {
 		try {
 			const url = new URL(mailto);
 			const to = extractEmail(decodeURIComponent(url.pathname));
-			const owned = (domain: string) => limits.ownDomains.some((own) => domain === own || domain.endsWith(`.${own}`));
-			if (to && siteOf(domainOf(to)) === siteOf(domainOf(contactEmail)) && !owned(domainOf(to))) {
+			if (to && sameSenderSite(to, contactEmail!) && !owned(domainOf(to))) {
 				return { kind: "mail", to, subject: cleanSubject(url.searchParams.get("subject")) };
 			}
 		} catch {
@@ -173,7 +197,8 @@ async function runOriginalUnsubscribe(env: Env, config: AppConfig, forward: Forw
 			: {}),
 	});
 	await response.body?.cancel();
-	if (response.status >= 400) throw new Error(`The sender's unsubscribe page answered ${response.status}`);
+	// Redirects are not followed (they could lead anywhere), so one is not a done unsubscribe.
+	if (response.status >= 300) throw new Error(`The sender's unsubscribe page answered ${response.status}`);
 	return `${plan.kind === "post" ? "one-click POST to" : "visited"} ${new URL(plan.url).hostname}`;
 }
 

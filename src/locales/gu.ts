@@ -403,6 +403,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} કાઢી નાખીએ? તેનું રિવર્સ ઉપનામ કામ કરવાનું બંધ કરી દેશે. તેઓ ફરી લખશે તો તેમને નવું મળશે.",
 	"notice.contactDeleted": "સંપર્ક કાઢી નાખ્યો.",
 	"notice.contactMissing": "તે સંપર્ક હવે અસ્તિત્વમાં નથી.",
+	"notice.tooManyDomains": "વધુમાં વધુ {count} એલિયાસ ડોમેન ઉમેરી શકાય છે.",
+	"notice.setupCodeWait": "એક મિનિટ કરતાં ઓછા સમય પહેલાં નવો કોડ બનાવવામાં આવ્યો હતો. લૉગમાં જુઓ, અથવા એક મિનિટ પછી ફરી પ્રયાસ કરો.",
+	"notice.aliasMissing": "તે એલિયાસ અસ્તિત્વમાં નથી અથવા કાઢી નાખવામાં આવ્યો છે.",
 };
 
 export default dictionary;

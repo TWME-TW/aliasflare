@@ -41,7 +41,7 @@ export function formatSenderName(format: SenderFormat, name: string | null | und
 export function sanitizeDisplayName(name: string | null | undefined): string {
 	if (!name) return "";
 	return name
-		.replace(/[\r\n\t]/g, " ")
+		.replace(/[\u0000-\u001f\u007f]/g, " ")
 		.replace(/[<>"@]/g, "")
 		.replace(/\s+/g, " ")
 		.trim()
@@ -104,6 +104,12 @@ export function reverseLocalOf(address: string): string | null {
 export function normalizeEmail(value: string): string {
 	return value.trim().toLowerCase();
 }
+
+/**
+ * A lower-case domain name: dotted labels ending in a top-level domain of letters, or an
+ * internationalized one in its xn-- form. The one pattern for every domain this app checks.
+ */
+export const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/;
 
 /**
  * A plain address: a dot-atom local part (no quoted local part, so nothing like
@@ -176,10 +182,39 @@ export function findAddressesOnDomain(text: string, domain: string): string[] {
 	return [...new Set((text.match(pattern) ?? []).map(normalizeEmail))];
 }
 
-/** Message-IDs from an In-Reply-To or References header value. */
+/** Message-IDs from an In-Reply-To or References header value: no control characters, at most 250 characters each. */
 export function parseMessageIds(value: string | null | undefined): string[] {
 	if (!value) return [];
-	return value.match(/<[^<>\s]+>/g) ?? [];
+	return (value.match(/<[^<>\s\u0000-\u001f\u007f]{1,250}>/g) ?? []);
+}
+
+const EXTENSIONS: Record<string, string> = {
+	"image/png": "png",
+	"image/jpeg": "jpg",
+	"image/gif": "gif",
+	"image/bmp": "bmp",
+	"image/tiff": "tif",
+	"application/pdf": "pdf",
+	"text/plain": "txt",
+	"text/html": "html",
+	"text/csv": "csv",
+	"text/calendar": "ics",
+	"application/zip": "zip",
+};
+
+/**
+ * Name, type and Content-ID of an attachment, safe to put in headers and API calls: no
+ * control characters or path separators, a well-formed media type, and a file name with an
+ * extension that matches the type when the sender gave none (pasted images often have none).
+ */
+export function cleanAttachment(attachment: { filename?: string | null; mimeType?: string | null; contentId?: string | null }, index: number) {
+	const typed = (attachment.mimeType ?? "").trim().toLowerCase();
+	const type = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/.test(typed) ? typed : "application/octet-stream";
+	let filename = (attachment.filename ?? "").replace(/[\u0000-\u001f\u007f/\\]+/g, " ").trim().slice(0, 200);
+	if (!filename) filename = `attachment-${index + 1}`;
+	if (!/\.[A-Za-z0-9]{1,8}$/.test(filename) && EXTENSIONS[type]) filename = `${filename}.${EXTENSIONS[type]}`;
+	const contentId = attachment.contentId?.replace(/^<|>$/g, "").replace(/[\u0000-\u0020\u007f<>]+/g, "").slice(0, 200) || undefined;
+	return { filename, type, contentId };
 }
 
 export function ensureAngle(id: string | null | undefined): string | null {

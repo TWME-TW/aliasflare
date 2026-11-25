@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "Видалити {email}? Його зворотний псевдонім перестане працювати. Якщо ця адреса напише знову, вона отримає новий.",
 	"notice.contactDeleted": "Контакт видалено.",
 	"notice.contactMissing": "Цього контакту більше не існує.",
+	"notice.tooManyDomains": "Можна додати не більше {count} доменів для псевдонімів.",
+	"notice.setupCodeWait": "Новий код було створено менше хвилини тому. Знайдіть його в журналах або спробуйте знову за хвилину.",
+	"notice.aliasMissing": "Такого псевдоніма не існує або його було видалено.",
 };
 
 export default dictionary;

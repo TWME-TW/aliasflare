@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} මකන්නද? එහි ප්‍රතිලෝම අන්වර්ථය ක්‍රියාත්මක වීම නවතිනු ඇත. ඔවුන් නැවත ලිව්වොත්, අලුත් එකක් ලැබේ.",
 	"notice.contactDeleted": "සම්බන්ධතාව මකා දමන ලදී.",
 	"notice.contactMissing": "එම සම්බන්ධතාව තවදුරටත් නොපවතී.",
+	"notice.tooManyDomains": "උපරිමයෙන් {count} ඒලියස් ඩොමේන් පමණක් එක් කළ හැක.",
+	"notice.setupCodeWait": "මිනිත්තුවකට පෙර නව කේතයක් සාදන ලදී. ලොග වල බලන්න, හෝ මිනිත්තුවකින් නැවත උත්සාහ කරන්න.",
+	"notice.aliasMissing": "එම ඒලියසය නොපවතී හෝ මකා දමා ඇත.",
 };
 
 export default dictionary;

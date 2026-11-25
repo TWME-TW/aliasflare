@@ -259,8 +259,11 @@ describe("notices and styles (hardening notes)", () => {
 		const cookie = await signIn(db);
 		const crafted = await (await request("GET", "/settings?notice=Your%20account%20is%20locked", { cookie })).text();
 		expect(crafted).not.toContain("Your account is locked");
-		const known = await (await request("GET", "/settings?notice=notice.newCreated&n.alias=a%40me.test", { cookie })).text();
+		const known = await (await request("GET", "/settings?notice=notice.newCreated&n.alias=a%40me.test", { cookie, headers: { "Sec-Fetch-Site": "same-origin" } })).text();
 		expect(known).toContain("Created a@me.test.");
+		// A link from another site cannot put its own words into a notice's values.
+		const fromElsewhere = await (await request("GET", "/settings?notice=notice.newCreated&n.alias=Call%20us", { cookie, headers: { "Sec-Fetch-Site": "cross-site" } })).text();
+		expect(fromElsewhere).not.toContain("Call us");
 	});
 	it("serves the stylesheet as a file and allows no inline styles", async () => {
 		const response = await request("GET", "/assets/app.css");

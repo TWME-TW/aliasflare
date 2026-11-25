@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} حذف کریں؟ اس کا ریورس عرف کام کرنا بند کر دے گا۔ اگر وہ دوبارہ لکھیں تو انہیں نیا ملے گا۔",
 	"notice.contactDeleted": "رابطہ حذف کر دیا گیا۔",
 	"notice.contactMissing": "وہ رابطہ اب موجود نہیں ہے۔",
+	"notice.tooManyDomains": "زیادہ سے زیادہ {count} عرف ڈومینز شامل کیے جا سکتے ہیں۔",
+	"notice.setupCodeWait": "ایک نیا کوڈ ایک منٹ سے کم پہلے بنایا گیا تھا۔ اسے لاگز میں دیکھیں، یا ایک منٹ بعد دوبارہ کوشش کریں۔",
+	"notice.aliasMissing": "وہ عرف موجود نہیں ہے یا حذف کر دیا گیا ہے۔",
 };
 
 export default dictionary;

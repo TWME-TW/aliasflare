@@ -67,7 +67,7 @@ export async function listAliasViews(db: D1Database, query: AliasQuery): Promise
 	const where = whereClause(query);
 	const [rows, count] = await db.batch([
 		db
-			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a ${where.sql} ORDER BY a.pinned DESC, a.created_at DESC, a.num_id DESC LIMIT ? OFFSET ?`)
+			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a ${where.sql} ORDER BY a.pinned DESC, MAX(a.created_at, COALESCE(a.last_used_at, 0)) DESC, a.num_id DESC LIMIT ? OFFSET ?`)
 			.bind(...where.params, query.limit, query.offset),
 		db.prepare(`SELECT COUNT(*) AS total FROM aliases a ${where.sql}`).bind(...where.params),
 	]);
@@ -148,8 +148,9 @@ export async function listDestinations(db: D1Database, settings: Settings): Prom
 }
 
 /** Resolves client-supplied destination ids to an address for aliases.destination (null = default). */
-export async function resolveDestination(db: D1Database, settings: Settings, id: number | string | undefined): Promise<string | null | undefined> {
-	if (id === undefined) return undefined;
+export async function resolveDestination(db: D1Database, settings: Settings, id: number | string | null | undefined): Promise<string | null | undefined> {
+	// null is what apps send for "no change" as often as leaving the field out.
+	if (id === undefined || id === null) return undefined;
 	const match = (await listDestinations(db, settings)).find((d) => d.numId === Number(id) || d.uid === String(id));
 	if (!match) throw new ClientError(400, "Unknown mailbox");
 	return match.isDefault ? null : match.email;
@@ -296,7 +297,23 @@ export async function restoreAlias(db: D1Database, address: string): Promise<voi
 	await db.prepare("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ?").bind(now(), address).run();
 }
 
-/** Removes the alias and its contacts for good; mail that still arrives makes it appear again. */
+/**
+ * Statements that remove a deleted alias and everything recorded about it: its contacts,
+ * forwards (subjects, unsubscribe links) and other activity. The alias row goes last, and
+ * nothing is removed unless the alias is deleted.
+ */
+export function forgetStatements(db: D1Database, address: string): D1PreparedStatement[] {
+	const ifDeleted = "EXISTS (SELECT 1 FROM aliases WHERE address = ? AND deleted_at IS NOT NULL)";
+	return [
+		db.prepare(`DELETE FROM forwards WHERE alias_address = ? AND ${ifDeleted}`).bind(address, address),
+		db.prepare(`DELETE FROM events WHERE alias_address = ? AND ${ifDeleted}`).bind(address, address),
+		db.prepare(`DELETE FROM contacts WHERE alias_address = ? AND ${ifDeleted}`).bind(address, address),
+		db.prepare("DELETE FROM aliases WHERE address = ? AND deleted_at IS NOT NULL").bind(address),
+	];
+}
+
+/** Removes the alias and everything about it for good; mail that still arrives makes it appear again. */
 export async function forgetAlias(db: D1Database, address: string): Promise<void> {
-	await db.batch([db.prepare("DELETE FROM contacts WHERE alias_address = ?").bind(address), db.prepare("DELETE FROM aliases WHERE address = ?").bind(address)]);
+	// The apps may forget an alias that is not deleted yet: mark it deleted in the same batch.
+	await db.batch([db.prepare("UPDATE aliases SET deleted_at = COALESCE(deleted_at, ?) WHERE address = ?").bind(now(), address), ...forgetStatements(db, address)]);
 }

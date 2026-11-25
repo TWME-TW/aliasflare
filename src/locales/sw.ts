@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "Ifute {email}? Lakabu yake ya kinyume itaacha kufanya kazi. Wakiandika tena, watapata mpya.",
 	"notice.contactDeleted": "Anwani imefutwa.",
 	"notice.contactMissing": "Anwani hiyo haipo tena.",
+	"notice.tooManyDomains": "Unaweza kuongeza vikoa vya alias visivyozidi {count}.",
+	"notice.setupCodeWait": "Msimbo mpya ulitengenezwa chini ya dakika moja iliyopita. Uangalie kwenye kumbukumbu za logi, au jaribu tena baada ya dakika moja.",
+	"notice.aliasMissing": "Alias hiyo haipo au imefutwa.",
 };
 
 export default dictionary;

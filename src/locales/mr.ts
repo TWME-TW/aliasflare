@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} हटवायचा? त्याचे रिव्हर्स उपनाव काम करणे थांबवेल. त्यांनी पुन्हा लिहिल्यास त्यांना नवीन मिळेल.",
 	"notice.contactDeleted": "संपर्क हटवला.",
 	"notice.contactMissing": "तो संपर्क आता अस्तित्वात नाही.",
+	"notice.tooManyDomains": "जास्तीत जास्त {count} एलियास डोमेन जोडता येतील.",
+	"notice.setupCodeWait": "एक मिनिटापूर्वी नवीन कोड तयार झाला होता. तो लॉगमध्ये पहा, किंवा एक मिनिटानंतर पुन्हा प्रयत्न करा.",
+	"notice.aliasMissing": "तो एलियास अस्तित्वात नाही किंवा हटवण्यात आला आहे.",
 };
 
 export default dictionary;

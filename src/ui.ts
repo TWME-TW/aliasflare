@@ -218,7 +218,7 @@ function copyButton(t: Translate, value: string): Html {
 export type PageOptions = { t: Translate; nav?: boolean; script?: boolean; current?: string; path?: string };
 
 function languageMenu(t: Translate, path = "/", extraClass = ""): Html {
-	return html`<form class="lang ${extraClass}" method="get" action="/lang">
+	return html`<form class="lang ${extraClass}" method="post" action="/lang">
 <label for="lang-${extraClass || "main"}" class="lang-label">${icon("globe")}<span class="sr">${t("nav.language")}</span></label>
 <input type="hidden" name="next" value="${path}" />
 <select id="lang-${extraClass || "main"}" name="locale" data-autosubmit>
@@ -326,7 +326,16 @@ function noticeBox(notice?: string): Html | string {
 export type ActivityItem = { kind: string; status: string; alias: string | null; detail: string | null; at: number };
 
 /** How long ago, like "3 hours ago", in the page's language. */
+/** Whether a stored timestamp can be shown as a date (a broken import could store anything). */
+const showable = (timestamp: number | null | undefined): timestamp is number =>
+	typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp > 0 && timestamp < 8.64e12;
+
+function isoTime(timestamp: number | null | undefined): string {
+	return showable(timestamp) ? new Date(timestamp * 1000).toISOString() : "";
+}
+
 function ago(timestamp: number, locale: string, now = Date.now() / 1000): string {
+	if (!showable(timestamp)) return "—";
 	const seconds = Math.round(timestamp - now);
 	const units: [Intl.RelativeTimeFormatUnit, number][] = [
 		["year", 365 * 86400],
@@ -342,7 +351,7 @@ function ago(timestamp: number, locale: string, now = Date.now() / 1000): string
 }
 
 function when(timestamp: number | null, locale: string): string {
-	if (!timestamp) return "—";
+	if (!showable(timestamp)) return "—";
 	return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(timestamp * 1000)) + " UTC";
 }
 
@@ -455,7 +464,8 @@ ${ALIAS_PAGE_SIZES.map((size) => html`<option value="${size}" ${list.perPage ===
 </form>
 <p class="muted">${t("dash.results", { count: String(list.total) })}${list.query || list.filter !== "all" ? html` · <a href="/">${t("dash.clear")}</a>` : ""}</p>
 ${aliases.length === 0
-	? html`<p class="muted">${list.query || list.filter !== "all" ? t("dash.noResults") : t("dash.noAliases")}</p>`
+	? html`<p class="muted">${list.query || list.filter !== "all" ? t("dash.noResults") : t("dash.noAliases")}</p>
+${list.page > 1 ? html`<nav class="pager" aria-label="${t("dash.pages")}"><a href="${listUrl({ page: Math.max(1, lastPage) })}">← ${t("dash.prev")}</a></nav>` : ""}`
 	: html`<form id="bulk" class="toolbar bulk" method="post" action="/aliases/bulk" data-bulk
  data-confirm-delete="${t("bulk.confirmDelete")}" data-confirm-forget="${t("bulk.confirmForget")}" data-none-selected="${t("bulk.noneSelected")}">
 <input type="hidden" name="back" value="${listUrl({})}" />
@@ -486,8 +496,8 @@ ${aliases.map((alias) => {
 <select name="mode" aria-label="${t("dash.colMode")}">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select>
 <button>${t("common.set")}</button></form></td>
 <td data-label="${t("dash.colContacts")}">${alias.contacts}</td>
-<td data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${new Date(alias.used_at * 1000).toISOString()}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
-<td data-label="${t("keys.colCreated")}"><time datetime="${new Date(alias.created_at * 1000).toISOString()}" title="${when(alias.created_at, t.locale)}">${ago(alias.created_at, t.locale)}</time></td>
+<td data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${isoTime(alias.used_at)}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
+<td data-label="${t("keys.colCreated")}"><time datetime="${isoTime(alias.created_at)}" title="${when(alias.created_at, t.locale)}">${ago(alias.created_at, t.locale)}</time></td>
 </tr>`;
 })}
 </tbody></table>
@@ -515,7 +525,7 @@ function activityTable(t: Translate, items: ActivityItem[]): Html {
 	if (items.length === 0) return html`<p class="muted">${t("dash.nothingYet")}</p>`;
 	return html`<table class="rt"><thead><tr><th>${t("dash.colWhen")}</th><th>${t("dash.colWhat")}</th><th>${t("dash.colAlias")}</th><th>${t("dash.colStatus")}</th><th>${t("dash.colDetail")}</th></tr></thead><tbody>
 ${items.map(
-	(item) => html`<tr><td data-label="${t("dash.colWhen")}"><time datetime="${new Date(item.at * 1000).toISOString()}" title="${when(item.at, t.locale)}">${ago(item.at, t.locale)}</time></td><td data-label="${t("dash.colWhat")}">${translated(t, `kind.${item.kind}`, item.kind)}</td>
+	(item) => html`<tr><td data-label="${t("dash.colWhen")}"><time datetime="${isoTime(item.at)}" title="${when(item.at, t.locale)}">${ago(item.at, t.locale)}</time></td><td data-label="${t("dash.colWhat")}">${translated(t, `kind.${item.kind}`, item.kind)}</td>
 <td data-label="${t("dash.colAlias")}">${item.alias ? html`<a href="/aliases/${encodeURIComponent(item.alias)}"><code>${item.alias}</code></a>` : ""}</td><td data-label="${t("dash.colStatus")}">${statusPill(t, item.status)}</td>
 <td data-label="${t("dash.colDetail")}" class="muted">${item.detail ?? ""}</td></tr>`,
 )}
@@ -803,7 +813,7 @@ export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: Cont
 ${noticeBox(notice)}
 <section>
 <h2 class="alias-cell"><code>${alias.address}</code>${copyButton(t, alias.address)}</h2>
-<p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)} · ${t("keys.colCreated")} <time datetime="${new Date(alias.created_at * 1000).toISOString()}">${when(alias.created_at, t.locale)}</time></p>
+<p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)} · ${t("keys.colCreated")} <time datetime="${isoTime(alias.created_at)}">${when(alias.created_at, t.locale)}</time></p>
 <form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <label for="note">${t("alias.note")}</label>
 <div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" /><noscript><button>${t("common.save")}</button></noscript></div>
@@ -972,7 +982,8 @@ function importedHistory(t: Translate, alias: AliasRow): Html | string {
 	if (!alias.imported_from) return "";
 	let details: Record<string, unknown> = {};
 	try {
-		details = alias.imported_details ? (JSON.parse(alias.imported_details) as Record<string, unknown>) : {};
+		const parsed: unknown = alias.imported_details ? JSON.parse(alias.imported_details) : {};
+		if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) details = parsed as Record<string, unknown>;
 	} catch {
 		// Shown without details.
 	}

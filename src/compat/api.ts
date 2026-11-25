@@ -6,13 +6,14 @@
  * SimpleLogin: https://github.com/simple-login/app/blob/master/docs/api.md
  * addy.io:     https://app.addy.io/docs/
  */
+import { clientKey } from "../ratelimit";
 import { Hono, type Context } from "hono";
 import { presentedKey, verifyApiKey, type ApiKeyRow } from "../apikeys";
 import { readTextLimited } from "../streams";
 import type { AppEnv } from "../auth";
 import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
-import { domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
+import { DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
 import {
@@ -70,6 +71,21 @@ api.onError((error, c) => {
 
 const isAddy = (c: C) => c.req.path.startsWith("/api/v1/");
 
+/**
+ * Limits for the client APIs, checked before anything reads D1 (the app's configuration
+ * included), so a flood of requests or key guesses never reaches the database.
+ */
+export async function apiThrottled(env: Env, ip: string | undefined): Promise<Response | null> {
+	const client = clientKey(ip);
+	if (env.API_RATE_LIMIT && !(await env.API_RATE_LIMIT.limit({ key: `api:${client}` })).success) {
+		return Response.json({ error: "Too many requests", message: "Too Many Attempts." }, { status: 429 });
+	}
+	// An address over the failed-key limit is turned away here, before any key is looked up.
+	const cache = lockoutCache();
+	if (cache && (await cache.match(lockoutUrl(client)))) return Response.json({ error: "Too many attempts", message: "Too Many Attempts." }, { status: 429 });
+	return null;
+}
+
 api.use("*", async (c, next) => {
 	const settings = await loadSettings(c.env.DB);
 	if (!(isAddy(c) ? settings.addyApi : settings.simpleloginApi)) return c.json({ error: "Not found", message: "Not found" }, 404);
@@ -79,15 +95,9 @@ api.use("*", async (c, next) => {
 		return c.json({ error: "Sign in with an API key. Create one on the API keys page of aliasflare." }, 403);
 	}
 	const key = presentedKey(c.req.raw.headers);
-	// Every request counts against a per-address limit before the key is looked up, so a
-	// flood of guesses never reaches D1. Failed keys also count against the stricter one.
-	const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
-	if (c.env.API_RATE_LIMIT && !(await c.env.API_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
-		return c.json({ error: "Too many requests", message: "Too Many Attempts." }, 429);
-	}
-	// An address over the failed-key limit is turned away here, before any key is looked up.
+	// The request limits ran before this (see apiThrottled); failed keys also count against the stricter one.
+	const ip = clientKey(c.req.header("CF-Connecting-IP"));
 	const cache = lockoutCache();
-	if (cache && (await cache.match(lockoutUrl(ip)))) return c.json({ error: "Too many attempts", message: "Too Many Attempts." }, 429);
 	const valid = key ? await verifyApiKey(c.env.DB, key) : null;
 	if (!valid) {
 		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
@@ -614,7 +624,7 @@ const addyBlock = (row: BlocklistRow) => ({
 	updated_at: addyDate(row.created_at),
 });
 
-const BLOCK_DOMAIN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const BLOCK_DOMAIN = DOMAIN_PATTERN;
 
 function blockValue(type: unknown, value: unknown): { kind: "address" | "domain"; value: string } {
 	const raw = (typeof value === "string" ? value : "").trim().toLowerCase().replace(/^@/, "");
@@ -627,16 +637,23 @@ function blockValue(type: unknown, value: unknown): { kind: "address" | "domain"
 	throw new ClientError(422, "The value is not a valid email address or domain.");
 }
 
+/** A page size from 1 to 100 (100 when missing or not a number); a fraction is rounded down. */
+function pageSize(value: string | undefined): number {
+	const size = Math.floor(Number(value));
+	return Number.isFinite(size) && size >= 1 ? Math.min(size, 100) : 100;
+}
+
 async function addBlocks(c: C, entries: { kind: "address" | "domain"; value: string }[]): Promise<{ rows: BlocklistRow[]; skipped: number }> {
 	requireAppSettings(c);
-	const created: string[] = [];
-	for (const entry of entries) {
-		const id = newId("bl");
-		const result = await c.env.DB.prepare("INSERT INTO blocklist (id, kind, value, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (value) DO NOTHING")
-			.bind(id, entry.kind, entry.value, now())
-			.run();
-		if (result.meta.changes > 0) created.push(id);
-	}
+	if (entries.length === 0) return { rows: [], skipped: 0 };
+	// One batch (one query), so a bulk add of 100 stays inside the Free plan's 50 queries.
+	const ids = entries.map(() => newId("bl"));
+	const results = await c.env.DB.batch(
+		entries.map((entry, index) =>
+			c.env.DB.prepare("INSERT INTO blocklist (id, kind, value, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (value) DO NOTHING").bind(ids[index], entry.kind, entry.value, now()),
+		),
+	);
+	const created = ids.filter((_, index) => (results[index]?.meta.changes ?? 0) > 0);
 	const rows = created.length
 		? (await c.env.DB.prepare(`SELECT * FROM blocklist WHERE id IN (${created.map(() => "?").join(", ")})`).bind(...created).all<BlocklistRow>()).results
 		: [];
@@ -656,7 +673,7 @@ api.get("/v1/blocklist", async (c) => {
 	const type = c.req.query("filter[type]");
 	const sort = c.req.query("sort") ?? "-created_at";
 	const column = BLOCKLIST_SORT.get(sort.replace(/^-/, "")) ?? "created_at";
-	const size = Math.min(Math.max(Number(c.req.query("page[size]")) || 100, 1), 100);
+	const size = pageSize(c.req.query("page[size]"));
 	const pageNumber = pageParam(c.req.query("page[number]"), 1);
 	const where: string[] = [];
 	const params: unknown[] = [];
@@ -728,7 +745,7 @@ api.get("/v1/aliases", async (c) => {
 	const deleted = c.req.query("filter[deleted]");
 	const active = c.req.query("filter[active]");
 	const pinned = c.req.query("filter[pinned]");
-	const size = Math.min(100, Math.max(1, Number(c.req.query("page[size]") ?? 100) || 100));
+	const size = pageSize(c.req.query("page[size]"));
 	const page = pageParam(c.req.query("page[number]"), 1);
 	const { aliases, total } = await listAliasViews(c.env.DB, {
 		deleted: deleted === "with" || deleted === "only" ? deleted : "without",

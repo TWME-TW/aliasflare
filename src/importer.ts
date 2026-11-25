@@ -11,7 +11,7 @@
  */
 import { newId, now } from "./db";
 import { domainOf, extractEmail, makeReverseLocal, normalizeEmail } from "./format";
-import { aliasDomainOfReverse, isReverseDomainOf } from "./domains";
+import { aliasDomainOfReverse, isOwnAddress, isReverseDomainOf } from "./domains";
 import type { Settings } from "./settings";
 import { discard, readTextLimited } from "./streams";
 
@@ -94,19 +94,29 @@ const count = (value: unknown): number => {
 	return Number.isFinite(number) && number > 0 ? Math.floor(number) : 0;
 };
 
-/** Unix seconds from a Unix timestamp (seconds or milliseconds) or a date string; UTC when no zone is given. */
+/** Timestamps outside 1990–2200 are taken as wrong and dropped. */
+const MIN_TIMESTAMP = 631152000;
+const MAX_TIMESTAMP = 7258118400;
+
+/**
+ * Unix seconds from a Unix timestamp (seconds, milliseconds, microseconds or nanoseconds) or
+ * a date string; UTC when no zone is given. Null for anything outside 1990–2200, so a wrong
+ * value never reaches the dashboard's date formatting.
+ */
 export function toTimestamp(value: unknown): number | null {
 	if (value === null || value === undefined || value === "") return null;
+	let seconds: number;
 	if (typeof value === "number" || (typeof value === "string" && /^\d+(\.\d+)?$/.test(value.trim()))) {
-		const number = Number(value);
-		if (!Number.isFinite(number) || number <= 0) return null;
-		return Math.floor(number > 1e12 ? number / 1000 : number);
+		seconds = Number(value);
+		if (!Number.isFinite(seconds) || seconds <= 0) return null;
+		while (seconds > MAX_TIMESTAMP) seconds /= 1000;
+	} else {
+		if (typeof value !== "string") return null;
+		let source = value.trim();
+		if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(source)) source = `${source.replace(" ", "T")}Z`;
+		seconds = Date.parse(source) / 1000;
 	}
-	if (typeof value !== "string") return null;
-	let source = value.trim();
-	if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(source)) source = `${source.replace(" ", "T")}Z`;
-	const ms = Date.parse(source);
-	return Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : null;
+	return Number.isFinite(seconds) && seconds >= MIN_TIMESTAMP && seconds <= MAX_TIMESTAMP ? Math.floor(seconds) : null;
 }
 
 const empty = (email: string): ImportedAlias => ({
@@ -168,6 +178,9 @@ async function getJson(url: string, headers: Record<string, string>, budget: Fet
 	}
 }
 
+/** An object from a JSON array: null, numbers and nested arrays in a list are skipped. */
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+
 /** SimpleLogin: GET /api/v2/aliases?page_id=N, 20 per page, until a page comes back empty. */
 export async function fetchSimpleLogin(base: string, apiKey: string, budget: FetchBudget = newFetchBudget()): Promise<ImportedAlias[]> {
 	const out: ImportedAlias[] = [];
@@ -175,7 +188,7 @@ export async function fetchSimpleLogin(base: string, apiKey: string, budget: Fet
 		const body = (await getJson(`${base}/api/v2/aliases?page_id=${page}`, { Authentication: apiKey }, budget)) as { aliases?: unknown[] };
 		if (!Array.isArray(body?.aliases)) throw new ImportError("format");
 		if (body.aliases.length === 0) break;
-		for (const raw of body.aliases as Record<string, unknown>[]) {
+		for (const raw of body.aliases.filter(isRecord)) {
 			const email = extractEmail(text(raw.email));
 			if (!email) continue;
 			const mailboxes = (Array.isArray(raw.mailboxes) ? (raw.mailboxes as { email?: unknown }[]) : [])
@@ -223,10 +236,17 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 		if (alias.sourceId === undefined || !active) continue;
 		const contacts: ImportedContact[] = [];
 		// Contacts are extra: when the budget runs low they stop, and the aliases still import.
+		// One alias whose list cannot be read keeps the contacts read so far and the others go on.
 		for (let page = 0; budget.left > 5 && page < MAX_PAGES; page += 1) {
-			const body = (await getJson(`${base}/api/aliases/${alias.sourceId}/contacts?page_id=${page}`, { Authentication: apiKey }, budget)) as { contacts?: unknown[] };
+			let body: { contacts?: unknown[] };
+			try {
+				body = (await getJson(`${base}/api/aliases/${alias.sourceId}/contacts?page_id=${page}`, { Authentication: apiKey }, budget)) as { contacts?: unknown[] };
+			} catch (error) {
+				if (!(error instanceof ImportError)) throw error;
+				break;
+			}
 			if (!Array.isArray(body?.contacts) || body.contacts.length === 0) break;
-			for (const raw of body.contacts as Record<string, unknown>[]) {
+			for (const raw of body.contacts.filter(isRecord)) {
 				const display = text(raw.contact, 300);
 				const email = extractEmail(display);
 				if (!email) continue;
@@ -254,7 +274,7 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 			"X-Requested-With": "XMLHttpRequest",
 		}, budget)) as { data?: unknown[]; meta?: { last_page?: number } };
 		if (!Array.isArray(body?.data)) throw new ImportError("format");
-		for (const raw of body.data as Record<string, unknown>[]) {
+		for (const raw of body.data.filter(isRecord)) {
 			const email = extractEmail(text(raw.email));
 			if (!email || raw.deleted_at) continue;
 			const recipients = (Array.isArray(raw.recipients) ? (raw.recipients as { email?: unknown }[]) : [])
@@ -293,7 +313,7 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 }
 
 /** RFC 4180 CSV: quoted fields, doubled quotes, CRLF or LF. */
-export function parseCsv(input: string): string[][] {
+export function parseCsv(input: string, maxRows = Infinity): string[][] {
 	const rows: string[][] = [];
 	let row: string[] = [];
 	let field = "";
@@ -310,6 +330,8 @@ export function parseCsv(input: string): string[][] {
 		else if (char === "\n" || char === "\r") {
 			if (char === "\r" && source[i + 1] === "\n") i += 1;
 			row.push(field), rows.push(row), (row = []), (field = "");
+			// Enough rows read: the rest of a long file is not parsed at all.
+			if (rows.length >= maxRows) return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
 		} else field += char;
 	}
 	if (field !== "" || row.length) row.push(field), rows.push(row);
@@ -339,7 +361,8 @@ const truthy = (value: string | undefined) => !value || !/^(false|0|no|off|disab
 
 /** Reads SimpleLogin's or addy.io's alias export, or any CSV with an "alias" or "email" column. */
 export function parseAliasCsv(input: string): ImportedAlias[] {
-	const [header, ...rows] = parseCsv(input);
+	// The header, the aliases taken, and a few blank lines to spare.
+	const [header, ...rows] = parseCsv(input, MAX_ALIASES + 100);
 	if (!header) throw new ImportError("empty");
 	const names = header.map((cell) => cell.trim().toLowerCase().replace(/\s+/g, "_"));
 	const index = Object.fromEntries(
@@ -434,7 +457,8 @@ export async function importAliases(
 	const newDestinations = new Set<string>();
 	const destinationFor = (alias: ImportedAlias): string | null => {
 		const destination = alias.destination?.toLowerCase();
-		if (!destination || destination === alias.email || ownDomain(domainOf(destination))) return null;
+		// The alias's own domain counts too, so an import before the domain is added cannot set up a loop.
+		if (!destination || destination === alias.email || ownDomain(domainOf(destination)) || isOwnAddress(destination, [domainOf(alias.email)])) return null;
 		if (destination === settings.defaultDestination.toLowerCase()) return null;
 		if (known.has(destination)) return destination;
 		if (!options.keepDestinations) return null;
@@ -450,13 +474,14 @@ export async function importAliases(
 
 	// Replies need a Mailflare mailbox; borrow the one of another alias on the same domain until
 	// the alias receives its first message (the webhook corrects it then).
+	// One query for all domains: the newest mailbox per domain.
 	const mailboxByDomain = new Map<string, string>();
-	for (const domain of new Set(list.map((alias) => domainOf(alias.email)))) {
-		const row = await db
-			.prepare("SELECT mailbox_id FROM aliases WHERE address LIKE ? AND mailbox_id != '' ORDER BY updated_at DESC LIMIT 1")
-			.bind(`%@${domain}`)
-			.first<{ mailbox_id: string }>();
-		mailboxByDomain.set(domain, row?.mailbox_id ?? "");
+	const { results: mailboxes } = await db
+		.prepare("SELECT address, mailbox_id FROM aliases WHERE mailbox_id != '' ORDER BY updated_at DESC")
+		.all<{ address: string; mailbox_id: string }>();
+	for (const row of mailboxes) {
+		const domain = domainOf(row.address);
+		if (!mailboxByDomain.has(domain)) mailboxByDomain.set(domain, row.mailbox_id);
 	}
 
 	const timestamp = now();

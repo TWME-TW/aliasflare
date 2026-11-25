@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "هل تريد حذف {email}؟ سيتوقف الاسم المستعار العكسي الخاص به عن العمل. إذا راسل مرة أخرى، فسيحصل على اسم مستعار عكسي جديد.",
 	"notice.contactDeleted": "تم حذف جهة الاتصال.",
 	"notice.contactMissing": "جهة الاتصال هذه لم تعد موجودة.",
+	"notice.tooManyDomains": "يمكن إضافة {count} نطاقات اسم مستعار كحد أقصى.",
+	"notice.setupCodeWait": "تم إنشاء رمز جديد قبل أقل من دقيقة. ابحث عنه في السجلات، أو حاول مرة أخرى بعد دقيقة.",
+	"notice.aliasMissing": "هذا الاسم المستعار غير موجود أو تم حذفه.",
 };
 
 export default dictionary;

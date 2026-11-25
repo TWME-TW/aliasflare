@@ -1,4 +1,4 @@
-import type { Translate } from "./i18n";
+import { textDirection, type Translate } from "./i18n";
 import { cleanLink, cleanText, isTrackerImage } from "./trackers";
 
 export type BannerInfo = {
@@ -24,7 +24,7 @@ export function bannerHtml(info: BannerInfo, trackersRemoved: number, t: Transla
 	const values: Record<string, string> = { alias: `<b>${escapeHtml(info.alias)}</b>`, sender: escapeHtml(info.sender) };
 	const sentTo = escapeHtml(t("banner.sentTo", { alias: "{alias}", sender: "{sender}" })).replace(/\{(alias|sender)\}/g, (_, key: string) => values[key]!);
 	const trackers = trackersRemoved > 0 ? ` · ${escapeHtml(t("banner.trackers", { count: trackersRemoved }))}` : "";
-	return `<div data-aliasflare-banner="1" lang="${t.locale}" style="display:block!important;visibility:visible!important;opacity:1!important;position:static!important;height:auto!important;max-height:none!important;overflow:visible!important;margin:0 0 16px;padding:10px 12px;border:1px solid #dadce0;border-radius:12px;background:#f6f8fc;font:12px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif;color:#5f6368;">${warning}${sentTo}${trackers}<br /><a href="${escapeHtml(info.blockUrl)}" style="${link}">${escapeHtml(t("banner.block"))}</a> · <a href="${escapeHtml(info.disableUrl)}" style="${link}">${escapeHtml(t("banner.disable"))}</a></div>`;
+	return `<div data-aliasflare-banner="1" lang="${t.locale}" dir="${textDirection(t.locale)}" style="display:block!important;visibility:visible!important;opacity:1!important;position:static!important;height:auto!important;max-height:none!important;overflow:visible!important;margin:0 0 16px;padding:10px 12px;border:1px solid #dadce0;border-radius:12px;background:#f6f8fc;font:12px/1.5 -apple-system,'Segoe UI',Roboto,sans-serif;color:#5f6368;">${warning}${sentTo}${trackers}<br /><a href="${escapeHtml(info.blockUrl)}" style="${link}">${escapeHtml(t("banner.block"))}</a> · <a href="${escapeHtml(info.disableUrl)}" style="${link}">${escapeHtml(t("banner.disable"))}</a></div>`;
 }
 
 export function bannerText(info: BannerInfo, trackersRemoved: number, t: Translate): string {
@@ -98,7 +98,11 @@ export async function transformForward(
 				})
 				.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
 				.text();
-			if (!inserted) html = block + html;
+			// Without a <body>, the banner goes after any doctype and <html>/<head>, not before them.
+			if (!inserted) {
+				const lead = /^\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?(?:<head\b[\s\S]*?<\/head>\s*)?/i.exec(html)?.[0] ?? "";
+				html = lead + block + html.slice(lead.length);
+			}
 		}
 		if (text !== undefined || !html) text = bannerText(banner, trackersRemoved, options.t) + (text ?? "");
 	}

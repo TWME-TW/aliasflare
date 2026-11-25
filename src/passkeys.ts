@@ -79,6 +79,8 @@ async function takeChallenge(db: D1Database, id: string | undefined, purpose: st
  * The one-time code that authorizes registering the first passkey. It is written to the
  * Worker's logs, so only someone with access to the Cloudflare account can read it.
  */
+const SETUP_CODE_COOLDOWN_SECONDS = 60;
+
 export async function issueSetupCode(db: D1Database, replace = false): Promise<{ created: boolean; expiresAt: number }> {
 	const existing = await db
 		.prepare("SELECT challenge, expires_at FROM auth_challenges WHERE purpose = 'setup' AND expires_at >= ? LIMIT 1")
@@ -87,6 +89,8 @@ export async function issueSetupCode(db: D1Database, replace = false): Promise<{
 	// The code is logged once, when it is made, so the logs hold one copy per code. Whoever
 	// missed it asks for a new one from the setup page.
 	if (existing && !replace) return { created: false, expiresAt: existing.expires_at };
+	// A new code at most once a minute, so nobody can keep replacing the one the owner is typing.
+	if (existing && existing.expires_at - SETUP_CODE_TTL_SECONDS > now() - SETUP_CODE_COOLDOWN_SECONDS) return { created: false, expiresAt: existing.expires_at };
 	const code = randomToken(10).toUpperCase();
 	const expiresAt = now() + SETUP_CODE_TTL_SECONDS;
 	await db.batch([

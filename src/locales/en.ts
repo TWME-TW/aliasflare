@@ -411,6 +411,9 @@ export const en = {
 	"alias.confirmDeleteContact": "Delete {email}? Its reverse alias stops working. If they write again, they get a new one.",
 	"notice.contactDeleted": "Contact deleted.",
 	"notice.contactMissing": "That contact no longer exists.",
+	"notice.tooManyDomains": "At most {count} alias domains can be added.",
+	"notice.setupCodeWait": "A new code was made less than a minute ago. Look in the logs for it, or try again in a minute.",
+	"notice.aliasMissing": "That alias does not exist or was deleted.",
 };
 
 export type MessageKey = keyof typeof en;

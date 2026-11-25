@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} حذف شود؟ نام مستعار معکوس آن از کار می‌افتد. اگر دوباره نامه بفرستد، یک نام مستعار معکوس جدید دریافت می‌کند.",
 	"notice.contactDeleted": "مخاطب حذف شد.",
 	"notice.contactMissing": "این مخاطب دیگر وجود ندارد.",
+	"notice.tooManyDomains": "حداکثر {count} دامنه‌ی نام مستعار می‌توان افزود.",
+	"notice.setupCodeWait": "کد جدید کمتر از یک دقیقه پیش ساخته شد. آن را در گزارش‌ها (لاگ‌ها) ببینید، یا یک دقیقه دیگر دوباره امتحان کنید.",
+	"notice.aliasMissing": "این نام مستعار وجود ندارد یا حذف شده است.",
 };
 
 export default dictionary;

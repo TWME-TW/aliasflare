@@ -141,8 +141,9 @@ export function isNoticeKey(value: unknown): value is MessageKey {
 export function translator(locale: Locale): Translate {
 	const dictionary: Dictionary = LOCALES[locale];
 	const t = ((key: MessageKey, params?: Record<string, string | number>) => {
-		const template = dictionary[key] ?? en[key];
-		return params ? template.replace(/\{(\w+)\}/g, (match, name: string) => (name in params ? String(params[name]) : match)) : template;
+		// Own keys only, never inherited ones ("constructor"); an unknown key comes back as itself.
+		const template = Object.hasOwn(dictionary, key) ? dictionary[key] : Object.hasOwn(en, key) ? en[key] : key;
+		return params ? template.replace(/\{(\w+)\}/g, (match, name: string) => (Object.hasOwn(params, name) ? String(params[name]) : match)) : template;
 	}) as Translate;
 	t.locale = locale;
 	return t;

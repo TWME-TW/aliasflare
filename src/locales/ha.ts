@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "Share {email}? Laƙabin juyawarsu zai daina aiki. Idan sun sake rubutawa, za su sami sabon laƙabi.",
 	"notice.contactDeleted": "An goge abokin hulɗa.",
 	"notice.contactMissing": "Wannan abokin hulɗa ba ya nan yanzu.",
+	"notice.tooManyDomains": "Ana iya ƙara iyakar {count} na yankunan alias kawai.",
+	"notice.setupCodeWait": "An ƙirƙiri sabon lamba ƙasa da minti ɗaya da ya wuce. Duba shi a cikin logs, ko ka sake gwadawa bayan minti ɗaya.",
+	"notice.aliasMissing": "Alias ɗin bai wanzu ba ko an goge shi.",
 };
 
 export default dictionary;

@@ -1,6 +1,7 @@
-import PostalMime from "postal-mime";
+import PostalMime, { type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
+import { siteOf } from "./unsubscribe";
 import { getAlias, getContactByReverseLocal, getContactsByReverseLocals, mapForwardedToOriginal, now, recordEvent } from "./db";
 import {
 	cleanSubjectLine,
@@ -13,6 +14,7 @@ import {
 	reverseAddress,
 	reverseLocalOf,
 	type Replacement,
+	cleanAttachment,
 } from "./format";
 import { mailflareReady } from "./config";
 import { aliasDomainOfReverse } from "./domains";
@@ -125,11 +127,33 @@ export function stripSignedLinks(body: string): string {
 	return body.replace(SIGNED_LINK, "[link removed]").replace(SIGNED_TOKEN, "[link removed]");
 }
 
-/** Each replacement, and also its form with "+" written as %2B, as it appears in mailto: links. */
+/** The ways a "+" is written in mail bodies: in mailto: links (%2B) and as HTML entities. */
+const ENCODED_PLUS = ["%2B", "&#43;", "&#x2b;", "&#x002b;", "&#043;", "&plus;"];
+const ENCODED_PLUS_PATTERN = /%2b|&#0*43;|&#x0*2b;|&plus;/gi;
+
+/** Each replacement, and also its forms with "+" encoded (matched without regard to case). */
 function withEncodedPlus(replacements: Replacement[]): Replacement[] {
 	return replacements.flatMap((replacement) =>
-		replacement.from.includes("+") ? [replacement, { from: replacement.from.replaceAll("+", "%2B"), to: replacement.to }] : [replacement],
+		replacement.from.includes("+")
+			? [replacement, ...ENCODED_PLUS.map((plus) => ({ from: replacement.from.replaceAll("+", plus), to: replacement.to }))]
+			: [replacement],
 	);
+}
+
+/**
+ * Message-IDs to send on in In-Reply-To and References. A forwarded copy's ID becomes the
+ * original's. An ID that maps to nothing and was made by the owner's own mail provider (the
+ * owner's earlier replies) is dropped: it would show the correspondent where the owner's
+ * real mailbox is.
+ */
+function threadIds(ids: string[], toOriginal: Map<string, string>, destination: string): string[] {
+	const ownSite = siteOf(domainOf(destination));
+	return ids.flatMap((id) => {
+		const original = toOriginal.get(id);
+		if (original) return [original];
+		const domain = id.slice(1, -1).split("@").pop() ?? "";
+		return domain.includes(".") && siteOf(domain) === ownSite ? [] : [id];
+	});
 }
 
 /** Drops the forwarding banner from quoted HTML (where the mail client kept its attribute). */
@@ -199,7 +223,15 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	}
 	const headers = headerSection(raw);
 	const authResults = headers === null ? null : firstAuthenticationResults(headers);
-	const email = await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" });
+	let email: Email;
+	try {
+		email = await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" });
+	} catch (error) {
+		const detail = `Unreadable message: ${error instanceof Error ? error.message : String(error)}`;
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail });
+		message.setReject("This message could not be read");
+		return;
+	}
 	const headerFrom = headers === null ? null : singleSender(headers, email.from?.address);
 
 	// Only the alias owner may write through a reverse alias, or anyone could send as the alias.
@@ -231,7 +263,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	if (settings.reverseAliasReplacement) {
 		const body = `${html ?? ""}\n${text ?? ""}`;
 		// mailto: links may write the "+" of a reverse alias as %2B.
-		const reverseLocals = findAddressesOnDomain(body.replace(/%2b/gi, "+"), reverseDomain)
+		const reverseLocals = findAddressesOnDomain(body.replace(ENCODED_PLUS_PATTERN, "+"), reverseDomain)
 			.map(reverseLocalOf)
 			.filter((local): local is string => !!local);
 		// Only this alias's own correspondents: a reverse alias of another alias stays as it is.
@@ -247,11 +279,9 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	}
 
 	const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
-	const toOriginal = await mapForwardedToOriginal(db, parentIds);
-	const inReplyTo = parseMessageIds(email.inReplyTo).map((id) => toOriginal.get(id) ?? id)[0];
-	const references = parseMessageIds(email.references)
-		.map((id) => toOriginal.get(id) ?? id)
-		.slice(-MAX_REFERENCES);
+	const toOriginal = await mapForwardedToOriginal(db, contact.alias_address, parentIds);
+	const inReplyTo = threadIds(parseMessageIds(email.inReplyTo), toOriginal, destination)[0];
+	const references = threadIds(parseMessageIds(email.references), toOriginal, destination).slice(-MAX_REFERENCES);
 
 	// An alias Mailflare receives also sends through Mailflare, so the reply is kept in its
 	// mailbox there. Every other alias sends with the provider chosen on the Connection page.
@@ -262,7 +292,8 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(`Too many attachments: at most ${limit} per message`);
 		return;
 	}
-	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, email.attachments.map((attachment, index) => attachment.filename || `attachment-${index + 1}`));
+	const files = email.attachments.map((attachment, index) => ({ ...cleanAttachment(attachment, index), inline: attachment.disposition === "inline", content: attachment.content as ArrayBuffer }));
+	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, files.map((file) => file.filename));
 	if (refused) {
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: refused });
 		message.setReject(refused);
@@ -279,17 +310,12 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 				to: [contact.email],
 				subject,
 				...(html ? { html } : {}),
-				...(text ? { text } : {}),
+				// A reply that was only the quoted banner is left with no body: send an empty text one.
+				...(text ? { text } : html ? {} : { text: "" }),
 				...(inReplyTo ? { inReplyTo } : {}),
 				...(references.length ? { references } : {}),
-				...(email.attachments.length
-					? {
-							attachments: email.attachments.map((attachment, index) => ({
-								filename: attachment.filename || `attachment-${index + 1}`,
-								type: attachment.mimeType || "application/octet-stream",
-								contentBase64: bytesToBase64(new Uint8Array(attachment.content as ArrayBuffer)),
-							})),
-						}
+				...(files.length
+					? { attachments: files.map((file) => ({ filename: file.filename, type: file.type, contentBase64: bytesToBase64(new Uint8Array(file.content)) })) }
 					: {}),
 			});
 		} else {
@@ -303,16 +329,13 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 				headers,
 				...(html ? { html } : {}),
 				text: text ?? (html ? undefined : ""),
-				attachments: email.attachments.map((attachment, index) => {
-					const contentId = attachment.contentId?.replace(/^<|>$/g, "");
-					return {
-						disposition: attachment.disposition === "inline" && contentId ? ("inline" as const) : ("attachment" as const),
-						...(contentId ? { contentId } : {}),
-						filename: attachment.filename || `attachment-${index + 1}`,
-						type: attachment.mimeType || "application/octet-stream",
-						content: attachment.content as ArrayBuffer,
-					};
-				}),
+				attachments: files.map((file) => ({
+					disposition: file.inline && file.contentId ? ("inline" as const) : ("attachment" as const),
+					...(file.contentId ? { contentId: file.contentId } : {}),
+					filename: file.filename,
+					type: file.type,
+					content: file.content,
+				})),
 			});
 		}
 	} catch (error) {
@@ -324,10 +347,16 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 
-	const repliedAt = now();
-	await db.batch([
-		db.prepare("UPDATE contacts SET reply_count = reply_count + 1, last_reply_at = ? WHERE id = ?").bind(repliedAt, contact.id),
-		db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(repliedAt, contact.alias_address),
-	]);
-	await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "sent" });
+	// The reply is out. A failure to record it must not throw: Email Routing would retry the
+	// delivery and the correspondent would get the reply twice.
+	try {
+		const repliedAt = now();
+		await db.batch([
+			db.prepare("UPDATE contacts SET reply_count = reply_count + 1, last_reply_at = ? WHERE id = ?").bind(repliedAt, contact.id),
+			db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(repliedAt, contact.alias_address),
+		]);
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "sent" });
+	} catch (error) {
+		console.error("Reply sent, but recording it failed", contact.id, error instanceof Error ? error.message : error);
+	}
 }

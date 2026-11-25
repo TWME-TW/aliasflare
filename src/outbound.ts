@@ -56,7 +56,7 @@ const TIMEOUT_MS = 20_000;
 
 function mailbox(from: OutboundMessage["from"]): string {
 	if (typeof from === "string") return from;
-	const name = from.name.replace(/["\\\r\n]/g, "").trim();
+	const name = from.name.replace(/["\\\u0000-\u001f\u007f]/g, "").trim();
 	return name ? `"${name}" <${from.email}>` : from.email;
 }
 
@@ -137,7 +137,7 @@ async function viaSmtp2go(apiKey: string, message: OutboundMessage): Promise<str
 
 function brevoAddress(from: OutboundMessage["from"]): { email: string; name?: string } {
 	if (typeof from === "string") return { email: from };
-	const name = from.name.replace(/[\r\n]/g, "").trim().slice(0, 70);
+	const name = from.name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 70);
 	return name ? { email: from.email, name } : { email: from.email };
 }
 

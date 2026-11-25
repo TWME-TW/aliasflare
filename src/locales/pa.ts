@@ -403,6 +403,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} ਮਿਟਾਉਣਾ ਹੈ? ਇਸ ਦਾ ਰਿਵਰਸ ਉਪਨਾਮ ਕੰਮ ਕਰਨਾ ਬੰਦ ਕਰ ਦੇਵੇਗਾ। ਜੇ ਉਹ ਦੁਬਾਰਾ ਲਿਖਣਗੇ, ਤਾਂ ਉਹਨਾਂ ਨੂੰ ਨਵਾਂ ਮਿਲੇਗਾ।",
 	"notice.contactDeleted": "ਸੰਪਰਕ ਮਿਟਾਇਆ ਗਿਆ।",
 	"notice.contactMissing": "ਉਹ ਸੰਪਰਕ ਹੁਣ ਮੌਜੂਦ ਨਹੀਂ ਹੈ।",
+	"notice.tooManyDomains": "ਵੱਧ ਤੋਂ ਵੱਧ {count} ਏਲੀਅਸ ਡੋਮੇਨ ਜੋੜੇ ਜਾ ਸਕਦੇ ਹਨ।",
+	"notice.setupCodeWait": "ਇੱਕ ਮਿੰਟ ਤੋਂ ਵੀ ਘੱਟ ਸਮਾਂ ਪਹਿਲਾਂ ਨਵਾਂ ਕੋਡ ਬਣਾਇਆ ਗਿਆ ਸੀ। ਲਾਗਾਂ ਵਿੱਚ ਦੇਖੋ, ਜਾਂ ਇੱਕ ਮਿੰਟ ਬਾਅਦ ਫਿਰ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
+	"notice.aliasMissing": "ਉਹ ਏਲੀਅਸ ਮੌਜੂਦ ਨਹੀਂ ਹੈ ਜਾਂ ਮਿਟਾਇਆ ਜਾ ਚੁੱਕਾ ਹੈ।",
 };
 
 export default dictionary;

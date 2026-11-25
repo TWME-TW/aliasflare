@@ -1,4 +1,4 @@
-import { isSenderFormat, type SenderFormat } from "./format";
+import { DOMAIN_PATTERN, isSenderFormat, type SenderFormat } from "./format";
 import { isLocale, type Locale } from "./i18n";
 
 export type UnsubscribeBehavior = "disable_alias" | "block_contact" | "preserve_original";
@@ -14,7 +14,10 @@ export function isRandomAliasFormat(value: unknown): value is RandomAliasFormat 
 }
 
 
-const DOMAIN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+const DOMAIN = DOMAIN_PATTERN;
+
+/** Alias domains one installation can have. */
+export const MAX_ALIAS_DOMAINS = 20;
 
 export type Settings = {
 	senderFormat: SenderFormat;
@@ -89,7 +92,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		simpleloginApi: raw.simpleloginApi === true,
 		addyApi: raw.addyApi === true,
 		aliasDomains: Array.isArray(raw.aliasDomains)
-			? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, 20)
+			? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, MAX_ALIAS_DOMAINS)
 			: [],
 		randomAliasFormat: isRandomAliasFormat(raw.randomAliasFormat) ? raw.randomAliasFormat : DEFAULT_SETTINGS.randomAliasFormat,
 		appSettings: typeof raw.appSettings === "boolean" ? raw.appSettings : DEFAULT_SETTINGS.appSettings,

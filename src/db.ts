@@ -105,24 +105,30 @@ export async function ensureAlias(
 	defaults: { forwardEnabled: boolean; destination: string | null },
 ): Promise<AliasRow> {
 	const timestamp = now();
-	await db
-		.prepare(
-			`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, num_id, uid, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT (address) DO NOTHING`,
-		)
-		.bind(
-			address,
-			mailboxId,
-			defaults.forwardEnabled ? 1 : 0,
-			defaults.forwardEnabled ? "all" : "none",
-			defaults.destination,
-			CATCH_ALL_NOTE,
-			crypto.randomUUID(),
-			timestamp,
-			timestamp,
-		)
-		.run();
-	const row = await getAlias(db, address);
+	// The number is taken inside the INSERT, and D1 runs one statement at a time, so two
+	// deliveries do not get the same one. Any conflict (the address, or should it ever happen
+	// the number or uid) does nothing, and the next attempt reads the row or tries again.
+	let row: AliasRow | null = null;
+	for (let attempt = 0; attempt < 3 && !row; attempt += 1) {
+		await db
+			.prepare(
+				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, num_id, uid, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
+			)
+			.bind(
+				address,
+				mailboxId,
+				defaults.forwardEnabled ? 1 : 0,
+				defaults.forwardEnabled ? "all" : "none",
+				defaults.destination,
+				CATCH_ALL_NOTE,
+				crypto.randomUUID(),
+				timestamp,
+				timestamp,
+			)
+			.run();
+		row = await getAlias(db, address);
+	}
 	if (!row) throw new Error(`Alias ${address} could not be created`);
 	if (row.mailbox_id !== mailboxId) {
 		// The address moved to another Mailflare mailbox; replies must be sent from the new one.
@@ -144,15 +150,20 @@ export function boundedList(values: string[], limit = 80): string[] {
 	return [...new Set(values)].slice(0, limit);
 }
 
+/**
+ * The alias's contacts among these reverse aliases. Looked up in chunks (one batch, so one
+ * query), so a message quoting many made-up reverse aliases cannot push a real one past the
+ * limit of one statement and leave it unreplaced.
+ */
 export async function getContactsByReverseLocals(db: D1Database, aliasAddress: string, locals: string[]): Promise<ContactRow[]> {
-	const unique = boundedList(locals.map((local) => local.toLowerCase()));
+	const unique = [...new Set(locals.map((local) => local.toLowerCase()))].slice(0, 2000);
 	if (unique.length === 0) return [];
-	const placeholders = unique.map(() => "?").join(", ");
-	const { results } = await db
-		.prepare(`SELECT * FROM contacts WHERE alias_address = ? AND reverse_local IN (${placeholders})`)
-		.bind(aliasAddress, ...unique)
-		.all<ContactRow>();
-	return results;
+	const chunks: string[][] = [];
+	for (let i = 0; i < unique.length; i += 80) chunks.push(unique.slice(i, i + 80));
+	const answers = await db.batch(
+		chunks.map((chunk) => db.prepare(`SELECT * FROM contacts WHERE alias_address = ? AND reverse_local IN (${chunk.map(() => "?").join(", ")})`).bind(aliasAddress, ...chunk)),
+	);
+	return answers.flatMap((answer) => answer.results as ContactRow[]);
 }
 
 /** Returns the contact for (alias, sender), creating it with a fresh reverse alias the first time. */
@@ -209,42 +220,45 @@ export async function recordEvent(
 }
 
 /** Maps Message-IDs the user's mail client saw (forwarded copies) back to the originals. */
-export async function mapForwardedToOriginal(db: D1Database, allIds: string[]): Promise<Map<string, string>> {
+export async function mapForwardedToOriginal(db: D1Database, aliasAddress: string, allIds: string[]): Promise<Map<string, string>> {
 	const map = new Map<string, string>();
 	const ids = boundedList(allIds);
 	if (ids.length === 0) return map;
 	const placeholders = ids.map(() => "?").join(", ");
+	// Only this alias's own forwards, so one alias's threads never reveal another's.
 	const { results } = await db
 		.prepare(
-			`SELECT forwarded_message_id, original_message_id FROM forwards WHERE forwarded_message_id IN (${placeholders}) AND original_message_id IS NOT NULL`,
+			`SELECT forwarded_message_id, original_message_id FROM forwards WHERE alias_address = ? AND forwarded_message_id IN (${placeholders}) AND original_message_id IS NOT NULL`,
 		)
-		.bind(...ids)
+		.bind(aliasAddress, ...ids)
 		.all<{ forwarded_message_id: string; original_message_id: string }>();
 	for (const row of results) map.set(row.forwarded_message_id, row.original_message_id);
 	return map;
 }
 
 /** The reverse of mapForwardedToOriginal, so forwarded copies thread together in the user's client. */
-export async function mapOriginalToForwarded(db: D1Database, allIds: string[]): Promise<Map<string, string>> {
+export async function mapOriginalToForwarded(db: D1Database, aliasAddress: string, allIds: string[]): Promise<Map<string, string>> {
 	const map = new Map<string, string>();
 	const ids = boundedList(allIds);
 	if (ids.length === 0) return map;
 	const placeholders = ids.map(() => "?").join(", ");
 	const { results } = await db
 		.prepare(
-			`SELECT original_message_id, forwarded_message_id FROM forwards WHERE original_message_id IN (${placeholders}) AND forwarded_message_id IS NOT NULL`,
+			`SELECT original_message_id, forwarded_message_id FROM forwards WHERE alias_address = ? AND original_message_id IN (${placeholders}) AND forwarded_message_id IS NOT NULL`,
 		)
-		.bind(...ids)
+		.bind(aliasAddress, ...ids)
 		.all<{ forwarded_message_id: string; original_message_id: string }>();
 	for (const row of results) map.set(row.original_message_id, row.forwarded_message_id);
 	return map;
 }
 
-export async function setForwardMode(db: D1Database, address: string, mode: ForwardMode): Promise<void> {
-	await db
-		.prepare("UPDATE aliases SET forward_mode = ?, forward_enabled = ?, updated_at = ? WHERE address = ?")
+/** Sets an alias's forwarding mode. False when there is no such alias (or it is deleted). */
+export async function setForwardMode(db: D1Database, address: string, mode: ForwardMode): Promise<boolean> {
+	const result = await db
+		.prepare("UPDATE aliases SET forward_mode = ?, forward_enabled = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL")
 		.bind(mode, mode === "none" ? 0 : 1, now(), address)
 		.run();
+	return (result.meta.changes ?? 0) > 0;
 }
 
 export type BlocklistRow = { id: string; kind: "address" | "domain"; value: string; hits: number; created_at: number };

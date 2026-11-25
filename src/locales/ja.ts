@@ -388,6 +388,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} を削除しますか？そのリバースエイリアスは使えなくなります。相手が再度メールを送ると、新しいリバースエイリアスが発行されます。",
 	"notice.contactDeleted": "連絡先を削除しました。",
 	"notice.contactMissing": "その連絡先はもう存在しません。",
+	"notice.tooManyDomains": "エイリアス用ドメインは最大 {count} 個まで追加できます。",
+	"notice.setupCodeWait": "新しいコードは1分以内に発行されています。ログを確認するか、1分後にもう一度お試しください。",
+	"notice.aliasMissing": "そのエイリアスは存在しないか、削除されています。",
 };
 
 export default dictionary;

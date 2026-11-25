@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} löschen? Der Reverse-Alias funktioniert danach nicht mehr. Schreibt die Person erneut, erhält sie einen neuen.",
 	"notice.contactDeleted": "Kontakt gelöscht.",
 	"notice.contactMissing": "Dieser Kontakt existiert nicht mehr.",
+	"notice.tooManyDomains": "Es können höchstens {count} Alias-Domains hinzugefügt werden.",
+	"notice.setupCodeWait": "Vor weniger als einer Minute wurde ein neuer Code erstellt. Schau in den Logs nach oder versuche es in einer Minute erneut.",
+	"notice.aliasMissing": "Dieser Alias existiert nicht oder wurde gelöscht.",
 };
 
 export default dictionary;

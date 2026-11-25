@@ -1,0 +1,19 @@
+# Weekly updates for npm packages and the pinned GitHub Actions, grouped so each week is
+# one pull request per ecosystem. Security updates are opened as soon as they are known.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "¿Eliminar {email}? Su alias inverso dejará de funcionar. Si vuelve a escribir, recibirá uno nuevo.",
 	"notice.contactDeleted": "Contacto eliminado.",
 	"notice.contactMissing": "Ese contacto ya no existe.",
+	"notice.tooManyDomains": "Se pueden añadir como máximo {count} dominios de alias.",
+	"notice.setupCodeWait": "Se generó un código nuevo hace menos de un minuto. Búscalo en los registros o inténtalo de nuevo en un minuto.",
+	"notice.aliasMissing": "Ese alias no existe o se eliminó.",
 };
 
 export default dictionary;

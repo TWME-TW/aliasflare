@@ -12,7 +12,7 @@ export async function readLimited(body: ReadableStream<Uint8Array> | null | unde
 		if (done) break;
 		total += value.byteLength;
 		if (total > max) {
-			await reader.cancel();
+			await reader.cancel().catch(() => undefined);
 			return null;
 		}
 		chunks.push(value);
@@ -29,7 +29,7 @@ export async function readLimited(body: ReadableStream<Uint8Array> | null | unde
 /** A request or response body as text, up to `max` bytes; null when it is longer or says it will be. */
 export async function readTextLimited(response: { headers: Headers; body: ReadableStream<Uint8Array> | null }, max: number): Promise<string | null> {
 	if (Number(response.headers.get("Content-Length") ?? 0) > max) {
-		await response.body?.cancel();
+		await response.body?.cancel().catch(() => undefined);
 		return null;
 	}
 	const bytes = await readLimited(response.body, max);

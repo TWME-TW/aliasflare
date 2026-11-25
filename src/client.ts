@@ -40,6 +40,7 @@ export const PASSKEY_SCRIPT = `
       excludeCredentials: (options.excludeCredentials || []).map((c) => ({ ...c, id: b64ToBuf(c.id) })),
     };
     const credential = await navigator.credentials.create({ publicKey });
+    if (!credential) throw Object.assign(new Error("cancelled"), { name: "NotAllowedError" });
     const r = credential.response;
     const response = {
       id: credential.id,
@@ -64,6 +65,7 @@ export const PASSKEY_SCRIPT = `
       allowCredentials: (options.allowCredentials || []).map((c) => ({ ...c, id: b64ToBuf(c.id) })),
     };
     const credential = await navigator.credentials.get({ publicKey });
+    if (!credential) throw Object.assign(new Error("cancelled"), { name: "NotAllowedError" });
     const r = credential.response;
     await post("/login/verify", {
       response: {
@@ -96,7 +98,8 @@ export const PASSKEY_SCRIPT = `
         else await register(form, flow === "setup" ? "/setup" : "/passkeys");
         location.href = form.dataset.next || "/";
       } catch (error) {
-        show(form, error && error.name === "NotAllowedError" ? (messages.msgCancelled || "The passkey prompt was cancelled or timed out.") : (error.message || String(error)));
+        const cancelled = error && (error.name === "NotAllowedError" || error.name === "AbortError");
+        show(form, cancelled ? (messages.msgCancelled || "The passkey prompt was cancelled or timed out.") : ((error && error.message) || String(error)));
       } finally {
         if (button) button.disabled = false;
       }
@@ -191,23 +194,43 @@ export const APP_SCRIPT = `(() => {
   }
   for (const form of document.querySelectorAll("form[data-autosave]")) {
     let latest = 0;
-    const save = async () => {
+    // Saves run one after another, so an older change can never land after a newer one.
+    let queue = Promise.resolve();
+    let lastSent = null;
+    const save = () => {
+      const body = new URLSearchParams(new FormData(form)).toString();
+      // Enter in a field fires both submit and change: the same values are sent once.
+      if (body === lastSent) return;
+      lastSent = body;
       const id = ++latest;
+      queue = queue.then(() => send(id, body));
+    };
+    const send = async (id, body) => {
       try {
         const response = await fetch(form.action, {
           method: "POST",
-          body: new URLSearchParams(new FormData(form)),
+          body: new URLSearchParams(body),
           headers: { "X-Autosave": "1", Accept: "application/json" },
           credentials: "same-origin",
         });
         const result = await response.json().catch(() => null);
         if (id !== latest) return; // a newer change is already on its way
         if (result && result.reload) { location.reload(); return; }
-        show((result && (result.message || result.error)) || form.dataset.msgFailed, !!(response.ok && result && result.ok));
+        const ok = !!(response.ok && result && result.ok);
+        if (!ok) lastSent = null; // a failed save may be tried again unchanged
+        show((result && (result.message || result.error)) || form.dataset.msgFailed, ok);
       } catch {
+        lastSent = null;
         if (id === latest) show(form.dataset.msgFailed, false);
       }
     };
+    // A note being typed is saved before the page is left.
+    window.addEventListener("pagehide", () => {
+      const body = new URLSearchParams(new FormData(form)).toString();
+      if (body !== lastSent && form.querySelector("input[type=text]:focus")) {
+        navigator.sendBeacon?.(form.action, new URLSearchParams(body));
+      }
+    });
     form.addEventListener("change", save);
     form.addEventListener("submit", (event) => { event.preventDefault(); save(); });
   }

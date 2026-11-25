@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} silinsin mi? Ters takma adı çalışmayı durdurur. Tekrar yazarlarsa yeni bir tane alırlar.",
 	"notice.contactDeleted": "Kişi silindi.",
 	"notice.contactMissing": "Bu kişi artık mevcut değil.",
+	"notice.tooManyDomains": "En fazla {count} takma alan adı eklenebilir.",
+	"notice.setupCodeWait": "Yeni kod bir dakikadan kısa süre önce oluşturuldu. Kayıtlarda (loglarda) bakın veya bir dakika sonra tekrar deneyin.",
+	"notice.aliasMissing": "Bu takma ad mevcut değil veya silinmiş.",
 };
 
 export default dictionary;

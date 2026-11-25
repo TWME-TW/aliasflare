@@ -403,6 +403,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email} ಅಳಿಸಬೇಕೇ? ಅದರ ರಿವರ್ಸ್ ಅಲಿಯಾಸ್ ಕೆಲಸ ಮಾಡುವುದಿಲ್ಲ. ಅವರು ಮತ್ತೆ ಬರೆದರೆ, ಹೊಸದೊಂದು ಸಿಗುತ್ತದೆ.",
 	"notice.contactDeleted": "ಸಂಪರ್ಕ ಅಳಿಸಲಾಗಿದೆ.",
 	"notice.contactMissing": "ಆ ಸಂಪರ್ಕ ಇನ್ನು ಅಸ್ತಿತ್ವದಲ್ಲಿಲ್ಲ.",
+	"notice.tooManyDomains": "ಗರಿಷ್ಠ {count} ಅಲಿಯಾಸ್ ಡೊಮೇನ್‌ಗಳನ್ನು ಮಾತ್ರ ಸೇರಿಸಬಹುದು.",
+	"notice.setupCodeWait": "ಒಂದು ನಿಮಿಷಕ್ಕಿಂತ ಕಡಿಮೆ ಹಿಂದೆ ಹೊಸ ಕೋಡ್ ರಚಿಸಲಾಗಿದೆ. ಲಾಗ್‌ಗಳಲ್ಲಿ ನೋಡಿ, ಅಥವಾ ಒಂದು ನಿಮಿಷದ ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+	"notice.aliasMissing": "ಆ ಅಲಿಯಾಸ್ ಅಸ್ತಿತ್ವದಲ್ಲಿಲ್ಲ ಅಥವಾ ಅಳಿಸಲಾಗಿದೆ.",
 };
 
 export default dictionary;

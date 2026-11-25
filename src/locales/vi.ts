@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "Xóa {email}? Bí danh ngược của liên hệ này sẽ ngừng hoạt động. Nếu họ gửi thư lại, họ sẽ nhận được một bí danh ngược mới.",
 	"notice.contactDeleted": "Đã xóa liên hệ.",
 	"notice.contactMissing": "Liên hệ này không còn tồn tại.",
+	"notice.tooManyDomains": "Chỉ có thể thêm tối đa {count} miền bí danh.",
+	"notice.setupCodeWait": "Mã mới được tạo cách đây chưa đầy một phút. Hãy xem trong nhật ký hoặc thử lại sau một phút.",
+	"notice.aliasMissing": "Bí danh này không tồn tại hoặc đã bị xóa.",
 };
 
 export default dictionary;

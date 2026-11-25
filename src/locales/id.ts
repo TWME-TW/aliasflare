@@ -394,6 +394,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "Hapus {email}? Alias baliknya akan berhenti berfungsi. Jika mereka menulis lagi, mereka akan mendapat yang baru.",
 	"notice.contactDeleted": "Kontak dihapus.",
 	"notice.contactMissing": "Kontak itu sudah tidak ada.",
+	"notice.tooManyDomains": "Maksimal {count} domain alias dapat ditambahkan.",
+	"notice.setupCodeWait": "Kode baru dibuat kurang dari satu menit yang lalu. Cek di log, atau coba lagi dalam satu menit.",
+	"notice.aliasMissing": "Alias tersebut tidak ada atau sudah dihapus.",
 };
 
 export default dictionary;

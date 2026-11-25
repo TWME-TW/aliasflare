@@ -83,7 +83,7 @@ export async function saveConfig(db: D1Database, values: Partial<Record<StoredKe
 	if (entries.length) await db.batch(entries.map(([key, value]) => statement.bind(key, value)));
 }
 
-export const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+export { DOMAIN_PATTERN } from "./format";
 export const WORKER_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 /** The https origin of a URL without credentials, or null. */
@@ -117,6 +117,8 @@ function checkEnv(env: Env): void {
 		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend, smtp2go or brevo");
 	}
 	if (value("WORKERS_PLAN") && !isWorkersPlan(value("WORKERS_PLAN").toLowerCase())) throw new ConfigError("WORKERS_PLAN must be free or paid");
+	// The setup code is all that stands between anyone and the first passkey.
+	if (value("SETUP_CODE") && value("SETUP_CODE").length < 10) throw new ConfigError("SETUP_CODE must be at least 10 characters long");
 	const worker = value("WORKER_NAME").toLowerCase();
 	if (worker && !WORKER_NAME_PATTERN.test(worker)) throw new ConfigError("WORKER_NAME is not a valid Worker name");
 }
@@ -134,11 +136,11 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 		// First run (no SIGNING_SECRET secret): create the key that signs sessions and links.
 		// Only a missing or too short stored key is replaced, so two racing requests agree.
 		await env.DB.prepare(
-			"INSERT INTO config (key, value) VALUES ('signingSecret', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE length(config.value) < 32",
+			"INSERT INTO config (key, value) VALUES ('signingSecret', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE length(trim(config.value)) < 32",
 		)
 			.bind(randomToken(48))
 			.run();
-		signingSecret = (await readStored(env.DB)).signingSecret ?? "";
+		signingSecret = (await readStored(env.DB)).signingSecret?.trim() ?? "";
 	}
 	return {
 		mailflareUrl: pick("mailflareUrl").replace(/\/+$/, ""),
@@ -149,7 +151,7 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 		siteOrigin: pick("publicUrl").replace(/\/+$/, "") || (validOrigin(stored.siteOrigin ?? "") ?? ""),
 		// Only from the CLOUDFLARE_API_TOKEN secret: a token typed on the dashboard is never stored.
 		cloudflareApiToken: env.CLOUDFLARE_API_TOKEN?.trim() ?? "",
-		workerName: pick("workerName") || "aliasflare",
+		workerName: pick("workerName").toLowerCase() || "aliasflare",
 		outboundProvider: ((provider) => (isOutboundProvider(provider) ? provider : "cloudflare"))(pick("outboundProvider").toLowerCase()),
 		outboundApiKey: pick("outboundApiKey"),
 		// Free unless told otherwise: the stricter limits work on both plans.

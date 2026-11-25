@@ -409,6 +409,9 @@ const dictionary: Dictionary = {
 	"alias.confirmDeleteContact": "{email}을(를) 삭제할까요? 해당 역방향 별칭은 작동하지 않게 됩니다. 상대방이 다시 메일을 보내면 새 역방향 별칭을 받게 됩니다.",
 	"notice.contactDeleted": "연락처를 삭제했습니다.",
 	"notice.contactMissing": "해당 연락처는 더 이상 존재하지 않습니다.",
+	"notice.tooManyDomains": "별칭 도메인은 최대 {count}개까지 추가할 수 있습니다.",
+	"notice.setupCodeWait": "새 코드는 1분 이내에 생성되었습니다. 로그에서 확인하거나 1분 후에 다시 시도하세요.",
+	"notice.aliasMissing": "해당 별칭이 존재하지 않거나 삭제되었습니다.",
 };
 
 export default dictionary;

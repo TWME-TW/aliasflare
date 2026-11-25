@@ -4,11 +4,14 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-11-01",
 	"compatibility_flags": ["nodejs_compat"],
-	"observability": { "enabled": true },
+	// Query strings (searches, addresses in notices) are left out of logs and traces.
+	"observability": { "enabled": true, "redact_query_string": true },
 	// Alias domains and the optional Mailflare connection are set up on the dashboard after
 	// you register a passkey. Variables or secrets with the names listed in src/env.d.ts
 	// override them; keep_vars leaves dashboard-set ones alone.
 	"keep_vars": true,
+	// Daily cleanup of old activity (see src/cleanup.ts).
+	"triggers": { "crons": ["23 3 * * *"] },
 	"send_email": [{ "name": "EMAIL", "remote": true }],
 	// Optional: reach Mailflare through a service binding instead of the public internet,
 	// when both Workers are on the same account.

@@ -2,7 +2,7 @@ import PostalMime, { type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { signToken } from "./crypto";
 import { ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
-import { domainOf, ensureAngle, extractEmail, cleanSubjectLine, formatSenderName, parseBareEmail, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
+import { cleanAttachment, domainOf, ensureAngle, extractEmail, cleanSubjectLine, formatSenderName, parseBareEmail, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
 import { translator } from "./i18n";
 import { getStoredMessage, mailflareConfig, MailflareError, MAX_MESSAGE_BYTES, type StoredMessage } from "./mailflare";
 import { sha256Hex } from "./apikeys";
@@ -18,7 +18,8 @@ const STALE_PROCESSING_SECONDS = 120;
 const MAX_REFERENCES = 10;
 /** A message that failed this many times is given up on, so Mailflare stops retrying it. */
 const MAX_ATTEMPTS = 5;
-const MAX_ATTACHMENTS = 50;
+/** Forwards go out with Cloudflare Email Sending, which takes at most 32 attachments. */
+const MAX_ATTACHMENTS = 32;
 const MAX_UNSUBSCRIBE_LENGTH = 4096;
 const MAX_NAME_LENGTH = 120;
 
@@ -122,9 +123,13 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 		envelopeFrom: event.from,
 		origin,
 		load: () => getStoredMessage(mailflareConfig(config), event.messageId),
+		// A signed webhook could be replayed later, after the alias exists: record the delivery
+		// even when there is no such alias, so a replay is a duplicate.
+		claimUnknown: true,
 	});
 	// Mailflare has already accepted the message; there is nothing to refuse, and nothing to retry.
-	return outcome.status === 404 ? { status: 200, result: "skipped: no such alias" } : outcome;
+	if (outcome.status === 404) return { status: 200, result: "skipped: no such alias" };
+	return outcome.status === 413 ? { status: 200, result: outcome.result } : outcome;
 }
 
 /** Reads a message stream up to MAX_MESSAGE_BYTES. */
@@ -160,10 +165,11 @@ export async function handleDirectInbound(message: ForwardableEmailMessage, env:
 		origin: config.siteOrigin,
 		load: async () => ({ mailboxId: "", raw: await readRaw(message.raw, message.rawSize) }),
 		size: message.rawSize,
+		headers: message.headers,
 		// Email Routing's own forward: no parsing, so no CPU, but the message goes as it is.
-		passThrough: message.headers.get(LOOP_HEADER) ? undefined : async (destination) => {
-					await message.forward(destination, new Headers({ [LOOP_HEADER]: aliasAddress }));
-				},
+		passThrough: async (destination) => {
+			await message.forward(destination, new Headers({ [LOOP_HEADER]: aliasAddress }));
+		},
 	});
 }
 
@@ -183,6 +189,10 @@ type ForwardInput = {
 	load: () => Promise<StoredMessage>;
 	/** Declared size of the message, when known before it is read. */
 	size?: number;
+	/** Record a delivery to an address that is not an alias (and will not become one). */
+	claimUnknown?: boolean;
+	/** The message's headers, when they are known before it is read. */
+	headers?: Headers;
 	/** Delivers the message unchanged, when it is too large to rewrite on the Free plan. */
 	passThrough?: (destination: string) => Promise<void>;
 };
@@ -199,7 +209,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	// leaves no rows behind.
 	const settings = await loadSettings(db);
 	const known = await getAlias(db, aliasAddress);
-	if (!known && !settings.createAliasesFromMail) return { status: 404, result: "no such alias" };
+	const unknown = !known && !settings.createAliasesFromMail;
+	if (unknown && !input.claimUnknown) return { status: 404, result: "no such alias" };
 
 	const claimed = await claim(db, input.key, aliasAddress);
 	if (!("id" in claimed)) return claimed;
@@ -208,12 +219,18 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		await finish(db, forwardId, { status: "skipped", error: reason });
 		return { status: 200, result: `skipped: ${reason}` };
 	};
+	if (unknown) {
+		await finish(db, forwardId, { status: "skipped", error: "no such alias" });
+		return { status: 404, result: "no such alias" };
+	}
 
 	try {
 		if (isReverseDomainOf(aliasDomain, settings.aliasDomains)) return await skip("the recipient is a reverse alias");
 		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
 		if (known?.deleted_at) return await skip("the alias was deleted");
 		if (known?.forward_mode === "none") return await skip("forwarding is off for this alias");
+		// A copy this Worker sent itself is recognised from its headers, before it is read.
+		if (input.headers?.get(LOOP_HEADER)) return await skip("already forwarded by this Worker");
 		const passThrough = config.workersPlan === "free" && input.passThrough && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES ? input.passThrough : null;
 		const stored = passThrough ? null : await input.load();
 		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", {
@@ -227,11 +244,23 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (isOwnAddress(destination, [...settings.aliasDomains, aliasDomain])) return await skip("destination would loop");
 
 		if (passThrough) {
-			// Without reading the message only the envelope sender can be checked.
-			const sender = parseBareEmail(event.from);
-			if (sender && isReverseDomainOf(domainOf(sender), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
-			const blocked = sender ? await matchBlocklist(db, sender) : null;
-			if (blocked) return await skip(`blocklist: ${blocked.value}`);
+			// The body is not read, but the headers are: the same filters run on the envelope
+			// sender and the From header as on a rewritten message.
+			const headers = input.headers ?? new Headers();
+			const senders = [...new Set([parseBareEmail(event.from), extractEmail(headers.get("From") ?? "")].filter((value): value is string => !!value))];
+			if (!senders.length || senders.some((sender) => isReverseDomainOf(domainOf(sender), [...settings.aliasDomains, aliasDomain]))) return await skip("no usable sender");
+			for (const sender of senders) {
+				const blocked = await matchBlocklist(db, sender);
+				if (blocked) return await skip(`blocklist: ${blocked.value}`);
+			}
+			const blockedContact = await db
+				.prepare(`SELECT 1 AS hit FROM contacts WHERE alias_address = ? AND blocked = 1 AND email IN (${senders.map(() => "?").join(", ")}) LIMIT 1`)
+				.bind(aliasAddress, ...senders)
+				.first<{ hit: number }>();
+			if (blockedContact) return await skip("sender is blocked");
+			if (alias.forward_mode === "no_promotions" && isPromotional([...headers].map(([key, value]) => ({ key, value })))) {
+				return await skip("promotional mail is blocked for this alias");
+			}
 			await passThrough(destination);
 			const sentAt = now();
 			try {
@@ -257,9 +286,12 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const malformedFrom = !!email.from?.address && !headerSender;
 		const senderEmail = headerSender ?? parseBareEmail(event.from);
 		if (!senderEmail || isReverseDomainOf(domainOf(senderEmail), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
+		const headerBlock = rawHeaderSection(stored!.raw);
+		const spoofed = malformedFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
 		await finish(db, forwardId, {
 			original_message_id: ensureAngle(email.messageId),
-			original_unsubscribe: usableUnsubscribe(headerValue(email, "List-Unsubscribe"))?.slice(0, MAX_UNSUBSCRIBE_LENGTH) ?? null,
+			// The unsubscribe of a sender that failed DMARC is not trusted: unsubscribing blocks it instead.
+			original_unsubscribe: spoofed ? null : (usableUnsubscribe(headerValue(email, "List-Unsubscribe"))?.slice(0, MAX_UNSUBSCRIBE_LENGTH) ?? null),
 			original_unsubscribe_post: /^\s*List-Unsubscribe=One-Click\s*$/i.test(headerValue(email, "List-Unsubscribe-Post") ?? "") ? 1 : 0,
 			subject: email.subject?.slice(0, 500) ?? null,
 		});
@@ -273,8 +305,6 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias");
 		if (email.attachments.length > MAX_ATTACHMENTS) return await skip(`${email.attachments.length} attachments (at most ${MAX_ATTACHMENTS})`);
 
-		const headerBlock = rawHeaderSection(stored!.raw);
-		const spoofed = malformedFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
 		// A display name from a message that failed DMARC is not trusted to rename a contact.
 		const senderName = spoofed ? null : email.from?.name?.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, MAX_NAME_LENGTH) || null;
 		const contact = await ensureContact(db, aliasAddress, senderEmail, senderName, settings.includeSenderInReverseAlias);
@@ -283,7 +313,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
 		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
-		const toForwarded = await mapOriginalToForwarded(db, parentIds);
+		const toForwarded = await mapOriginalToForwarded(db, aliasAddress, parentIds);
 		const inReplyTo = parseMessageIds(email.inReplyTo).map((id) => toForwarded.get(id) ?? id)[0];
 		const references = parseMessageIds(email.references)
 			.map((id) => toForwarded.get(id) ?? id)
@@ -332,9 +362,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			...(body.html ? { html: body.html } : {}),
 			text: body.text ?? (body.html ? undefined : ""),
 			attachments: email.attachments.map((attachment, index) => {
-				const filename = attachment.filename || `attachment-${index + 1}`;
-				const type = attachment.mimeType || "application/octet-stream";
-				const contentId = attachment.contentId?.replace(/^<|>$/g, "");
+				const { filename, type, contentId } = cleanAttachment(attachment, index);
 				return attachment.disposition === "inline" && contentId
 					? { disposition: "inline" as const, contentId, filename, type, content: attachment.content as ArrayBuffer }
 					: { disposition: "attachment" as const, filename, type, content: attachment.content as ArrayBuffer };
@@ -359,10 +387,11 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await finish(db, forwardId, { status: "failed", error: message.slice(0, 1000) });
-		// A message Mailflare no longer has, or one too large to send, will never succeed.
+		// A message Mailflare no longer has, or one too large to send, will never succeed. Too
+		// large is reported as such, so mail delivered directly can be refused with a bounce.
 		if (error instanceof MailflareError && (error.status === 404 || error.status === 413)) {
 			await finish(db, forwardId, { status: "skipped" });
-			return { status: 200, result: `skipped: ${message.slice(0, 200)}` };
+			return { status: error.status === 413 ? 413 : 200, result: `skipped: ${message.slice(0, 200)}` };
 		}
 		console.error("Forward failed", event.messageId, message);
 		return { status: 500, result: "failed" };
