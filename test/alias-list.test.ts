@@ -89,3 +89,19 @@ describe("one-click random aliases", () => {
 		expect(row?.address).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@me\.test$/);
 	});
 });
+
+describe("creation time", () => {
+	it("is shown for each alias on the list and on its page", async () => {
+		const db = testDb();
+		const created = Math.floor(Date.now() / 1000) - 3 * 86400;
+		await db.prepare("INSERT INTO aliases (address, num_id, uid, created_at, updated_at) VALUES ('shop@me.test', 1, 'u1', ?, ?)").bind(created, created).run();
+		const env = { DB: db, SIGNING_SECRET: TEST_SECRET } as unknown as Env;
+		const cookie = await signIn(db);
+		const iso = new Date(created * 1000).toISOString();
+		const list = await (await app.fetch(new Request("https://alias.test/", { headers: { cookie } }), env)).text();
+		expect(list).toContain("<th>Created</th>");
+		expect(list).toContain(`<td data-label="Created"><time datetime="${iso}"`);
+		const page = await (await app.fetch(new Request("https://alias.test/aliases/shop%40me.test", { headers: { cookie } }), env)).text();
+		expect(page).toContain(`Created <time datetime="${iso}">`);
+	});
+});

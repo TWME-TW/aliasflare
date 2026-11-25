@@ -468,7 +468,7 @@ ${actions.map(([value, label]) => html`<option value="${value}" ${value === "not
 <button class="primary">${t("bulk.apply")}</button>
 </form>
 <table class="rt">
-<thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th><th>${t("dash.colLastUsed")}</th></tr></thead>
+<thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th><th>${t("dash.colLastUsed")}</th><th>${t("keys.colCreated")}</th></tr></thead>
 <tbody>
 ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
@@ -487,6 +487,7 @@ ${aliases.map((alias) => {
 <button>${t("common.set")}</button></form></td>
 <td data-label="${t("dash.colContacts")}">${alias.contacts}</td>
 <td data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${new Date(alias.used_at * 1000).toISOString()}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
+<td data-label="${t("keys.colCreated")}"><time datetime="${new Date(alias.created_at * 1000).toISOString()}" title="${when(alias.created_at, t.locale)}">${ago(alias.created_at, t.locale)}</time></td>
 </tr>`;
 })}
 </tbody></table>
@@ -802,7 +803,7 @@ export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: Cont
 ${noticeBox(notice)}
 <section>
 <h2 class="alias-cell"><code>${alias.address}</code>${copyButton(t, alias.address)}</h2>
-<p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)}</p>
+<p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)} · ${t("keys.colCreated")} <time datetime="${new Date(alias.created_at * 1000).toISOString()}">${when(alias.created_at, t.locale)}</time></p>
 <form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <label for="note">${t("alias.note")}</label>
 <div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" /><noscript><button>${t("common.save")}</button></noscript></div>
