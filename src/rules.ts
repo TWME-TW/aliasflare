@@ -267,8 +267,12 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 		const actions = kind === "replies" ? rule.actions.filter((action) => REPLY_ACTIONS.includes(action.type)) : rule.actions;
 		if (!actions.length) continue;
 		const hasBlock = actions.some((action) => action.type === "block");
-		// Block rules test every candidate sender (envelope and From), so spoofing From cannot evade a block.
-		const blockMatched = hasBlock && candidates.some((sender) => ruleMatches(rule, { ...message, sender }));
+		// Block rules test every candidate sender (envelope and From), so spoofing From cannot evade a
+		// block. A rule with a negative sender condition ("does not end with @work.test") has to hold for
+		// all of them: a newsletter's bounce address must not block mail whose From the rule allows.
+		const negativeSender = rule.conditions.some((condition) => condition.type === "sender" && (condition.match.startsWith("is not") || condition.match.startsWith("does not")));
+		const blockMatched =
+			hasBlock && (negativeSender ? candidates.every((sender) => ruleMatches(rule, { ...message, sender })) : candidates.some((sender) => ruleMatches(rule, { ...message, sender })));
 		// A spoofed From address must not trigger positive sender rules (forwardTo, displayFrom, subject, banner).
 		const hasSenderCondition = rule.conditions.some((condition) => condition.type === "sender");
 		const normalMatched = !(message.spoofed && hasSenderCondition) && ruleMatches(rule, message);

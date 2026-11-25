@@ -285,7 +285,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "Kaynaktaki ID",
 	"set.appSettings": "Uygulamaların ayarları değiştirmesine izin ver",
-	"set.appSettingsHelp": "SimpleLogin ve addy.io uygulamaları, kendi ayar ekranlarında gösterilenleri değiştirebilir: takma ad biçimi, varsayılan takma ad alan adı, gönderen adresi biçimi, varsayılan yönlendirme adresi ve engelleme listesi. Bağlantı, API ve anahtar ayarları yalnızca buradan değiştirilebilir.",
+	"set.appSettingsHelp": "SimpleLogin ve addy.io uygulamaları, kendi ayar ekranlarında gösterilenleri değiştirebilir: takma ad biçimi, varsayılan takma ad alan adı, gönderen adresi biçimi, varsayılan yönlendirme adresi, engelleme listesi ve kurallar. Bağlantı, API ve anahtar ayarları yalnızca buradan değiştirilebilir.",
 	"set.uiLanguage": "Panel dili",
 	"set.uiLanguageHelp": "Bu tarayıcıda saklanır. Siz bir dil seçene kadar panel, tarayıcınızın dilini kullanır.",
 	"dash.search": "Takma adlarda ara",

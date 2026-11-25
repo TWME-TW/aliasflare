@@ -269,6 +269,30 @@ describe("3. Forward & reply security: auto-responder loop, >20 From passThrough
 		expect(sent).toHaveLength(1);
 		expect((sent[0]!.from as { name: string }).name).not.toBe("Trusted VIP");
 	});
+
+	it("does not let a bounce address trip a block rule whose negative sender condition the From meets", async () => {
+		const { key } = await createApiKey(db, "app", "apps");
+		await app.fetch(
+			new Request(`${ORIGIN}/api/v1/rules`, {
+				method: "POST",
+				headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ name: "Only work", conditions: [{ type: "sender", match: "does not end with", values: ["@work.test"] }], actions: [{ type: "block" }] }),
+			}),
+			env,
+		);
+		const raw = `${PASS.replace("home.test", "work.test")}\r\nFrom: boss@work.test\r\nTo: shop@a.test\r\nSubject: Hi\r\nMessage-ID: <nb1@work.test>\r\n\r\nBody\r\n`;
+		await worker.email!(
+			{ to: "shop@a.test", from: "bounce-123@mailer.test", headers: new Headers({ From: "boss@work.test" }), raw: new Response(raw).body, rawSize: raw.length, forward: async () => {}, setReject: () => {} } as never,
+			env,
+		);
+		expect(sent).toHaveLength(1);
+		const raw2 = `From: someone@other.test\r\nTo: shop@a.test\r\nSubject: Hi\r\nMessage-ID: <nb2@other.test>\r\n\r\nBody\r\n`;
+		await worker.email!(
+			{ to: "shop@a.test", from: "someone@other.test", headers: new Headers({ From: "someone@other.test" }), raw: new Response(raw2).body, rawSize: raw2.length, forward: async () => {}, setReject: () => {} } as never,
+			env,
+		);
+		expect(sent).toHaveLength(1);
+	});
 });
 
 describe("4. API authorization (appSettings on rules), bulk efficiency, labels, and MCP", () => {
@@ -416,15 +440,24 @@ describe("5. Outbound redaction, non-JSON 200 error, custom header control chars
 		).rejects.toSatisfy((err: Error) => !err.message.includes(secret) && !err.message.includes(authB64));
 	});
 
-	it("fails on HTTP 200 non-JSON from JSON providers, rejects control chars in customHeaders, and rejects invalid mailbabyOrderId on /connection", async () => {
-		vi.stubGlobal("fetch", async () => new Response("<html>WAF blocked</html>", { status: 200 }));
+	it("accepts a 2xx non-JSON answer (but not where 200 can mean unsent), rejects control chars in customHeaders, and rejects invalid mailbabyOrderId on /connection", async () => {
+		vi.stubGlobal("fetch", async () => new Response("<html>accepted</html>", { status: 200 }));
+		// The provider accepted it: bouncing would make the owner send it twice.
 		await expect(
 			sendOutbound(
 				env,
 				{ outboundProvider: "resend", outboundApiKey: "re_123456", outboundOptions: normalizeOutboundOptions({}) } as AppConfig,
 				{ from: "shop@a.test", to: "bob@store.test", subject: "Hi", text: "Hi" },
 			),
-		).rejects.toThrow(/non-JSON/i);
+		).resolves.toEqual({ messageId: undefined });
+		// Mail.baby's 200 carries a status: without it the message is not taken as sent.
+		await expect(
+			sendOutbound(
+				env,
+				{ outboundProvider: "mailbaby", outboundApiKey: "mb_123456", outboundOptions: normalizeOutboundOptions({}) } as AppConfig,
+				{ from: "shop@a.test", to: "bob@store.test", subject: "Hi", text: "Hi" },
+			),
+		).rejects.toThrow(/Mail\.baby did not send/);
 
 		expect(() => parseHeaderLines("X-Test: ok\rvalue")).toThrow(/control characters/i);
 		expect(normalizeOutboundOptions({ mailbabyOrderId: "0" }).mailbabyOrderId).toBe("");
@@ -444,9 +477,9 @@ describe("5. Outbound redaction, non-JSON 200 error, custom header control chars
 			if (path.endsWith("/email/routing/dns") && method === "POST" && init.body) {
 				return Response.json({ success: false, errors: [{ code: 1001, message: "MX record already exists" }] }, { status: 409 });
 			}
-			if (path.endsWith("/email/routing/dns") && method === "GET" && parsed.searchParams.get("subdomain") === "r.a.test") {
+			if (path.endsWith("/dns_records") && method === "GET" && parsed.searchParams.get("name") === "r.a.test") {
 				// Conflicting non-Cloudflare MX record on subdomain
-				return ok([{ type: "MX", content: "mail.other.example" }]);
+				return ok([{ type: "MX", content: "route1.mx.cloudflare.net" }, { type: "MX", content: "mail.other.example" }]);
 			}
 			if (path.endsWith("/email/routing/rules") && method === "GET") {
 				return ok([{ id: "r1", enabled: true, matchers: [{ type: "literal", field: "to", value: "reply@r.a.test" }], actions: [{ type: "worker", value: ["other-worker"] }] }]);

@@ -300,7 +300,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID kwenye chanzo",
 	"set.appSettings": "Ruhusu programu zibadilishe mipangilio",
-	"set.appSettingsHelp": "Programu za SimpleLogin na addy.io zinaweza kubadilisha kinachoonyeshwa kwenye skrini zao za mipangilio: muundo wa lakabu, kikoa chaguomsingi cha lakabu, muundo wa anwani ya mtumaji, anwani chaguomsingi ya kutuma na orodha ya waliozuiwa. Mipangilio ya muunganisho, API na funguo inaweza kubadilishwa hapa tu.",
+	"set.appSettingsHelp": "Programu za SimpleLogin na addy.io zinaweza kubadilisha kinachoonyeshwa kwenye skrini zao za mipangilio: muundo wa lakabu, kikoa chaguomsingi cha lakabu, muundo wa anwani ya mtumaji, anwani chaguomsingi ya kutuma, orodha ya waliozuiwa na sheria. Mipangilio ya muunganisho, API na funguo inaweza kubadilishwa hapa tu.",
 	"set.uiLanguage": "Lugha ya dashibodi",
 	"set.uiLanguageHelp": "Huhifadhiwa kwenye kivinjari hiki. Hadi uchague, dashibodi hufuata lugha ya kivinjari chako.",
 	"dash.search": "Tafuta lakabu",

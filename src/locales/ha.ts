@@ -300,7 +300,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID a tushe",
 	"set.appSettings": "Bar manhajoji su canja saituna",
-	"set.appSettingsHelp": "Manhajojin SimpleLogin da addy.io na iya canja abin da shafukan saitunansu ke nunawa: tsarin laƙabi, domain na laƙabi na asali, tsarin adireshin mai aikawa, adireshin tura saƙo na asali da jerin da aka toshe. Saitunan haɗi, API da maɓallai a nan kaɗai ake iya canja su.",
+	"set.appSettingsHelp": "Manhajojin SimpleLogin da addy.io na iya canja abin da shafukan saitunansu ke nunawa: tsarin laƙabi, domain na laƙabi na asali, tsarin adireshin mai aikawa, adireshin tura saƙo na asali, jerin da aka toshe da dokoki. Saitunan haɗi, API da maɓallai a nan kaɗai ake iya canja su.",
 	"set.uiLanguage": "Harshen dashboard",
 	"set.uiLanguageHelp": "Ana adana shi a wannan browser. Har sai ka zaɓa, dashboard yana bin harshen browser ɗinka.",
 	"dash.search": "Nemo laƙabi",

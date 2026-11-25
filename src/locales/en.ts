@@ -302,7 +302,7 @@ export const en = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID at the source",
 	"set.appSettings": "Let apps change settings",
-	"set.appSettingsHelp": "SimpleLogin and addy.io apps may change what their settings screens show: the alias format, the default alias domain, the sender address format, the default forwarding address and the blocklist. Connection, API and key settings can only be changed here.",
+	"set.appSettingsHelp": "SimpleLogin and addy.io apps may change what their settings screens show: the alias format, the default alias domain, the sender address format, the default forwarding address, the blocklist and rules. Connection, API and key settings can only be changed here.",
 	"set.uiLanguage": "Dashboard language",
 	"set.uiLanguageHelp": "Saved in this browser. Until you choose one, the dashboard follows your browser's language.",
 	"dash.search": "Search aliases",

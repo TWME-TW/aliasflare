@@ -285,7 +285,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID bij de bron",
 	"set.appSettings": "Apps instellingen laten wijzigen",
-	"set.appSettingsHelp": "Apps van SimpleLogin en addy.io mogen wijzigen wat hun instellingenschermen tonen: de aliasindeling, het standaard aliasdomein, de indeling van het afzenderadres, het standaard doorstuuradres en de blokkeerlijst. Instellingen voor verbinding, API en sleutels kunnen alleen hier worden gewijzigd.",
+	"set.appSettingsHelp": "Apps van SimpleLogin en addy.io mogen wijzigen wat hun instellingenschermen tonen: de aliasindeling, het standaard aliasdomein, de indeling van het afzenderadres, het standaard doorstuuradres, de blokkeerlijst en de regels. Instellingen voor verbinding, API en sleutels kunnen alleen hier worden gewijzigd.",
 	"set.uiLanguage": "Taal van het dashboard",
 	"set.uiLanguageHelp": "Opgeslagen in deze browser. Zolang je er geen kiest, volgt het dashboard de taal van je browser.",
 	"dash.search": "Aliassen zoeken",

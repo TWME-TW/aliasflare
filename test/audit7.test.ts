@@ -247,7 +247,7 @@ describe("4. SSRF, Mailflare JMAP safety, and Cloudflare setup hardening", () =>
 				return Response.json({ success: false, errors: [{ code: 81057, message: "MX record already exists" }] }, { status: 400 });
 			}
 			if (path.endsWith("/email/routing") && (init.method ?? "GET") === "GET") return Response.json({ success: true, result: { enabled: true, status: "ready" } });
-			if (path.endsWith("/email/routing/dns") && (init.method ?? "GET") === "GET") return Response.json({ success: true, result: [{ type: "MX", content: "route1.mx.cloudflare.net" }] });
+			if (path.endsWith("/dns_records") && (init.method ?? "GET") === "GET") return Response.json({ success: true, result: [{ type: "MX", content: "route1.mx.cloudflare.net" }] });
 			if (path.endsWith("/email/routing/rules") && (init.method ?? "GET") === "GET") return Response.json({ success: true, result: [] });
 			return Response.json({ success: true, result: {} });
 		});

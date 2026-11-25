@@ -300,7 +300,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "원본의 ID",
 	"set.appSettings": "앱의 설정 변경 허용",
-	"set.appSettingsHelp": "SimpleLogin 및 addy.io 앱은 설정 화면에 표시되는 항목을 변경할 수 있습니다: 별칭 형식, 기본 별칭 도메인, 보내는 사람 주소 형식, 기본 전달 주소, 차단 목록. 연결, API, 키 설정은 여기에서만 변경할 수 있습니다.",
+	"set.appSettingsHelp": "SimpleLogin 및 addy.io 앱은 설정 화면에 표시되는 항목을 변경할 수 있습니다: 별칭 형식, 기본 별칭 도메인, 보내는 사람 주소 형식, 기본 전달 주소, 차단 목록, 규칙. 연결, API, 키 설정은 여기에서만 변경할 수 있습니다.",
 	"set.uiLanguage": "대시보드 언어",
 	"set.uiLanguageHelp": "이 브라우저에 저장됩니다. 선택하기 전까지 대시보드는 브라우저 언어를 따릅니다.",
 	"dash.search": "별칭 검색",

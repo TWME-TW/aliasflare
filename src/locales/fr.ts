@@ -300,7 +300,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID à la source",
 	"set.appSettings": "Autoriser les applications à modifier les paramètres",
-	"set.appSettingsHelp": "Les applications SimpleLogin et addy.io peuvent modifier ce que montrent leurs écrans de paramètres : le format des alias, le domaine d'alias par défaut, le format de l'adresse de l'expéditeur, l'adresse de transfert par défaut et la liste de blocage. Les paramètres de connexion, d'API et de clés ne peuvent être modifiés qu'ici.",
+	"set.appSettingsHelp": "Les applications SimpleLogin et addy.io peuvent modifier ce que montrent leurs écrans de paramètres : le format des alias, le domaine d'alias par défaut, le format de l'adresse de l'expéditeur, l'adresse de transfert par défaut, la liste de blocage et les règles. Les paramètres de connexion, d'API et de clés ne peuvent être modifiés qu'ici.",
 	"set.uiLanguage": "Langue du tableau de bord",
 	"set.uiLanguageHelp": "Enregistrée dans ce navigateur. Tant que vous n'en choisissez pas une, le tableau de bord suit la langue de votre navigateur.",
 	"dash.search": "Rechercher des alias",

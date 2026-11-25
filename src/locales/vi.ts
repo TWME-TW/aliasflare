@@ -285,7 +285,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID ở nguồn",
 	"set.appSettings": "Cho phép ứng dụng thay đổi cài đặt",
-	"set.appSettingsHelp": "Các ứng dụng SimpleLogin và addy.io có thể thay đổi những gì màn hình cài đặt của chúng hiển thị: định dạng bí danh, tên miền bí danh mặc định, định dạng địa chỉ người gửi, địa chỉ chuyển tiếp mặc định và danh sách chặn. Cài đặt kết nối, API và khóa chỉ có thể thay đổi tại đây.",
+	"set.appSettingsHelp": "Các ứng dụng SimpleLogin và addy.io có thể thay đổi những gì màn hình cài đặt của chúng hiển thị: định dạng bí danh, tên miền bí danh mặc định, định dạng địa chỉ người gửi, địa chỉ chuyển tiếp mặc định, danh sách chặn và quy tắc. Cài đặt kết nối, API và khóa chỉ có thể thay đổi tại đây.",
 	"set.uiLanguage": "Ngôn ngữ bảng điều khiển",
 	"set.uiLanguageHelp": "Được lưu trong trình duyệt này. Cho đến khi bạn chọn, bảng điều khiển sẽ theo ngôn ngữ của trình duyệt.",
 	"dash.search": "Tìm bí danh",

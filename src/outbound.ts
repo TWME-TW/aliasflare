@@ -163,13 +163,11 @@ async function request(
 	if (response.status >= 300) {
 		throw new OutboundError(`${new URL(url).hostname} answered ${response.status}: ${redact(text, secret).slice(0, 300)}`);
 	}
-	if (raw === null) {
-		throw new OutboundError(`${new URL(url).hostname} answered ${response.status} with a response larger than 64 KiB`);
-	}
-	if (expectJson && invalidJson) {
-		throw new OutboundError(`${new URL(url).hostname} answered ${response.status} with non-JSON: ${redact(text, secret).slice(0, 300)}`);
-	}
-	return { status: response.status, json };
+	// A 2xx answer means the provider accepted the message, so an unreadable body (not JSON, or over
+	// 64 KiB) is not a failure: bouncing would make the owner send a reply that already went out.
+	// It only has no message id; providers whose 200 can still mean "not sent" (SMTP2GO, Mail.baby)
+	// check their answer's fields and fail when those are missing.
+	return { status: response.status, json: raw === null || (expectJson && invalidJson) ? null : json };
 }
 
 async function viaResend(apiKey: string, message: OutboundMessage): Promise<string | undefined> {

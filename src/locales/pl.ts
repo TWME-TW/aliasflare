@@ -285,7 +285,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "ID w źródle",
 	"set.appSettings": "Pozwól aplikacjom zmieniać ustawienia",
-	"set.appSettingsHelp": "Aplikacje SimpleLogin i addy.io mogą zmieniać to, co pokazują ich ekrany ustawień: format aliasów, domyślną domenę aliasów, format adresu nadawcy, domyślny adres przekazywania i listę blokad. Ustawienia połączenia, API i kluczy można zmieniać tylko tutaj.",
+	"set.appSettingsHelp": "Aplikacje SimpleLogin i addy.io mogą zmieniać to, co pokazują ich ekrany ustawień: format aliasów, domyślną domenę aliasów, format adresu nadawcy, domyślny adres przekazywania, listę blokad i reguły. Ustawienia połączenia, API i kluczy można zmieniać tylko tutaj.",
 	"set.uiLanguage": "Język panelu",
 	"set.uiLanguageHelp": "Zapisany w tej przeglądarce. Dopóki go nie wybierzesz, panel używa języka Twojej przeglądarki.",
 	"dash.search": "Szukaj aliasów",

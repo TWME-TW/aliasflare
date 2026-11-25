@@ -279,7 +279,7 @@ const dictionary: Dictionary = {
 	"hist.pgp": "PGP",
 	"hist.sourceId": "移行元の ID",
 	"set.appSettings": "アプリによる設定の変更を許可",
-	"set.appSettingsHelp": "SimpleLogin や addy.io のアプリは、設定画面に表示される項目を変更できます：エイリアスの形式、デフォルトのエイリアスドメイン、送信者アドレスの形式、デフォルトの転送先アドレス、ブロックリスト。接続、API、キーの設定はここでのみ変更できます。",
+	"set.appSettingsHelp": "SimpleLogin や addy.io のアプリは、設定画面に表示される項目を変更できます：エイリアスの形式、デフォルトのエイリアスドメイン、送信者アドレスの形式、デフォルトの転送先アドレス、ブロックリスト、ルール。接続、API、キーの設定はここでのみ変更できます。",
 	"set.uiLanguage": "ダッシュボードの言語",
 	"set.uiLanguageHelp": "このブラウザーに保存されます。選択するまでは、ダッシュボードはブラウザーの言語に従います。",
 	"dash.search": "エイリアスを検索",

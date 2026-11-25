@@ -108,15 +108,18 @@ async function routingEnabled(token: string, zoneId: string): Promise<boolean> {
 		return false;
 	}
 }
-/** True when Cloudflare reports Email Routing MX records are configured on the subdomain. */
+/**
+ * True when the subdomain's MX records in the zone all point at Email Routing. (GET
+ * /email/routing/dns lists the records Email Routing needs, not the ones that exist, so it cannot
+ * tell; the token has DNS edit, which reads them.) Another mail service's MX makes this false.
+ */
 async function subdomainRoutingEnabled(token: string, zoneId: string, domain: string): Promise<boolean> {
 	try {
-		const result = await cf<{ type?: string; content?: string }[] | { records?: { type?: string; content?: string }[] }>(
+		const records = await cf<{ type?: string; content?: string }[]>(
 			token,
-			`/zones/${encodeURIComponent(zoneId)}/email/routing/dns?subdomain=${encodeURIComponent(domain)}`,
+			`/zones/${encodeURIComponent(zoneId)}/dns_records?type=MX&name=${encodeURIComponent(domain)}&per_page=50`,
 		);
-		const records = Array.isArray(result) ? result : (result?.records ?? []);
-		return records.some((record) => record.type?.toUpperCase() === "MX" && /\.mx\.cloudflare\.net\.?$/i.test(record.content ?? ""));
+		return Array.isArray(records) && records.length > 0 && records.every((record) => /\.mx\.cloudflare\.net\.?$/i.test(record.content ?? ""));
 	} catch {
 		return false;
 	}
