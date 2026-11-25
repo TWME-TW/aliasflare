@@ -91,7 +91,7 @@ export const PASSKEY_SCRIPT = `
       const messages = form.querySelector("[data-msg-unsupported]")?.dataset || {};
       if (!window.PublicKeyCredential) return show(form, messages.msgUnsupported || "This browser does not support passkeys.");
       const button = form.querySelector("button");
-      if (button) button.disabled = true;
+      if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
       try {
         const flow = form.dataset.passkey;
         if (flow === "login") await login();
@@ -101,7 +101,7 @@ export const PASSKEY_SCRIPT = `
         const cancelled = error && (error.name === "NotAllowedError" || error.name === "AbortError");
         show(form, cancelled ? (messages.msgCancelled || "The passkey prompt was cancelled or timed out.") : ((error && error.message) || String(error)));
       } finally {
-        if (button) button.disabled = false;
+        if (button) { button.disabled = false; button.removeAttribute("aria-busy"); }
       }
     });
   }
@@ -115,31 +115,77 @@ export const APP_SCRIPT = `(() => {
     select.addEventListener("change", () => select.form && select.form.requestSubmit());
   }
 
-  // The sending provider's own fields show as soon as it is chosen.
+  // The sending provider's own fields and plan/provider notices stay in sync as options change.
   const provider = document.getElementById("outboundProvider");
+  const workersPlan = document.getElementById("workersPlan");
   if (provider) {
-    const show = () => {
-      for (const group of document.querySelectorAll(".provider-fields")) group.hidden = group.dataset.provider !== provider.value;
+    const providerKey = document.querySelector("[data-provider-key]");
+    const freeNotice = document.querySelector("[data-free-notice]");
+    const brevoNotice = document.querySelector("[data-brevo-notice]");
+    const syncConnection = () => {
+      const value = provider.value;
+      for (const group of document.querySelectorAll(".provider-fields")) {
+        const active = group.dataset.provider === value;
+        group.hidden = !active;
+        const fixed = group.dataset.fixed === "1";
+        for (const el of group.querySelectorAll("input, select, textarea")) {
+          el.disabled = fixed || !active;
+        }
+      }
+      if (providerKey) providerKey.hidden = value === "cloudflare";
+      if (freeNotice && workersPlan) freeNotice.hidden = !(workersPlan.value === "free" && value === "cloudflare");
+      if (brevoNotice) brevoNotice.hidden = value !== "brevo";
     };
-    provider.addEventListener("change", show);
+    provider.addEventListener("change", syncConnection);
+    if (workersPlan) workersPlan.addEventListener("change", syncConnection);
+    syncConnection();
   }
 
-  // Import forms carry the domains chosen in the shared box above them.
+  // Forward method direct-mode notice updates immediately on Settings.
+  const forwardMethod = document.getElementById("forwardMethod");
+  const directNote = document.querySelector("[data-direct-note]");
+  if (forwardMethod && directNote) {
+    forwardMethod.addEventListener("change", () => { directNote.hidden = forwardMethod.value !== "direct"; });
+  }
+
+  // Rule editor: only show the action value input for actions that take one, and only attach
+  // forwarding-address suggestions for "forwardTo".
+  const NO_VALUE_ACTIONS = new Set(["", "block", "removeAttachments", "banner"]);
+  for (const select of document.querySelectorAll("select[data-act-type]")) {
+    const row = select.closest(".row");
+    const input = row && row.querySelector("[data-act-value]");
+    if (!input) continue;
+    const syncAction = () => {
+      const type = select.value;
+      const none = NO_VALUE_ACTIONS.has(type);
+      input.hidden = none;
+      input.disabled = none;
+      if (type === "forwardTo") input.setAttribute("list", "rule-destinations");
+      else input.removeAttribute("list");
+    };
+    select.addEventListener("change", syncAction);
+    syncAction();
+  }
+
+  // Import and long-running setup forms carry shared domains (when present) and prevent double clicks.
   const domainSource = document.querySelector("[data-domains-source]");
-  const importForms = [...document.querySelectorAll("form[data-import]")];
-  for (const form of importForms) {
+  const busyForms = [...document.querySelectorAll("form[data-import], form[data-busy]")];
+  for (const form of busyForms) {
     form.addEventListener("submit", () => {
       const hidden = form.querySelector("[data-domains]");
       if (hidden && domainSource) hidden.value = domainSource.value;
-      const button = form.querySelector("button");
-      if (button) button.disabled = true;
+      const button = form.querySelector("button.primary, button[type=submit], button");
+      if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
     });
   }
-  if (importForms.length) {
+  if (busyForms.length) {
     window.addEventListener("pageshow", () => {
-      for (const form of importForms) {
-        const button = form.querySelector("button");
-        if (button) button.disabled = false;
+      for (const form of busyForms) {
+        const button = form.querySelector("button.primary, button[type=submit], button");
+        if (button && !button.hasAttribute("data-stay-disabled")) {
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+        }
       }
     });
   }
@@ -221,45 +267,77 @@ export const APP_SCRIPT = `(() => {
     const action = bulk.querySelector("select[name=action]");
     const value = bulk.querySelector("[data-bulk-value]");
     const refresh = () => {
-      const checked = picks().filter((box) => box.checked).length;
+      const list = picks();
+      const checked = list.filter((box) => box.checked).length;
       if (counter) counter.textContent = counter.dataset.template.replace("{count}", String(checked));
+      bulk.toggleAttribute("data-empty", checked === 0);
       if (all) {
-        all.checked = checked > 0 && checked === picks().length;
-        all.indeterminate = checked > 0 && checked < picks().length;
+        all.checked = checked > 0 && checked === list.length;
+        all.indeterminate = checked > 0 && checked < list.length;
       }
     };
     const labelMenu = bulk.querySelector("[data-bulk-labels]");
-    const showValue = () => {
+    const labelFilter = labelMenu && labelMenu.querySelector("[data-label-filter]");
+    const showValue = (fromUser) => {
       const option = action && action.selectedOptions[0];
-      if (value) value.hidden = !(option && option.hasAttribute("data-needs-value"));
+      if (value) {
+        const needs = !!(option && option.hasAttribute("data-needs-value"));
+        value.hidden = !needs;
+        if (needs) {
+          value.type = action.value === "destination" ? "email" : "text";
+          if (fromUser) value.focus();
+        }
+      }
       if (labelMenu) {
-        labelMenu.hidden = !(option && option.hasAttribute("data-needs-labels"));
-        if (labelMenu.hidden) labelMenu.open = false;
-        else labelMenu.open = true;
+        const needs = !!(option && option.hasAttribute("data-needs-labels"));
+        labelMenu.hidden = !needs;
+        if (!needs) labelMenu.open = false;
+        else if (fromUser) {
+          labelMenu.open = true;
+          if (labelFilter) labelFilter.focus();
+        }
       }
     };
     if (labelMenu) {
       const summary = labelMenu.querySelector("summary");
       const boxes = [...labelMenu.querySelectorAll("input[name=labels]")];
-      const filter = labelMenu.querySelector("[data-label-filter]");
       const count = () => {
         const n = boxes.filter((box) => box.checked).length;
         summary.textContent = n ? summary.dataset.template.replace("{count}", String(n)) : summary.dataset.empty;
       };
       for (const box of boxes) box.addEventListener("change", count);
-      if (filter) filter.addEventListener("input", () => {
-        const q = filter.value.trim().toLowerCase();
-        for (const box of boxes) box.closest("label").hidden = !!q && !box.closest("label").dataset.name.includes(q);
-      });
+      if (labelFilter) {
+        labelFilter.addEventListener("input", () => {
+          const q = labelFilter.value.trim().toLowerCase();
+          for (const box of boxes) box.closest("label").hidden = !!q && !box.closest("label").dataset.name.includes(q);
+        });
+        labelMenu.addEventListener("toggle", () => { if (labelMenu.open) labelFilter.focus(); });
+      }
       // A click elsewhere or Escape closes the list, keeping what was ticked.
       document.addEventListener("click", (event) => { if (labelMenu.open && !labelMenu.contains(event.target)) labelMenu.open = false; });
       labelMenu.addEventListener("keydown", (event) => { if (event.key === "Escape" && labelMenu.open) { labelMenu.open = false; summary.focus(); } });
       count();
     }
     if (all) all.addEventListener("change", () => { for (const box of picks()) box.checked = all.checked; refresh(); });
-    for (const box of picks()) box.addEventListener("change", refresh);
-    if (action) action.addEventListener("change", showValue);
-    showValue();
+    let lastPicked = null;
+    for (const box of picks()) {
+      box.addEventListener("click", (event) => {
+        if (event.shiftKey && lastPicked && lastPicked !== box) {
+          const list = picks();
+          const a = list.indexOf(lastPicked);
+          const b = list.indexOf(box);
+          if (a !== -1 && b !== -1) {
+            const [start, end] = a < b ? [a, b] : [b, a];
+            for (let i = start; i <= end; i++) list[i].checked = box.checked;
+          }
+        }
+        lastPicked = box;
+        refresh();
+      });
+      box.addEventListener("change", refresh);
+    }
+    if (action) action.addEventListener("change", () => showValue(true));
+    showValue(false);
     refresh();
     bulk.addEventListener("submit", (event) => {
       if (!picks().some((box) => box.checked)) {
@@ -298,12 +376,16 @@ export const APP_SCRIPT = `(() => {
       if (!confirm(form.dataset.confirm)) event.preventDefault();
     });
   }
+  const copyTimers = new WeakMap();
   for (const button of document.querySelectorAll("button[data-copy]")) {
     if (!navigator.clipboard) continue;
     button.hidden = false;
     button.addEventListener("click", async () => {
       try {
         await navigator.clipboard.writeText(button.dataset.copy);
+        clearTimeout(copyTimers.get(button));
+        button.dataset.copied = "1";
+        copyTimers.set(button, setTimeout(() => { delete button.dataset.copied; }, 1600));
         show(button.dataset.msgCopied, true);
       } catch {
         show(button.dataset.copy, false);
@@ -327,12 +409,23 @@ export const APP_SCRIPT = `(() => {
       params.set(name, val);
       lastSent = params.toString();
     };
-    const save = () => {
+    const save = (event) => {
+      // Switching unsubscribe behavior to "redirect_contact" before filling the redirect address
+      // would fail immediately; move focus to the address field so the user can enter it first.
+      const target = event && event.target;
+      if (target && (target.id === "unsubscribeBehavior" || target.id === "unsubscribeFallback") && target.value === "redirect_contact") {
+        const redirect = form.querySelector("#unsubscribeRedirect");
+        if (redirect && !redirect.value.trim()) {
+          redirect.focus();
+          return;
+        }
+      }
       const body = new URLSearchParams(new FormData(form)).toString();
       // Enter in a field fires both submit and change: the same values are sent once.
       if (body === lastSent) return;
       lastSent = body;
       const id = ++latest;
+      form.dataset.saving = "1";
       queue = queue.then(() => send(id, body));
     };
     const send = async (id, body) => {
@@ -347,6 +440,7 @@ export const APP_SCRIPT = `(() => {
         if (result && result.theme) applyTheme(result.theme);
         if (result && result.reload) pendingReload = true;
         if (id !== latest) return; // a newer change is already on its way
+        delete form.dataset.saving;
         const ok = !!(response.ok && result && result.ok);
         if (ok && pendingReload) { location.reload(); return; }
         if (!ok) {
@@ -356,6 +450,7 @@ export const APP_SCRIPT = `(() => {
         show((result && (result.message || result.error)) || form.dataset.msgFailed, ok);
       } catch {
         if (id === latest) {
+          delete form.dataset.saving;
           lastSent = null;
           show(form.dataset.msgFailed, false);
         }
@@ -364,6 +459,9 @@ export const APP_SCRIPT = `(() => {
     autosaveForms.push({ form, getLastSent: () => lastSent });
     form.addEventListener("change", save);
     form.addEventListener("submit", (event) => { event.preventDefault(); save(); });
+    form.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && event.target && event.target.matches("input[type=text], input[type=email]")) event.target.blur();
+    });
   }
   if (autosaveForms.length) {
     // One pagehide listener flushes any note currently being typed before the page is left.
@@ -379,8 +477,35 @@ export const APP_SCRIPT = `(() => {
     input.addEventListener("focus", () => input.select());
     input.focus();
   }
-  for (const chip of document.querySelectorAll("[data-colour]")) {
-    if (/^#[0-9a-f]{6}$/i.test(chip.dataset.colour)) chip.style.setProperty("--lc", chip.dataset.colour);
+  // Search ergonomics: clearing with the native x button refreshes results; "/" focuses search.
+  const searchInput = document.querySelector('form[role="search"] input[type="search"]');
+  if (searchInput) {
+    searchInput.addEventListener("search", () => {
+      if (searchInput.value === "" && searchInput.defaultValue !== "" && searchInput.form) searchInput.form.requestSubmit();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return;
+      const active = document.activeElement;
+      if (active && (active.matches("input, textarea, select") || active.isContentEditable)) return;
+      event.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    });
+  }
+  // Show timestamps in the browser's own timezone instead of UTC.
+  const times = document.querySelectorAll("time[datetime]");
+  if (times.length) {
+    try {
+      const fmt = new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: "medium", timeStyle: "short" });
+      for (const el of times) {
+        const date = new Date(el.getAttribute("datetime") || "");
+        if (Number.isNaN(date.getTime())) continue;
+        const text = fmt.format(date);
+        const relative = el.hasAttribute("title");
+        el.title = text;
+        if (!relative) el.textContent = text;
+      }
+    } catch {}
   }
   // On a phone the menu is one row that scrolls sideways: keep it where it was from page to page,
   // and bring the current page's link into view when it would be hidden.

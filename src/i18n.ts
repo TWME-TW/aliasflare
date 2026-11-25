@@ -145,6 +145,52 @@ export function isNoticeKey(value: unknown): value is MessageKey {
 	return typeof value === "string" && value.startsWith("notice.") && Object.hasOwn(en, value);
 }
 
+const ERROR_NOTICE_KEYS = new Set<MessageKey>([
+	"notice.badDestination",
+	"notice.destinationOnReverse",
+	"notice.badMailflareUrl",
+	"notice.badPublicUrl",
+	"notice.badBlock",
+	"notice.bulkNoLabels",
+	"notice.lastPasskey",
+	"notice.badMode",
+	"notice.loop",
+	"notice.badContact",
+	"notice.badAliasDomain",
+	"notice.badWorkerName",
+	"notice.needCloudflareToken",
+	"notice.bulkBad",
+	"notice.newExists",
+	"notice.newBadPrefix",
+	"notice.newBadDomain",
+	"notice.newFailed",
+	"notice.needAliasDomains",
+	"notice.badProvider",
+	"notice.freeSetupLimit",
+	"notice.contactMissing",
+	"notice.tooManyDomains",
+	"notice.setupCodeWait",
+	"notice.aliasMissing",
+	"notice.unsubRedirectMissing",
+	"notice.badSmtp",
+	"notice.badSes",
+	"notice.badCustom",
+	"notice.labelName",
+	"notice.labelTaken",
+	"notice.labelLimit",
+	"notice.labelMissing",
+	"notice.ruleInvalid",
+	"notice.ruleLimit",
+	"notice.ruleMissing",
+	"notice.ruleForwardTo",
+	"notice.ruleUnsupported",
+]);
+
+/** True when a redirect notice reports a validation or action failure rather than success. */
+export function isErrorNoticeKey(value: unknown): boolean {
+	return isNoticeKey(value) && ERROR_NOTICE_KEYS.has(value);
+}
+
 export function translator(locale: Locale, theme: Theme = "system"): Translate {
 	const dictionary: Dictionary = LOCALES[locale];
 	const t = ((key: MessageKey, params?: Record<string, string | number>) => {
