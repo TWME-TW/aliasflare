@@ -333,7 +333,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "ಒಂದು ಕ್ರಿಯೆ ಮತ್ತು ಕನಿಷ್ಠ ಒಂದು ಅಲಿಯಾಸ್ ಆಯ್ಕೆಮಾಡಿ.",
 	"new.title": "ಹೊಸ ಅಲಿಯಾಸ್",
 	"new.prefix": "ಅಲಿಯಾಸ್ ಹೆಸರು",
-	"new.prefixPlaceholder": "ಹೆಸರು, ಉದಾ. shop (ಖಾಲಿ ಬಿಟ್ಟರೆ ಯಾದೃಚ್ಛಿಕ ಅಲಿಯಾಸ್ ರಚನೆಯಾಗುತ್ತದೆ)",
 	"new.domain": "ಅಲಿಯಾಸ್ ಡೊಮೇನ್",
 	"new.note": "ಟಿಪ್ಪಣಿ (ಐಚ್ಛಿಕ)",
 	"new.destination": "ಫಾರ್ವರ್ಡ್ ವಿಳಾಸ (ಡೀಫಾಲ್ಟ್‌ಗಾಗಿ ಖಾಲಿ ಬಿಡಿ)",
@@ -369,8 +368,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ಈಗಾಗಲೇ ಬೇರೆಡೆ ಮೇಲ್ ಕಳುಹಿಸುತ್ತಿರುವ catch-all ಅನ್ನು (ಉದಾಹರಣೆಗೆ Mailflare ಗೆ) ಈ Worker ಗೂ ತೋರಿಸಿ. ಅದು ಇಂದು ಅಲ್ಲಿಗೆ ಕಳುಹಿಸುವ ಮೇಲ್ ಬದಲಾಗಿ ಇಲ್ಲಿಗೆ ಬರುತ್ತದೆ. ಬೇರೆ ಮೇಲ್ ಬರುವ ಡೊಮೇನ್‌ಗಳಿಗೆ ಇದನ್ನು ಆಫ್ ಆಗಿಯೇ ಇಡಿ.",
 	"common.copy": "ನಕಲಿಸಿ",
 	"common.copied": "{value} ನಕಲಿಸಲಾಗಿದೆ",
-	"new.kind": "ಅಲಿಯಾಸ್ ಪ್ರಕಾರ",
-	"new.kind.custom": "ನೀವೇ ಆಯ್ಕೆ ಮಾಡುವ ಹೆಸರು",
 	"dash.perPage": "ಪ್ರತಿ ಪುಟಕ್ಕೆ {count}",
 	"dash.perPageLabel": "ಪ್ರತಿ ಪುಟಕ್ಕೆ ಸಾಲುಗಳು",
 	"dash.colLastUsed": "ಕೊನೆಯ ಬಳಕೆ",
@@ -398,6 +395,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (ಉಚಿತ: ದಿನಕ್ಕೆ 300)",
 	"conn.brevoLimits": "Brevo ಥ್ರೆಡ್ ಹೆಡರ್‌ಗಳನ್ನು ಅಥವಾ ಇನ್‌ಲೈನ್ ಚಿತ್ರಗಳನ್ನು ಸ್ವೀಕರಿಸುವುದಿಲ್ಲ: ಉತ್ತರವು ಸ್ವೀಕರಿಸುವವರಿಗೆ ಹೊಸ ಸಂಭಾಷಣೆಯಾಗಿ ಕಾಣಿಸಬಹುದು, ಇನ್‌ಲೈನ್ ಚಿತ್ರಗಳು ಲಗತ್ತುಗಳಾಗಿ ಬರುತ್ತವೆ, ಮತ್ತು Brevo ನಿರಾಕರಿಸುವ ಫೈಲ್ ಪ್ರಕಾರಗಳಿರುವ ಉತ್ತರಗಳು (ಉದಾಹರಣೆಗೆ .exe ಅಥವಾ .json) ನಿಮಗೆ ಹಿಂತಿರುಗಿಸಲಾಗುತ್ತದೆ.",
 	"alias.forwarding": "ಫಾರ್ವರ್ಡ್ ಮಾಡುವಿಕೆ",
+	"new.namePlaceholder": "ಹೆಸರು, shop ನಂತೆ",
+	"new.randomLabel": "ಅಥವಾ ಯಾದೃಚ್ಛಿಕವಾಗಿ ಒಂದನ್ನು ರಚಿಸಿ:",
+	"new.random.random_words": "ಪದಗಳು",
+	"new.random.random_characters": "ಯಾದೃಚ್ಛಿಕ ಅಕ್ಷರಗಳು",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

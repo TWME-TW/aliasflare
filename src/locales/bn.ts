@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "একটি কাজ এবং অন্তত একটি অ্যালিয়াস বেছে নিন।",
 	"new.title": "নতুন অ্যালিয়াস",
 	"new.prefix": "অ্যালিয়াসের নাম",
-	"new.prefixPlaceholder": "নাম, যেমন shop (খালি রাখলে এলোমেলো অ্যালিয়াস তৈরি হবে)",
 	"new.domain": "অ্যালিয়াস ডোমেইন",
 	"new.note": "নোট (ঐচ্ছিক)",
 	"new.destination": "ফরোয়ার্ডিং ঠিকানা (ডিফল্টের জন্য খালি রাখুন)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "যে catch-all ইতিমধ্যে অন্য কোথাও মেইল পাঠায় (যেমন Mailflare-এ), তাকেও এই Worker-এ নির্দেশ করুন। সে আজ যে মেইল সেখানে পাঠায়, তার বদলে তা এখানে আসবে। অন্য মেইল গ্রহণ করে এমন ডোমেইনের জন্য এটি বন্ধ রাখুন।",
 	"common.copy": "কপি করুন",
 	"common.copied": "{value} কপি করা হয়েছে",
-	"new.kind": "অ্যালিয়াসের ধরন",
-	"new.kind.custom": "আপনার পছন্দের একটি নাম",
 	"dash.perPage": "প্রতি পৃষ্ঠায় {count}",
 	"dash.perPageLabel": "প্রতি পৃষ্ঠায় সারি",
 	"dash.colLastUsed": "সর্বশেষ ব্যবহার",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (ফ্রি: দিনে 300)",
 	"conn.brevoLimits": "Brevo থ্রেড হেডার বা ইনলাইন ছবি গ্রহণ করে না: উত্তর প্রাপকের কাছে নতুন কথোপকথন হিসেবে দেখাতে পারে, ইনলাইন ছবি সংযুক্তি হিসেবে আসে, এবং Brevo যে ফাইল প্রকার প্রত্যাখ্যান করে (যেমন .exe বা .json) সেগুলোর উত্তর আপনার কাছে ফেরত পাঠানো হয়।",
 	"alias.forwarding": "ফরোয়ার্ডিং",
+	"new.namePlaceholder": "নাম, যেমন shop",
+	"new.randomLabel": "অথবা এলোমেলোভাবে একটি তৈরি করুন:",
+	"new.random.random_words": "শব্দ",
+	"new.random.random_characters": "র‍্যান্ডম অক্ষর",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

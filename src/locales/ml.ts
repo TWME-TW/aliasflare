@@ -333,7 +333,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "ഒരു പ്രവർത്തനവും കുറഞ്ഞത് ഒരു അപരനാമവും തിരഞ്ഞെടുക്കുക.",
 	"new.title": "പുതിയ അപരനാമം",
 	"new.prefix": "അപരനാമത്തിന്റെ പേര്",
-	"new.prefixPlaceholder": "പേര്, ഉദാ. shop (ശൂന്യമായി വിട്ടാൽ ക്രമരഹിതമായ അപരനാമം സൃഷ്ടിക്കും)",
 	"new.domain": "അപരനാമ ഡൊമെയ്ൻ",
 	"new.note": "കുറിപ്പ് (ഓപ്ഷണൽ)",
 	"new.destination": "ഫോർവേഡിംഗ് വിലാസം (ഡിഫോൾട്ടിന് ശൂന്യമായി വിടുക)",
@@ -369,8 +368,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ഇതിനകം മറ്റെവിടെയോ മെയിൽ അയയ്ക്കുന്ന catch-all-നെയും (ഉദാഹരണത്തിന് Mailflare-ലേക്ക്) ഈ Worker-ലേക്ക് നയിക്കുക. അത് ഇന്ന് അവിടേക്ക് അയയ്ക്കുന്ന മെയിൽ പകരം ഇവിടെ എത്തും. മറ്റ് മെയിൽ ലഭിക്കുന്ന ഡൊമെയ്‌നുകൾക്ക് ഇത് ഓഫ് ആക്കി വയ്ക്കുക.",
 	"common.copy": "പകർത്തുക",
 	"common.copied": "{value} പകർത്തി",
-	"new.kind": "അപരനാമത്തിന്റെ തരം",
-	"new.kind.custom": "നിങ്ങൾ തിരഞ്ഞെടുക്കുന്ന പേര്",
 	"dash.perPage": "ഓരോ പേജിലും {count}",
 	"dash.perPageLabel": "ഓരോ പേജിലെ വരികൾ",
 	"dash.colLastUsed": "അവസാനം ഉപയോഗിച്ചത്",
@@ -398,6 +395,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (സൗജന്യം: പ്രതിദിനം 300)",
 	"conn.brevoLimits": "Brevo ത്രെഡ് ഹെഡറുകളോ ഇൻലൈൻ ചിത്രങ്ങളോ സ്വീകരിക്കില്ല: മറുപടി സ്വീകർത്താവിന് പുതിയ സംഭാഷണമായി കാണപ്പെട്ടേക്കാം, ഇൻലൈൻ ചിത്രങ്ങൾ അറ്റാച്ച്‌മെന്റുകളായി എത്തുന്നു, Brevo നിരസിക്കുന്ന ഫയൽ തരങ്ങളുള്ള മറുപടികൾ (.exe അല്ലെങ്കിൽ .json പോലുള്ളവ) നിങ്ങളിലേക്ക് തിരികെ അയയ്ക്കുന്നു.",
 	"alias.forwarding": "ഫോർവേഡിംഗ്",
+	"new.namePlaceholder": "പേര്, shop പോലെ",
+	"new.randomLabel": "അല്ലെങ്കിൽ ക്രമരഹിതമായി ഒന്ന് സൃഷ്ടിക്കുക:",
+	"new.random.random_words": "വാക്കുകൾ",
+	"new.random.random_characters": "ക്രമരഹിത അക്ഷരങ്ങൾ",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

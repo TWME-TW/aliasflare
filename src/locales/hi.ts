@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "कोई कार्रवाई और कम से कम एक उपनाम चुनें।",
 	"new.title": "नया उपनाम",
 	"new.prefix": "उपनाम का नाम",
-	"new.prefixPlaceholder": "नाम, जैसे shop (खाली छोड़ें तो यादृच्छिक उपनाम बनेगा)",
 	"new.domain": "उपनाम डोमेन",
 	"new.note": "नोट (वैकल्पिक)",
 	"new.destination": "अग्रेषण पता (डिफ़ॉल्ट के लिए खाली छोड़ें)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "जो catch-all पहले से कहीं और मेल भेजता है (जैसे Mailflare को), उसे भी इस Worker पर भेजें। वह मेल जो आज वहाँ जाता है, उसके बजाय यहाँ आएगा। जिन डोमेन पर दूसरी मेल आती है, उनके लिए इसे बंद रखें।",
 	"common.copy": "कॉपी करें",
 	"common.copied": "{value} कॉपी किया गया",
-	"new.kind": "उपनाम का प्रकार",
-	"new.kind.custom": "आपके चुने हुए नाम",
 	"dash.perPage": "प्रति पृष्ठ {count}",
 	"dash.perPageLabel": "प्रति पृष्ठ पंक्तियाँ",
 	"dash.colLastUsed": "अंतिम उपयोग",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (फ़्री: हर दिन 300)",
 	"conn.brevoLimits": "Brevo थ्रेड हेडर और इनलाइन इमेज स्वीकार नहीं करता: जवाब प्राप्तकर्ता को नई बातचीत के रूप में दिख सकता है, इनलाइन इमेज अटैचमेंट के रूप में पहुँचती हैं, और जिन फ़ाइल प्रकारों को Brevo अस्वीकार करता है (जैसे .exe या .json), उनके जवाब आपको वापस भेज दिए जाते हैं।",
 	"alias.forwarding": "अग्रेषण",
+	"new.namePlaceholder": "नाम, जैसे shop",
+	"new.randomLabel": "या कोई यादृच्छिक बनाएँ:",
+	"new.random.random_words": "शब्द",
+	"new.random.random_characters": "रैंडम अक्षर",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

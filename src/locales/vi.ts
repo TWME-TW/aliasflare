@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Hãy chọn một thao tác và ít nhất một bí danh.",
 	"new.title": "Bí danh mới",
 	"new.prefix": "Tên bí danh",
-	"new.prefixPlaceholder": "Tên, ví dụ shop (để trống để tạo bí danh ngẫu nhiên)",
 	"new.domain": "Tên miền bí danh",
 	"new.note": "Ghi chú (tùy chọn)",
 	"new.destination": "Địa chỉ chuyển tiếp (để trống để dùng mặc định)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Cũng trỏ catch-all đang gửi thư đến nơi khác (chẳng hạn Mailflare) tới Worker này. Thư mà nó đang gửi đến đó sẽ chuyển về đây. Hãy tắt tùy chọn này với các tên miền đang nhận thư khác.",
 	"common.copy": "Sao chép",
 	"common.copied": "Đã sao chép {value}",
-	"new.kind": "Loại bí danh",
-	"new.kind.custom": "Tên do bạn chọn",
 	"dash.perPage": "{count} mục mỗi trang",
 	"dash.perPageLabel": "Số dòng mỗi trang",
 	"dash.colLastUsed": "Lần dùng cuối",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (miễn phí: 300 thư mỗi ngày)",
 	"conn.brevoLimits": "Brevo không chấp nhận tiêu đề chuỗi thư hoặc hình ảnh nhúng: thư trả lời có thể hiển thị với người nhận như một cuộc trò chuyện mới, hình ảnh nhúng được gửi dưới dạng tệp đính kèm, và các thư trả lời có loại tệp mà Brevo từ chối (như .exe hoặc .json) sẽ bị trả lại cho bạn.",
 	"alias.forwarding": "Chuyển tiếp",
+	"new.namePlaceholder": "Tên, như shop",
+	"new.randomLabel": "Hoặc tạo ngẫu nhiên:",
+	"new.random.random_words": "Từ ngữ",
+	"new.random.random_characters": "Ký tự ngẫu nhiên",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Pilih tindakan dan sekurang-kurangnya satu alias.",
 	"new.title": "Alias baharu",
 	"new.prefix": "Nama alias",
-	"new.prefixPlaceholder": "Nama, contohnya shop (kosongkan untuk alias rawak)",
 	"new.domain": "Domain alias",
 	"new.note": "Nota (pilihan)",
 	"new.destination": "Alamat pemajuan (kosongkan untuk lalai)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Halakan juga catch-all yang sudah menghantar mel ke tempat lain (contohnya ke Mailflare) ke Worker ini. Mel yang dihantarnya ke sana hari ini akan datang ke sini. Biarkan tidak dipilih untuk domain yang menerima mel lain.",
 	"common.copy": "Salin",
 	"common.copied": "Disalin {value}",
-	"new.kind": "Jenis alias",
-	"new.kind.custom": "Nama pilihan anda",
 	"dash.perPage": "{count} setiap halaman",
 	"dash.perPageLabel": "Baris setiap halaman",
 	"dash.colLastUsed": "Terakhir digunakan",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (percuma: 300 sehari)",
 	"conn.brevoLimits": "Brevo tidak menerima pengepala bebenang atau imej sebaris: balasan mungkin dipaparkan kepada penerima sebagai perbualan baharu, imej sebaris tiba sebagai lampiran, dan balasan dengan jenis fail yang ditolak Brevo (seperti .exe atau .json) dihantar balik kepada anda.",
 	"alias.forwarding": "Pemajuan",
+	"new.namePlaceholder": "Nama, seperti shop",
+	"new.randomLabel": "Atau cipta secara rawak:",
+	"new.random.random_words": "Perkataan",
+	"new.random.random_characters": "Aksara rawak",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

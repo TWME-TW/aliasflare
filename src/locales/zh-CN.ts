@@ -318,7 +318,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "请选择一项操作，并至少选择一个别名。",
 	"new.title": "新建别名",
 	"new.prefix": "别名名称",
-	"new.prefixPlaceholder": "名称，例如 shop（留空则随机生成）",
 	"new.domain": "别名域名",
 	"new.note": "备注（选填）",
 	"new.destination": "转发地址（留空则使用默认值）",
@@ -354,8 +353,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "同时将已把邮件发送到其他地方（例如 Mailflare）的 catch-all 指向此 Worker。它当前发往那里的邮件将改为发到这里。对于接收其他邮件的域名请保持关闭。",
 	"common.copy": "复制",
 	"common.copied": "已复制 {value}",
-	"new.kind": "别名类型",
-	"new.kind.custom": "自选名称",
 	"dash.perPage": "每页 {count} 条",
 	"dash.perPageLabel": "每页行数",
 	"dash.colLastUsed": "最后使用",
@@ -383,6 +380,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo（免费：每天 300 封）",
 	"conn.brevoLimits": "Brevo 不接受串接标头和内嵌图片：收件人可能会把回复看成新的对话，内嵌图片会变成附件，而含有 Brevo 拒收文件类型（例如 .exe 或 .json）的回复会被退回给你。",
 	"alias.forwarding": "转发设置",
+	"new.namePlaceholder": "名称，例如 shop",
+	"new.randomLabel": "或随机创建一个：",
+	"new.random.random_words": "单词",
+	"new.random.random_characters": "随机字符",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

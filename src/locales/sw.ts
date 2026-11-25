@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Chagua kitendo na angalau lakabu moja.",
 	"new.title": "Lakabu mpya",
 	"new.prefix": "Jina la lakabu",
-	"new.prefixPlaceholder": "Jina, mfano shop (acha tupu kwa lakabu ya nasibu)",
 	"new.domain": "Kikoa cha lakabu",
 	"new.note": "Maelezo (si lazima)",
 	"new.destination": "Anwani ya kutuma (acha tupu kwa chaguo-msingi)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Elekeza pia kwenye Worker hii catch-all ambayo tayari inatuma barua mahali pengine (kwa mfano kwa Mailflare). Barua inazotuma huko leo sasa zitafika hapa badala yake. Iache imezimwa kwa vikoa vinavyopokea barua nyingine.",
 	"common.copy": "Nakili",
 	"common.copied": "Imenakiliwa {value}",
-	"new.kind": "Aina ya lakabu",
-	"new.kind.custom": "Jina unalochagua mwenyewe",
 	"dash.perPage": "{count} kwa ukurasa",
 	"dash.perPageLabel": "Safu kwa ukurasa",
 	"dash.colLastUsed": "Imetumika mara ya mwisho",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (bure: 300 kwa siku)",
 	"conn.brevoLimits": "Brevo haikubali vichwa vya mnyororo wa barua wala picha zilizopachikwa: jibu linaweza kuonekana kwa mpokeaji kama mazungumzo mapya, picha zilizopachikwa hufika kama viambatisho, na majibu yenye aina za faili ambazo Brevo hukataa (kama .exe au .json) hurudishwa kwako.",
 	"alias.forwarding": "Kutuma",
+	"new.namePlaceholder": "Jina, kama shop",
+	"new.randomLabel": "Au unda moja kwa nasibu:",
+	"new.random.random_words": "Maneno",
+	"new.random.random_characters": "Herufi nasibu",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

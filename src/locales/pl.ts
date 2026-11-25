@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Wybierz akcję i co najmniej jeden alias.",
 	"new.title": "Nowy alias",
 	"new.prefix": "Nazwa aliasu",
-	"new.prefixPlaceholder": "Nazwa, np. shop (puste, aby wygenerować losowy alias)",
 	"new.domain": "Domena aliasu",
 	"new.note": "Notatka (opcjonalnie)",
 	"new.destination": "Adres przekazywania (puste, aby użyć domyślnego)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Kieruje też na ten Worker catch-all, który już wysyła pocztę gdzie indziej (na przykład do Mailflare). Pocztę, którą dziś wysyła tam, będzie odbierać tutaj. Pozostaw wyłączone dla domen, które odbierają inną pocztę.",
 	"common.copy": "Kopiuj",
 	"common.copied": "Skopiowano {value}",
-	"new.kind": "Typ aliasu",
-	"new.kind.custom": "Nazwa wybrana przez Ciebie",
 	"dash.perPage": "{count} na stronę",
 	"dash.perPageLabel": "Wierszy na stronę",
 	"dash.colLastUsed": "Ostatnio używany",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (bezpłatnie: 300 dziennie)",
 	"conn.brevoLimits": "Brevo nie obsługuje nagłówków wątków ani obrazów w treści: odpowiedź może dla odbiorcy wyglądać jak nowa rozmowa, obrazy w treści trafiają jako załączniki, a odpowiedzi z typami plików odrzucanymi przez Brevo (np. .exe lub .json) wracają do Ciebie.",
 	"alias.forwarding": "Przekazywanie",
+	"new.namePlaceholder": "Nazwa, np. shop",
+	"new.randomLabel": "Lub utwórz losowy:",
+	"new.random.random_words": "Słowa",
+	"new.random.random_characters": "Losowe znaki",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

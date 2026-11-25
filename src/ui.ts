@@ -147,13 +147,15 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 .toolbar select { width:auto; }
 .bulk { padding:10px 12px; border-radius:16px; background:var(--bg); }
 .create { margin:12px 0; padding:10px 14px; border-radius:16px; background:var(--bg); }
-.create summary { cursor:pointer; font-weight:600; }
+.create h2 { margin:0; }
+.create-random { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.create-extra { display:grid; gap:10px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
 .create-form { display:grid; gap:10px; margin-top:10px; }
 .create-address { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .create-address input { flex:1 1 200px; width:auto; }
 .create-address select { width:auto; }
 .create-form .check { margin-top:0; }
-.create-form button { justify-self:start; }
+.create-address button { flex:none; }
 th.pick, td.pick { width:36px; }
 td.pick input, th.pick input { width:18px; height:18px; accent-color:var(--primary); }
 .pager { display:flex; gap:16px; justify-content:center; align-items:center; margin-top:12px; }
@@ -365,25 +367,29 @@ function newAliasForm(t: Translate, settings: Settings): Html | string {
 	if (settings.aliasDomains.length === 0) {
 		return html`<p class="notice">${t("new.noDomains")} <a href="/settings">${t("dash.goToSettings")}</a></p>`;
 	}
-	return html`<details class="create" open>
-<summary>${t("new.title")}</summary>
+	// One form: the first button (the one Enter presses) creates the named alias; each random
+	// button skips the name and creates an alias of its kind on the chosen domain in one click.
+	return html`<section class="create" aria-labelledby="new-title">
+<h2 id="new-title">${t("new.title")}</h2>
 <form method="post" action="/aliases/new" class="create-form">
-<label>${t("new.kind")} <select name="kind" data-alias-kind>
-<option value="custom">${t("new.kind.custom")}</option>
-${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}">${t(`set.format.${format}`)}</option>`)}
-</select></label>
 <div class="create-address">
-<input type="text" name="prefix" data-custom-only maxlength="50" autocomplete="off" spellcheck="false" placeholder="${t("new.prefixPlaceholder")}" aria-label="${t("new.prefix")}" />
+<input type="text" name="prefix" required maxlength="50" autocomplete="off" spellcheck="false" placeholder="${t("new.namePlaceholder")}" aria-label="${t("new.prefix")}" />
 <span aria-hidden="true">@</span>
 <select name="domain" aria-label="${t("new.domain")}">
 ${settings.aliasDomains.map((domain) => html`<option value="${domain}">${domain}</option>`)}
 </select>
+<button class="primary" name="kind" value="custom">${t("new.create")}</button>
 </div>
+<div class="create-random" role="group" aria-labelledby="new-random">
+<span id="new-random" class="muted">${t("new.randomLabel")}</span>
+${RANDOM_ALIAS_FORMATS.map((format) => html`<button name="kind" value="${format}" formnovalidate>${t(`new.random.${format}`)}</button>`)}
+</div>
+<div class="create-extra">
 <label>${t("new.note")} <input type="text" name="note" maxlength="500" /></label>
 <label>${t("new.destination")} <input type="email" name="destination" maxlength="254" placeholder="${settings.defaultDestination || ""}" /></label>
-<button>${t("new.create")}</button>
+</div>
 </form>
-</details>`;
+</section>`;
 }
 
 export function dashboardPage(

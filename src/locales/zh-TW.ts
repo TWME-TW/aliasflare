@@ -318,7 +318,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "請選擇動作，並至少選取一個別名。",
 	"new.title": "新增別名",
 	"new.prefix": "別名名稱",
-	"new.prefixPlaceholder": "名稱，例如 shop（留空則隨機產生）",
 	"new.domain": "別名網域",
 	"new.note": "備註（選填）",
 	"new.destination": "轉寄地址（留空表示使用預設）",
@@ -354,8 +353,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "已經把信送往其他地方（例如 Mailflare）的 catch-all，也改為指向這個 Worker。原本送到那裡的信之後會改送到這裡。用來接收其他信件的網域請不要勾選。",
 	"common.copy": "複製",
 	"common.copied": "已複製 {value}",
-	"new.kind": "別名類型",
-	"new.kind.custom": "自訂名稱",
 	"dash.perPage": "每頁 {count} 列",
 	"dash.perPageLabel": "每頁列數",
 	"dash.colLastUsed": "上次使用",
@@ -383,6 +380,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo（免費：每天 300 封）",
 	"conn.brevoLimits": "Brevo 不接受串接標頭與內嵌圖片：收件者可能會把回信看成新的對話，內嵌圖片會變成附件，而含有 Brevo 拒收檔案類型（例如 .exe 或 .json）的回信會被退回給你。",
 	"alias.forwarding": "轉寄設定",
+	"new.namePlaceholder": "名稱，例如 shop",
+	"new.randomLabel": "或一鍵隨機建立：",
+	"new.random.random_words": "單字",
+	"new.random.random_characters": "隨機字元",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

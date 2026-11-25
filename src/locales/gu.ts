@@ -333,7 +333,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "એક ક્રિયા અને ઓછામાં ઓછું એક ઉપનામ પસંદ કરો.",
 	"new.title": "નવું ઉપનામ",
 	"new.prefix": "ઉપનામનું નામ",
-	"new.prefixPlaceholder": "નામ, જેમ કે shop (ખાલી છોડો તો રેન્ડમ ઉપનામ બનશે)",
 	"new.domain": "ઉપનામ ડોમેન",
 	"new.note": "નોંધ (વૈકલ્પિક)",
 	"new.destination": "ફૉરવર્ડિંગ સરનામું (ડિફોલ્ટ માટે ખાલી છોડો)",
@@ -369,8 +368,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "પહેલેથી બીજે ક્યાંય મેઇલ મોકલતા catch-all ને (જેમ કે Mailflare પર) પણ આ Worker તરફ નિર્દેશિત કરો. તે આજે ત્યાં મોકલે છે તે મેઇલ તેના બદલે અહીં આવશે. બીજો મેઇલ મેળવતા ડોમેન માટે તેને બંધ રાખો.",
 	"common.copy": "કોપી કરો",
 	"common.copied": "{value} કૉપી કરવામાં આવ્યું",
-	"new.kind": "ઉપનામનો પ્રકાર",
-	"new.kind.custom": "તમે પસંદ કરેલું નામ",
 	"dash.perPage": "પ્રતિ પૃષ્ઠ {count}",
 	"dash.perPageLabel": "પ્રતિ પૃષ્ઠ પંક્તિઓ",
 	"dash.colLastUsed": "છેલ્લે વપરાયેલ",
@@ -398,6 +395,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (ફ્રી: દિવસના 300)",
 	"conn.brevoLimits": "Brevo થ્રેડ હેડર કે ઇનલાઇન છબીઓ સ્વીકારતું નથી: જવાબ પ્રાપ્તકર્તાને નવી વાતચીત તરીકે દેખાઈ શકે છે, ઇનલાઇન છબીઓ જોડાણ તરીકે પહોંચે છે, અને Brevo નકારે એવા ફાઇલ પ્રકારવાળા જવાબ (જેમ કે .exe અથવા .json) તમને પાછા મોકલવામાં આવે છે.",
 	"alias.forwarding": "ફૉરવર્ડિંગ",
+	"new.namePlaceholder": "નામ, જેમ કે shop",
+	"new.randomLabel": "અથવા રેન્ડમ રીતે એક બનાવો:",
+	"new.random.random_words": "શબ્દો",
+	"new.random.random_characters": "રેન્ડમ અક્ષરો",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

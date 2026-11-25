@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Elige una acción y al menos un alias.",
 	"new.title": "Nuevo alias",
 	"new.prefix": "Nombre del alias",
-	"new.prefixPlaceholder": "Nombre, p. ej. shop (vacío para un alias aleatorio)",
 	"new.domain": "Dominio del alias",
 	"new.note": "Nota (opcional)",
 	"new.destination": "Dirección de reenvío (vacío para la predeterminada)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "También apunta a este Worker un catch-all que ya envía correo a otro lugar (por ejemplo, a Mailflare). El correo que hoy se envía allí llegará aquí en su lugar. Desactívalo en los dominios que reciben otro correo.",
 	"common.copy": "Copiar",
 	"common.copied": "Copiado {value}",
-	"new.kind": "Tipo de alias",
-	"new.kind.custom": "Un nombre que elijas",
 	"dash.perPage": "{count} por página",
 	"dash.perPageLabel": "Filas por página",
 	"dash.colLastUsed": "Último uso",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (gratis: 300 al día)",
 	"conn.brevoLimits": "Brevo no acepta encabezados de hilo ni imágenes en línea: una respuesta puede aparecer al destinatario como una conversación nueva, las imágenes en línea llegan como adjuntos y las respuestas con tipos de archivo que Brevo rechaza (como .exe o .json) se te devuelven.",
 	"alias.forwarding": "Reenvío",
+	"new.namePlaceholder": "Nombre, como shop",
+	"new.randomLabel": "O crea uno al azar:",
+	"new.random.random_words": "Palabras",
+	"new.random.random_characters": "Caracteres aleatorios",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "یک عمل و دست‌کم یک نام مستعار انتخاب کنید.",
 	"new.title": "نام مستعار جدید",
 	"new.prefix": "نام مستعار",
-	"new.prefixPlaceholder": "نام، مثل shop (برای نام مستعار تصادفی خالی بگذارید)",
 	"new.domain": "دامنه نام مستعار",
 	"new.note": "یادداشت (اختیاری)",
 	"new.destination": "نشانی ارسال (برای پیش‌فرض خالی بگذارید)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "یک catch-all که از قبل ایمیل را جای دیگری می‌فرستد (مثلاً به Mailflare) را هم به این Worker وصل می‌کند. ایمیلی که امروز به آنجا می‌فرستد، به‌جایش به اینجا می‌رسد. برای دامنه‌هایی که ایمیل دیگری دریافت می‌کنند خاموش بگذارید.",
 	"common.copy": "کپی",
 	"common.copied": "{value} کپی شد",
-	"new.kind": "نوع نام مستعار",
-	"new.kind.custom": "نامی که خودتان انتخاب می‌کنید",
 	"dash.perPage": "{count} در هر صفحه",
 	"dash.perPageLabel": "ردیف در هر صفحه",
 	"dash.colLastUsed": "آخرین استفاده",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (رایگان: روزانه 300)",
 	"conn.brevoLimits": "Brevo هدرهای رشته‌ای و تصاویر درون‌متنی را نمی‌پذیرد: پاسخ ممکن است برای گیرنده به‌صورت گفتگوی جدید نمایش داده شود، تصاویر درون‌متنی به‌صورت پیوست می‌رسند، و پاسخ‌هایی که نوع فایلشان توسط Brevo رد می‌شود (مانند .exe یا .json) به شما بازگردانده می‌شوند.",
 	"alias.forwarding": "ارسال",
+	"new.namePlaceholder": "نام، مانند shop",
+	"new.randomLabel": "یا یکی را به‌صورت تصادفی بسازید:",
+	"new.random.random_words": "کلمات",
+	"new.random.random_characters": "نویسه‌های تصادفی",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

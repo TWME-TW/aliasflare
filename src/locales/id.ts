@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Pilih tindakan dan setidaknya satu alias.",
 	"new.title": "Alias baru",
 	"new.prefix": "Nama alias",
-	"new.prefixPlaceholder": "Nama, misalnya shop (kosongkan untuk alias acak)",
 	"new.domain": "Domain alias",
 	"new.note": "Catatan (opsional)",
 	"new.destination": "Alamat penerusan (kosongkan untuk default)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Arahkan juga catch-all yang sudah mengirim email ke tempat lain (misalnya ke Mailflare) ke Worker ini. Email yang saat ini dikirim ke sana akan masuk ke sini. Biarkan nonaktif untuk domain yang menerima email lain.",
 	"common.copy": "Salin",
 	"common.copied": "Disalin {value}",
-	"new.kind": "Jenis alias",
-	"new.kind.custom": "Nama yang Anda pilih",
 	"dash.perPage": "{count} per halaman",
 	"dash.perPageLabel": "Baris per halaman",
 	"dash.colLastUsed": "Terakhir digunakan",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (gratis: 300 per hari)",
 	"conn.brevoLimits": "Brevo tidak menerima header thread maupun gambar sebaris: balasan mungkin tampil sebagai percakapan baru bagi penerima, gambar sebaris tiba sebagai lampiran, dan balasan dengan jenis file yang ditolak Brevo (seperti .exe atau .json) dikembalikan kepada Anda.",
 	"alias.forwarding": "Penerusan",
+	"new.namePlaceholder": "Nama, misalnya shop",
+	"new.randomLabel": "Atau buat secara acak:",
+	"new.random.random_words": "Kata",
+	"new.random.random_characters": "Karakter acak",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

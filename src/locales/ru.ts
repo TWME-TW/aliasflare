@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Выберите действие и хотя бы один алиас.",
 	"new.title": "Новый алиас",
 	"new.prefix": "Имя алиаса",
-	"new.prefixPlaceholder": "Имя, например shop (пусто — случайный алиас)",
 	"new.domain": "Домен алиаса",
 	"new.note": "Заметка (необязательно)",
 	"new.destination": "Адрес пересылки (пусто — по умолчанию)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Также направляет на этот Worker catch-all, который уже отправляет почту в другое место (например, в Mailflare). Почта, которую он сейчас туда отправляет, будет приходить сюда. Не включайте для доменов, которые получают другую почту.",
 	"common.copy": "Копировать",
 	"common.copied": "Скопировано: {value}",
-	"new.kind": "Тип алиаса",
-	"new.kind.custom": "Имя на ваш выбор",
 	"dash.perPage": "{count} на странице",
 	"dash.perPageLabel": "Строк на странице",
 	"dash.colLastUsed": "Последнее использование",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (бесплатно: 300 в день)",
 	"conn.brevoLimits": "Brevo не принимает заголовки цепочки писем и встроенные изображения: ответ может выглядеть для получателя как новая переписка, встроенные изображения приходят как вложения, а ответы с типами файлов, которые Brevo отклоняет (например, .exe или .json), возвращаются вам.",
 	"alias.forwarding": "Пересылка",
+	"new.namePlaceholder": "Имя, например shop",
+	"new.randomLabel": "Или создайте случайный:",
+	"new.random.random_words": "Слова",
+	"new.random.random_characters": "Случайные символы",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

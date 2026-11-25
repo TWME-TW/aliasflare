@@ -333,7 +333,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "ஒரு செயலையும் குறைந்தது ஒரு மாற்றுப்பெயரையும் தேர்ந்தெடுக்கவும்.",
 	"new.title": "புதிய மாற்றுப்பெயர்",
 	"new.prefix": "மாற்றுப்பெயரின் பெயர்",
-	"new.prefixPlaceholder": "பெயர், எ.கா. shop (காலியாக விட்டால் சீரற்ற மாற்றுப்பெயர் உருவாக்கப்படும்)",
 	"new.domain": "மாற்றுப்பெயர் டொமைன்",
 	"new.note": "குறிப்பு (விருப்பத்தேர்வு)",
 	"new.destination": "முன்னனுப்பு முகவரி (இயல்புநிலைக்கு காலியாக விடவும்)",
@@ -369,8 +368,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ஏற்கனவே வேறிடத்திற்கு அஞ்சல் அனுப்பும் catch-all ஐ (எடுத்துக்காட்டாக Mailflare க்கு) இந்த Worker க்கும் சுட்டிக்காட்டவும். அது இன்று அங்கு அனுப்பும் அஞ்சல் அதற்குப் பதிலாக இங்கு வரும். வேறு அஞ்சல் பெறும் டொமைன்களுக்கு இதை அணைத்து வைக்கவும்.",
 	"common.copy": "நகலெடு",
 	"common.copied": "{value} நகலெடுக்கப்பட்டது",
-	"new.kind": "மாற்றுப்பெயர் வகை",
-	"new.kind.custom": "நீங்கள் தேர்ந்தெடுக்கும் பெயர்",
 	"dash.perPage": "ஒரு பக்கத்திற்கு {count}",
 	"dash.perPageLabel": "பக்கத்திற்கான வரிசைகள்",
 	"dash.colLastUsed": "கடைசியாகப் பயன்படுத்தியது",
@@ -398,6 +395,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (இலவசம்: நாளொன்றுக்கு 300)",
 	"conn.brevoLimits": "Brevo திரி தலைப்புகளையோ உள்ளிணைந்த படங்களையோ ஏற்காது: பதில் பெறுநருக்குப் புதிய உரையாடலாகத் தோன்றலாம், உள்ளிணைந்த படங்கள் இணைப்புகளாக வரும், மேலும் Brevo மறுக்கும் கோப்பு வகைகள் (.exe அல்லது .json போன்றவை) கொண்ட பதில்கள் உங்களுக்குத் திருப்பி அனுப்பப்படும்.",
 	"alias.forwarding": "முன்னனுப்புதல்",
+	"new.namePlaceholder": "பெயர், எ.கா. shop",
+	"new.randomLabel": "அல்லது சீரற்ற முறையில் ஒன்றை உருவாக்கவும்:",
+	"new.random.random_words": "சொற்கள்",
+	"new.random.random_characters": "சீரற்ற எழுத்துகள்",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

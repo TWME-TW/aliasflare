@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Kies een actie en minstens één alias.",
 	"new.title": "Nieuwe alias",
 	"new.prefix": "Aliasnaam",
-	"new.prefixPlaceholder": "Naam, bijv. shop (leeg voor een willekeurige alias)",
 	"new.domain": "Aliasdomein",
 	"new.note": "Notitie (optioneel)",
 	"new.destination": "Doorstuuradres (leeg voor de standaard)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Laat ook een catch-all die al ergens anders mail naartoe stuurt (bijvoorbeeld naar Mailflare) naar deze Worker verwijzen. Mail die er nu naartoe gaat, komt dan hier terecht. Laat dit uit staan voor domeinen die andere mail ontvangen.",
 	"common.copy": "Kopiëren",
 	"common.copied": "{value} gekopieerd",
-	"new.kind": "Alias-type",
-	"new.kind.custom": "Een naam naar keuze",
 	"dash.perPage": "{count} per pagina",
 	"dash.perPageLabel": "Rijen per pagina",
 	"dash.colLastUsed": "Laatst gebruikt",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (gratis: 300 per dag)",
 	"conn.brevoLimits": "Brevo accepteert geen threadkoppen of inline afbeeldingen: een antwoord kan bij de ontvanger als nieuw gesprek verschijnen, inline afbeeldingen komen als bijlagen aan, en antwoorden met bestandstypen die Brevo weigert (zoals .exe of .json) worden naar jou teruggestuurd.",
 	"alias.forwarding": "Doorsturen",
+	"new.namePlaceholder": "Naam, bijvoorbeeld shop",
+	"new.randomLabel": "Of maak er willekeurig een aan:",
+	"new.random.random_words": "Woorden",
+	"new.random.random_characters": "Willekeurige tekens",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

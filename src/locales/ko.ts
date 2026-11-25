@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "작업을 선택하고 별칭을 하나 이상 선택하세요.",
 	"new.title": "새 별칭",
 	"new.prefix": "별칭 이름",
-	"new.prefixPlaceholder": "이름 입력, 예: shop (비워 두면 무작위 별칭)",
 	"new.domain": "별칭 도메인",
 	"new.note": "메모(선택)",
 	"new.destination": "전달 주소 (비워 두면 기본값)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "이미 다른 곳(예: Mailflare)으로 메일을 보내는 catch-all도 이 Worker로 연결합니다. 현재 그곳으로 가던 메일이 대신 여기로 옵니다. 다른 메일을 받는 도메인에서는 끄세요.",
 	"common.copy": "복사",
 	"common.copied": "{value} 복사됨",
-	"new.kind": "별칭 유형",
-	"new.kind.custom": "직접 정한 이름",
 	"dash.perPage": "페이지당 {count}개",
 	"dash.perPageLabel": "페이지당 행 수",
 	"dash.colLastUsed": "마지막 사용",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (무료: 하루 300통)",
 	"conn.brevoLimits": "Brevo는 스레드 헤더와 인라인 이미지를 지원하지 않습니다. 그래서 답장이 받는 사람에게 새 대화로 보일 수 있고, 인라인 이미지는 첨부 파일로 도착하며, Brevo가 거부하는 파일 형식(.exe 또는 .json 등)이 포함된 답장은 발신자에게 반송됩니다.",
 	"alias.forwarding": "전달 설정",
+	"new.namePlaceholder": "이름, 예: shop",
+	"new.randomLabel": "또는 무작위로 만들기:",
+	"new.random.random_words": "단어",
+	"new.random.random_characters": "무작위 문자",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

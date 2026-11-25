@@ -48,7 +48,9 @@ describe("alias list", () => {
 		expect([...page.matchAll(/data-copy="/g)]).toHaveLength(25);
 		expect(page).toContain('href="/?per=25&amp;page=2"');
 		expect(page).toMatch(/<option value="25" selected>/);
-		expect(page).toContain('<details class="create" open>');
+		expect(page).toContain('<section class="create"');
+		expect(page).not.toContain('<details class="create"');
+		expect(page).toContain('name="kind" value="uuid" formnovalidate');
 		const unknown = await (await app.fetch(new Request("https://alias.test/?per=7", { headers: { cookie } }), env)).text();
 		expect([...unknown.matchAll(/data-copy="/g)]).toHaveLength(34);
 	});
@@ -63,5 +65,27 @@ describe("alias list", () => {
 	it("has a copy button for each alias, shown only by the page script", async () => {
 		const page = await dashboard();
 		expect(page).toMatch(/<button type="button" class="ghost copy" data-copy="new@me.test"[^>]*hidden>/);
+	});
+});
+
+describe("one-click random aliases", () => {
+	it("creates an alias of the kind on the button, ignoring any name typed", async () => {
+		const { signIn } = await import("./helpers/session");
+		const { loadSettings, saveSettings } = await import("../src/settings");
+		const db = testDb();
+		await saveSettings(db, { ...(await loadSettings(db)), aliasDomains: ["me.test"] });
+		const env = { DB: db, SIGNING_SECRET: TEST_SECRET } as unknown as Env;
+		const cookie = await signIn(db);
+		const response = await app.fetch(
+			new Request("https://alias.test/aliases/new", {
+				method: "POST",
+				headers: { cookie, origin: "https://alias.test", "content-type": "application/x-www-form-urlencoded" },
+				body: "prefix=&domain=me.test&kind=uuid&note=&destination=",
+			}),
+			env,
+		);
+		expect(response.status).toBe(302);
+		const row = await db.prepare("SELECT address FROM aliases").first<{ address: string }>();
+		expect(row?.address).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@me\.test$/);
 	});
 });

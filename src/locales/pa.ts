@@ -333,7 +333,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "ਇੱਕ ਕਾਰਵਾਈ ਅਤੇ ਘੱਟੋ-ਘੱਟ ਇੱਕ ਉਪਨਾਮ ਚੁਣੋ।",
 	"new.title": "ਨਵਾਂ ਉਪਨਾਮ",
 	"new.prefix": "ਉਪਨਾਮ ਦਾ ਨਾਂ",
-	"new.prefixPlaceholder": "ਨਾਂ, ਜਿਵੇਂ shop (ਖਾਲੀ ਛੱਡਣ ਨਾਲ ਬੇਤਰਤੀਬ ਉਪਨਾਮ ਬਣੇਗਾ)",
 	"new.domain": "ਉਪਨਾਮ ਡੋਮੇਨ",
 	"new.note": "ਨੋਟ (ਵਿਕਲਪਿਕ)",
 	"new.destination": "ਅੱਗੇ ਭੇਜਣ ਦਾ ਪਤਾ (ਡਿਫਾਲਟ ਲਈ ਖਾਲੀ ਛੱਡੋ)",
@@ -369,8 +368,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ਜੋ catch-all ਪਹਿਲਾਂ ਹੀ ਕਿਤੇ ਹੋਰ ਮੇਲ ਭੇਜਦਾ ਹੈ (ਜਿਵੇਂ Mailflare ਨੂੰ), ਉਸਨੂੰ ਵੀ ਇਸ Worker ਵੱਲ ਭੇਜੋ। ਜੋ ਮੇਲ ਉਹ ਅੱਜ ਉੱਥੇ ਭੇਜਦਾ ਹੈ, ਉਹ ਇਸਦੀ ਥਾਂ ਇੱਥੇ ਆਵੇਗੀ। ਹੋਰ ਮੇਲ ਪ੍ਰਾਪਤ ਕਰਨ ਵਾਲੇ ਡੋਮੇਨਾਂ ਲਈ ਇਸਨੂੰ ਬੰਦ ਰੱਖੋ।",
 	"common.copy": "ਕਾਪੀ ਕਰੋ",
 	"common.copied": "{value} ਕਾਪੀ ਕੀਤਾ ਗਿਆ",
-	"new.kind": "ਉਪਨਾਮ ਦੀ ਕਿਸਮ",
-	"new.kind.custom": "ਤੁਹਾਡੇ ਵੱਲੋਂ ਚੁਣਿਆ ਨਾਂ",
 	"dash.perPage": "ਪ੍ਰਤੀ ਪੰਨਾ {count}",
 	"dash.perPageLabel": "ਪ੍ਰਤੀ ਪੰਨਾ ਕਤਾਰਾਂ",
 	"dash.colLastUsed": "ਆਖਰੀ ਵਰਤੋਂ",
@@ -398,6 +395,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (ਮੁਫ਼ਤ: ਦਿਨ ਦੇ 300)",
 	"conn.brevoLimits": "Brevo ਥ੍ਰੈਡ ਹੈਡਰ ਜਾਂ ਇਨਲਾਈਨ ਤਸਵੀਰਾਂ ਨੂੰ ਕਬੂਲ ਨਹੀਂ ਕਰਦਾ: ਜਵਾਬ ਪ੍ਰਾਪਤਕਰਤਾ ਨੂੰ ਨਵੀਂ ਗੱਲਬਾਤ ਵਜੋਂ ਦਿਖ ਸਕਦਾ ਹੈ, ਇਨਲਾਈਨ ਤਸਵੀਰਾਂ ਅਟੈਚਮੈਂਟ ਵਜੋਂ ਪਹੁੰਚਦੀਆਂ ਹਨ, ਅਤੇ ਜਿਨ੍ਹਾਂ ਫਾਈਲ ਕਿਸਮਾਂ ਨੂੰ Brevo ਰੱਦ ਕਰਦਾ ਹੈ (ਜਿਵੇਂ .exe ਜਾਂ .json), ਉਹਨਾਂ ਵਾਲੇ ਜਵਾਬ ਤੁਹਾਨੂੰ ਵਾਪਸ ਭੇਜੇ ਜਾਂਦੇ ਹਨ।",
 	"alias.forwarding": "ਅੱਗੇ ਭੇਜਣਾ",
+	"new.namePlaceholder": "ਨਾਮ, ਜਿਵੇਂ shop",
+	"new.randomLabel": "ਜਾਂ ਬੇਤਰਤੀਬੇ ਇੱਕ ਬਣਾਓ:",
+	"new.random.random_words": "ਸ਼ਬਦ",
+	"new.random.random_characters": "ਬੇਤਰਤੀਬੇ ਅੱਖਰ",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

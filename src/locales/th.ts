@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "เลือกการดำเนินการและนามแฝงอย่างน้อยหนึ่งรายการ",
 	"new.title": "นามแฝงใหม่",
 	"new.prefix": "ชื่อนามแฝง",
-	"new.prefixPlaceholder": "ชื่อ เช่น shop (เว้นว่างเพื่อสุ่มนามแฝง)",
 	"new.domain": "โดเมนนามแฝง",
 	"new.note": "บันทึก (ไม่บังคับ)",
 	"new.destination": "ที่อยู่ส่งต่อ (เว้นว่างเพื่อใช้ค่าเริ่มต้น)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ให้ catch-all ที่ส่งอีเมลไปที่อื่นอยู่แล้ว (เช่น Mailflare) ชี้มายัง Worker นี้ด้วย อีเมลที่ส่งไปที่นั่นในปัจจุบันจะมาถึงที่นี่แทน ให้ปิดไว้สำหรับโดเมนที่รับอีเมลอื่น",
 	"common.copy": "คัดลอก",
 	"common.copied": "คัดลอก {value} แล้ว",
-	"new.kind": "ประเภทนามแฝง",
-	"new.kind.custom": "ชื่อที่คุณเลือกเอง",
 	"dash.perPage": "{count} รายการต่อหน้า",
 	"dash.perPageLabel": "จำนวนแถวต่อหน้า",
 	"dash.colLastUsed": "ใช้ล่าสุด",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (ฟรี: 300 ฉบับต่อวัน)",
 	"conn.brevoLimits": "Brevo ไม่รองรับ thread header หรือรูปภาพแบบ inline การตอบกลับอาจแสดงต่อผู้รับเป็นการสนทนาใหม่ รูปภาพ inline จะถูกส่งมาเป็นไฟล์แนบ และการตอบกลับที่มีประเภทไฟล์ซึ่ง Brevo ปฏิเสธ (เช่น .exe หรือ .json) จะถูกส่งคืนให้คุณ",
 	"alias.forwarding": "การส่งต่อ",
+	"new.namePlaceholder": "ชื่อ เช่น shop",
+	"new.randomLabel": "หรือสร้างแบบสุ่ม:",
+	"new.random.random_words": "คำ",
+	"new.random.random_characters": "อักขระสุ่ม",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

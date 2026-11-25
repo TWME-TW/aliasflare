@@ -318,7 +318,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "操作を選択し、エイリアスを 1 件以上選択してください。",
 	"new.title": "新しいエイリアス",
 	"new.prefix": "エイリアス名",
-	"new.prefixPlaceholder": "名前（例：shop）（空欄でランダム生成）",
 	"new.domain": "エイリアスのドメイン",
 	"new.note": "メモ（任意）",
 	"new.destination": "転送先アドレス（空欄でデフォルト）",
@@ -354,8 +353,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "すでに別の宛先（例: Mailflare）へメールを送っているキャッチオールも、このWorkerに向けます。現在そこに送られているメールは代わりにここへ届くようになります。他のメールを受信しているドメインではオフのままにしてください。",
 	"common.copy": "コピー",
 	"common.copied": "{value} をコピーしました",
-	"new.kind": "エイリアスの種類",
-	"new.kind.custom": "任意の名前",
 	"dash.perPage": "1ページあたり {count} 件",
 	"dash.perPageLabel": "1ページの行数",
 	"dash.colLastUsed": "最終使用",
@@ -383,6 +380,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo（無料: 1 日 300 通）",
 	"conn.brevoLimits": "Brevo はスレッドヘッダーとインライン画像を受け付けません。そのため、返信が受信者には新しい会話として表示されることがあり、インライン画像は添付ファイルとして届き、Brevo が拒否するファイル形式（.exe や .json など）を含む返信は差し戻されます。",
 	"alias.forwarding": "転送設定",
+	"new.namePlaceholder": "名前（例：shop）",
+	"new.randomLabel": "またはランダムに作成：",
+	"new.random.random_words": "単語",
+	"new.random.random_characters": "ランダムな文字",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

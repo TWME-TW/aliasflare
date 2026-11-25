@@ -341,7 +341,6 @@ export const en = {
 	"notice.bulkBad": "Choose an action and at least one alias.",
 	"new.title": "New alias",
 	"new.prefix": "Alias name",
-	"new.prefixPlaceholder": "Name, like shop (empty for a random alias)",
 	"new.domain": "Alias domain",
 	"new.note": "Note (optional)",
 	"new.destination": "Forwarding address (empty for the default)",
@@ -377,8 +376,6 @@ export const en = {
 	"cf.replaceCatchAllHelp": "Also point a catch-all that already sends mail elsewhere (for example to Mailflare) at this Worker. Mail it sends there today then comes here instead. Leave it off for domains that receive other mail.",
 	"common.copy": "Copy",
 	"common.copied": "Copied {value}",
-	"new.kind": "Alias type",
-	"new.kind.custom": "A name you choose",
 	"dash.perPage": "{count} per page",
 	"dash.perPageLabel": "Rows per page",
 	"dash.colLastUsed": "Last used",
@@ -406,6 +403,11 @@ export const en = {
 	"conn.provider.brevo": "Brevo (free: 300 a day)",
 	"conn.brevoLimits": "Brevo does not accept threading headers or inline images: a reply may show as a new conversation for the recipient, inline images arrive as attachments, and replies with file types Brevo refuses (such as .exe or .json) are bounced back to you.",
 	"alias.forwarding": "Forwarding",
+	"new.namePlaceholder": "Name, like shop",
+	"new.randomLabel": "Or create one at random:",
+	"new.random.random_words": "Words",
+	"new.random.random_characters": "Random characters",
+	"new.random.uuid": "UUID",
 };
 
 export type MessageKey = keyof typeof en;

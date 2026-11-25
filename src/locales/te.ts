@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "ఒక చర్యను, కనీసం ఒక మారుపేరును ఎంచుకోండి.",
 	"new.title": "కొత్త మారుపేరు",
 	"new.prefix": "మారుపేరు పేరు",
-	"new.prefixPlaceholder": "పేరు, ఉదా. shop (ఖాళీగా వదిలేస్తే యాదృచ్ఛిక మారుపేరు సృష్టించబడుతుంది)",
 	"new.domain": "మారుపేరు డొమైన్",
 	"new.note": "గమనిక (ఐచ్ఛికం)",
 	"new.destination": "ఫార్వర్డింగ్ చిరునామా (డిఫాల్ట్ కోసం ఖాళీగా ఉంచండి)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "ఇప్పటికే వేరే చోటికి మెయిల్ పంపుతున్న catch-all ను (ఉదాహరణకు Mailflare కు) ఈ Worker కు కూడా చూపండి. అది ఈరోజు అక్కడికి పంపే మెయిల్ బదులుగా ఇక్కడికి వస్తుంది. ఇతర మెయిల్ అందుకునే డొమైన్‌ల కోసం దీనిని ఆఫ్ చేసి ఉంచండి.",
 	"common.copy": "కాపీ చేయండి",
 	"common.copied": "{value} కాపీ చేయబడింది",
-	"new.kind": "మారుపేరు రకం",
-	"new.kind.custom": "మీరు ఎంచుకునే పేరు",
 	"dash.perPage": "ప్రతి పేజీకి {count}",
 	"dash.perPageLabel": "పేజీకి వరుసలు",
 	"dash.colLastUsed": "చివరిగా ఉపయోగించినది",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (ఉచితం: రోజుకు 300)",
 	"conn.brevoLimits": "Brevo థ్రెడ్ హెడర్‌లను లేదా ఇన్‌లైన్ చిత్రాలను అంగీకరించదు: జవాబు గ్రహీతకు కొత్త సంభాషణగా కనిపించవచ్చు, ఇన్‌లైన్ చిత్రాలు జోడింపులుగా వస్తాయి, మరియు Brevo తిరస్కరించే ఫైల్ రకాలతో ఉన్న జవాబులు (ఉదాహరణకు .exe లేదా .json) మీకు తిరిగి పంపబడతాయి.",
 	"alias.forwarding": "ఫార్వర్డింగ్",
+	"new.namePlaceholder": "పేరు, ఉదా. shop",
+	"new.randomLabel": "లేదా యాదృచ్ఛికంగా ఒకటి సృష్టించండి:",
+	"new.random.random_words": "పదాలు",
+	"new.random.random_characters": "యాదృచ్ఛిక అక్షరాలు",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

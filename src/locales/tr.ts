@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Bir işlem ve en az bir takma ad seçin.",
 	"new.title": "Yeni takma ad",
 	"new.prefix": "Takma ad adı",
-	"new.prefixPlaceholder": "Ad, ör. shop (rastgele takma ad için boş bırakın)",
 	"new.domain": "Takma ad alan adı",
 	"new.note": "Not (isteğe bağlı)",
 	"new.destination": "Yönlendirme adresi (varsayılan için boş bırakın)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Başka bir yere (örneğin Mailflare'e) e-posta gönderen bir catch-all'ı da bu Worker'a yönlendirir. Bugün oraya giden e-postalar bunun yerine buraya gelir. Başka e-posta alan alan adlarında kapalı bırakın.",
 	"common.copy": "Kopyala",
 	"common.copied": "{value} kopyalandı",
-	"new.kind": "Takma ad türü",
-	"new.kind.custom": "Kendin seçtiğin bir ad",
 	"dash.perPage": "Sayfa başına {count}",
 	"dash.perPageLabel": "Sayfa başına satır",
 	"dash.colLastUsed": "Son kullanım",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (ücretsiz: günde 300)",
 	"conn.brevoLimits": "Brevo, ileti dizisi üstbilgilerini ve satır içi resimleri kabul etmez: bir yanıt alıcıya yeni bir konuşma gibi görünebilir, satır içi resimler ek olarak gelir ve Brevo'nun reddettiği dosya türlerine sahip yanıtlar (.exe veya .json gibi) size geri gönderilir.",
 	"alias.forwarding": "Yönlendirme",
+	"new.namePlaceholder": "Ad, örn. shop",
+	"new.randomLabel": "Ya da rastgele bir tane oluşturun:",
+	"new.random.random_words": "Sözcükler",
+	"new.random.random_characters": "Rastgele karakterler",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

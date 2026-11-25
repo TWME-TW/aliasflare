@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "کوئی عمل اور کم از کم ایک عرف منتخب کریں۔",
 	"new.title": "نیا عرف",
 	"new.prefix": "عرف کا نام",
-	"new.prefixPlaceholder": "نام، جیسے shop (خالی چھوڑنے پر بے ترتیب عرف بنے گا)",
 	"new.domain": "عرف ڈومین",
 	"new.note": "نوٹ (اختیاری)",
 	"new.destination": "فارورڈنگ ایڈریس (ڈیفالٹ کے لیے خالی چھوڑیں)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "جو catch-all پہلے ہی کہیں اور میل بھیجتا ہے (جیسے Mailflare کو)، اسے بھی اس Worker کی طرف موڑیں۔ جو میل وہ آج وہاں بھیجتا ہے وہ اس کے بجائے یہاں آئے گا۔ جن ڈومینز پر دوسری میل آتی ہے ان کے لیے اسے بند رکھیں۔",
 	"common.copy": "کاپی کریں",
 	"common.copied": "{value} کاپی ہو گیا",
-	"new.kind": "عرف کی قسم",
-	"new.kind.custom": "ایک نام جو آپ خود چنیں",
 	"dash.perPage": "فی صفحہ {count}",
 	"dash.perPageLabel": "فی صفحہ قطاریں",
 	"dash.colLastUsed": "آخری استعمال",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (مفت: روزانہ 300)",
 	"conn.brevoLimits": "Brevo تھریڈ ہیڈرز یا ان لائن تصاویر قبول نہیں کرتا: جواب وصول کنندہ کو نئی گفتگو کے طور پر نظر آ سکتا ہے، ان لائن تصاویر منسلکات کے طور پر پہنچتی ہیں، اور جن فائل اقسام کو Brevo مسترد کرتا ہے (جیسے .exe یا .json) ان والے جوابات آپ کو واپس بھیج دیے جاتے ہیں۔",
 	"alias.forwarding": "فارورڈنگ",
+	"new.namePlaceholder": "نام، جیسے shop",
+	"new.randomLabel": "یا بے ترتیب طور پر ایک بنائیں:",
+	"new.random.random_words": "الفاظ",
+	"new.random.random_characters": "بے ترتیب حروف",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

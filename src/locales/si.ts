@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "ක්‍රියාවක් සහ අවම වශයෙන් එක් අන්වර්ථයක් තෝරන්න.",
 	"new.title": "නව අන්වර්ථ නාමය",
 	"new.prefix": "අන්වර්ථ නාමයේ නම",
-	"new.prefixPlaceholder": "නම, උදා. shop (හිස්ව තැබුවහොත් අහඹු අන්වර්ථ නාමයක් සාදනු ඇත)",
 	"new.domain": "අන්වර්ථ වසම",
 	"new.note": "සටහන (විකල්ප)",
 	"new.destination": "යොමු කිරීමේ ලිපිනය (පෙරනිමිය සඳහා හිස්ව තබන්න)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "දැනටමත් වෙනත් තැනකට තැපෑල යවන catch-all එකද (උදාහරණයක් ලෙස Mailflare වෙත) මෙම Worker වෙත යොමු කරන්න. එය අද එහට යවන තැපෑල ඒ වෙනුවට මෙහි පැමිණෙනු ඇත. වෙනත් තැපෑල ලැබෙන වසම් සඳහා මෙය ක්‍රියාවිරහිතව තබන්න.",
 	"common.copy": "පිටපත් කරන්න",
 	"common.copied": "{value} පිටපත් කරන ලදී",
-	"new.kind": "අන්වර්ථ නාමයේ වර්ගය",
-	"new.kind.custom": "ඔබ තෝරන නම",
 	"dash.perPage": "පිටුවකට {count}",
 	"dash.perPageLabel": "පිටුවකට පේළි",
 	"dash.colLastUsed": "අවසන් වරට භාවිතා කළ",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (නොමිලේ: දිනකට 300)",
 	"conn.brevoLimits": "Brevo නූල් ශීර්ෂ හෝ ඇතුළත රූප පිළිගන්නේ නැත: පිළිතුර ලබන්නාට නව සංවාදයක් ලෙස පෙනෙන්නට පුළුවන, ඇතුළත රූප ඇමුණුම් ලෙස පැමිණෙයි, සහ Brevo ප්‍රතික්ෂේප කරන ගොනු වර්ග (උදා: .exe හෝ .json) සහිත පිළිතුරු ඔබ වෙත ආපසු යවයි.",
 	"alias.forwarding": "යොමු කිරීම",
+	"new.namePlaceholder": "නම, shop වැනි",
+	"new.randomLabel": "නැතහොත් අහඹු ලෙස එකක් සාදන්න:",
+	"new.random.random_words": "වචන",
+	"new.random.random_characters": "අහඹු අක්ෂර",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

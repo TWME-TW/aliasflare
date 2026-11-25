@@ -324,7 +324,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Виберіть дію та принаймні один псевдонім.",
 	"new.title": "Новий псевдонім",
 	"new.prefix": "Назва псевдоніма",
-	"new.prefixPlaceholder": "Назва, наприклад shop (порожньо — випадковий псевдонім)",
 	"new.domain": "Домен псевдонімів",
 	"new.note": "Нотатка (необов'язково)",
 	"new.destination": "Адреса пересилання (порожньо — типова)",
@@ -360,8 +359,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Також спрямовує на цей Worker catch-all, який уже надсилає пошту деінде (наприклад, до Mailflare). Пошта, яку він зараз туди надсилає, натомість приходитиме сюди. Вимкніть для доменів, які отримують іншу пошту.",
 	"common.copy": "Копіювати",
 	"common.copied": "Скопійовано {value}",
-	"new.kind": "Тип псевдоніма",
-	"new.kind.custom": "Назва на ваш вибір",
 	"dash.perPage": "{count} на сторінці",
 	"dash.perPageLabel": "Рядків на сторінці",
 	"dash.colLastUsed": "Останнє використання",
@@ -389,6 +386,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (безкоштовно: 300 на день)",
 	"conn.brevoLimits": "Brevo не приймає заголовки гілки листування та вбудовані зображення: відповідь може виглядати для отримувача як нова розмова, вбудовані зображення надходять як вкладення, а відповіді з типами файлів, які Brevo відхиляє (наприклад, .exe або .json), повертаються до вас.",
 	"alias.forwarding": "Пересилання",
+	"new.namePlaceholder": "Назва, наприклад shop",
+	"new.randomLabel": "Або створіть випадковий:",
+	"new.random.random_words": "Слова",
+	"new.random.random_characters": "Випадкові символи",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

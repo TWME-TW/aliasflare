@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "اختر إجراءً وحدّد اسمًا مستعارًا واحدًا على الأقل.",
 	"new.title": "اسم مستعار جديد",
 	"new.prefix": "اسم المستعار",
-	"new.prefixPlaceholder": "اسم، مثل shop (اتركه فارغًا لإنشاء اسم عشوائي)",
 	"new.domain": "نطاق الاسم المستعار",
 	"new.note": "ملاحظة (اختياري)",
 	"new.destination": "عنوان إعادة التوجيه (اتركه فارغًا للافتراضي)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "وجّه أيضًا إلى هذا Worker أي catch-all يرسل البريد إلى مكان آخر بالفعل (مثل Mailflare). فالبريد الذي يُرسل إلى هناك اليوم سيصل إلى هنا بدلًا من ذلك. اتركه معطّلًا للنطاقات التي تستقبل بريدًا آخر.",
 	"common.copy": "نسخ",
 	"common.copied": "تم نسخ {value}",
-	"new.kind": "نوع الاسم المستعار",
-	"new.kind.custom": "اسم تختاره بنفسك",
 	"dash.perPage": "{count} لكل صفحة",
 	"dash.perPageLabel": "صفوف لكل صفحة",
 	"dash.colLastUsed": "آخر استخدام",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (مجاناً: 300 يومياً)",
 	"conn.brevoLimits": "لا يقبل Brevo ترويسات الخيوط ولا الصور المضمّنة: قد يظهر الرد لدى المستلم كمحادثة جديدة، وتصل الصور المضمّنة كمرفقات، ويُعاد إليك الرد الذي يحتوي على أنواع ملفات يرفضها Brevo (مثل .exe أو .json).",
 	"alias.forwarding": "إعادة التوجيه",
+	"new.namePlaceholder": "الاسم، مثل shop",
+	"new.randomLabel": "أو أنشئ واحدًا عشوائيًا:",
+	"new.random.random_words": "كلمات",
+	"new.random.random_characters": "أحرف عشوائية",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;

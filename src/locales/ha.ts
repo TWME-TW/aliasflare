@@ -339,7 +339,6 @@ const dictionary: Dictionary = {
 	"notice.bulkBad": "Zaɓi aiki da aƙalla laƙabi ɗaya.",
 	"new.title": "Sabon laƙabi",
 	"new.prefix": "Sunan laƙabi",
-	"new.prefixPlaceholder": "Suna, misali shop (bar wofi don laƙabi bazuwa)",
 	"new.domain": "Domain na laƙabi",
 	"new.note": "Bayani (zaɓi)",
 	"new.destination": "Adireshin tura saƙo (bar wofi don tsoho)",
@@ -375,8 +374,6 @@ const dictionary: Dictionary = {
 	"cf.replaceCatchAllHelp": "Haka kuma a nuna wa wannan Worker catch-all da ke aika saƙo a wani wuri tuni (misali zuwa Mailflare). Saƙon da yake aikawa can yau zai zo nan maimakon. A bar shi a kashe ga domains da ke karɓar wasu saƙonni.",
 	"common.copy": "Kwafi",
 	"common.copied": "An kwafi {value}",
-	"new.kind": "Nau'in laƙabi",
-	"new.kind.custom": "Sunan da ka zaɓa",
 	"dash.perPage": "{count} a kowane shafi",
 	"dash.perPageLabel": "Layuka a kowane shafi",
 	"dash.colLastUsed": "An yi amfani da shi ta ƙarshe",
@@ -404,6 +401,11 @@ const dictionary: Dictionary = {
 	"conn.provider.brevo": "Brevo (kyauta: 300 a rana)",
 	"conn.brevoLimits": "Brevo ba ya karɓar headar zaren saƙo ko hotuna da aka saka a cikin saƙo: amsa na iya bayyana ga mai karɓa a matsayin sabon zance, hotunan da aka saka suna zuwa a matsayin abin haɗe, kuma amsoshin da ke da nau'in fayil da Brevo ya ƙi (kamar .exe ko .json) ana mayar da su gare ka.",
 	"alias.forwarding": "Tura",
+	"new.namePlaceholder": "Suna, kamar shop",
+	"new.randomLabel": "Ko ƙirƙiri ɗaya bazuwar:",
+	"new.random.random_words": "Kalmomi",
+	"new.random.random_characters": "Haruffa na bazuwar",
+	"new.random.uuid": "UUID",
 };
 
 export default dictionary;
