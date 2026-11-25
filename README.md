@@ -74,7 +74,7 @@ On a phone:
 
 ## Requirements
 
-- A Cloudflare account. The **Workers Free** plan works: forwards to your own mailbox use Cloudflare Email Sending, which delivers to verified destination addresses on any plan. Mail to other people (replies through reverse aliases, senders' mailto unsubscribe) needs either **Workers Paid** for Email Sending or another sending service (Resend, SMTP2GO, Brevo, Postmark, Mailgun, Amazon SES, any SMTP server or a custom HTTP request), with each alias domain verified there. Most have a free plan. If you only want to receive, none is needed: choose receive-only forwarding (step 8).
+- A Cloudflare account. The **Workers Free** plan works: forwards to your own mailbox use Cloudflare Email Sending, which delivers to verified destination addresses on any plan. Mail to other people (replies through reverse aliases, senders' mailto unsubscribe) needs either **Workers Paid** for Email Sending or another sending service (Resend, SMTP2GO, Brevo, Postmark, Mailgun, Amazon SES, Mail.baby, any SMTP server or a custom HTTP request), with each alias domain verified there. Most have a free plan. If you only want to receive, none is needed: choose receive-only forwarding (step 8).
 - One or more **alias domains** on Cloudflare. Each one must be a **zone apex** (`a.com`, not `mail.a.com`), because Email Routing has catch-all rules only on the apex, and it should receive no other mail: Email Routing takes over its MX records.
 
 ## Setup
@@ -157,6 +157,7 @@ On **Connection → Sending mail**, choose your Workers plan (Free is assumed) a
 | Resend, SMTP2GO, Brevo, Postmark | an API key |
 | Mailgun | an API key and the region (US or EU); each alias domain is a Mailgun sending domain |
 | Amazon SES | an IAM access key ID and secret allowed `ses:SendRawEmail`, and the region |
+| Mail.baby | your InterServer API key, and optionally the mail order that sends (the first active one otherwise) |
 | SMTP server | host, port (587 STARTTLS or 465 TLS; port 25 is closed to Workers), user name and password: works with almost any provider or your own server |
 | Custom HTTP request | an https URL, header lines and a JSON body with placeholders such as `{{to}}`, `{{subject}}`, `{{html}}`, `{{attachments}}` or `{{raw}}` (the whole message in base64); the key is `{{api_key}}` |
 
@@ -241,7 +242,7 @@ What it cannot do, on purpose: read mail, senders, contacts or activity (text wr
 
 ### Environment overrides
 
-These variables or secrets win over the dashboard: `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`, `MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `OUTBOUND_PROVIDER` (`cloudflare`, `resend`, `smtp2go`, `brevo`, `postmark`, `mailgun`, `ses`, `smtp` or `custom`), `OUTBOUND_API_KEY`, `OUTBOUND_OPTIONS` (a JSON object with the provider's other fields, such as the SMTP server or the Mailgun region), `WORKERS_PLAN` (`free` or `paid`).
+These variables or secrets win over the dashboard: `PUBLIC_URL`, `SIGNING_SECRET`, `SETUP_CODE`, `CLOUDFLARE_API_TOKEN`, `WORKER_NAME`, `MAILFLARE_URL`, `MAILFLARE_API_KEY`, `WEBHOOK_SECRET`, `OUTBOUND_PROVIDER` (`cloudflare`, `resend`, `smtp2go`, `brevo`, `postmark`, `mailgun`, `ses`, `mailbaby`, `smtp` or `custom`), `OUTBOUND_API_KEY`, `OUTBOUND_OPTIONS` (a JSON object with the provider's other fields, such as the SMTP server or the Mailgun region), `WORKERS_PLAN` (`free` or `paid`).
 
 ## Security model
 

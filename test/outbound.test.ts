@@ -92,6 +92,45 @@ describe("replies through another provider", () => {
 	});
 });
 
+describe("replies through Mail.baby", () => {
+	it("go as a whole message to rawsend, from the chosen mail order, with the thread headers", async () => {
+		await db
+			.prepare("INSERT INTO config (key, value) VALUES ('outboundProvider', 'mailbaby'), ('outboundApiKey', 'mb-key-test'), ('outboundOptions', '{\"mailbabyOrderId\":\"39\"}')")
+			.run();
+		stubProvider(() => Response.json({ status: "ok", text: "185caa69ff7000f47c" }));
+		const reverse = await reverseAliasOfBob();
+		const { msg, rejected } = inbound(reverse, "owner@gmail.test", `${PASS}\r\nFrom: owner@gmail.test\r\nIn-Reply-To: <p@x>`, "Thanks");
+		await deliver(msg);
+		expect(rejected()).toBeNull();
+		expect(calls[0]!.url).toBe("https://api.mailbaby.net/mail/rawsend");
+		expect(calls[0]!.headers["X-API-KEY"]).toBe("mb-key-test");
+		expect(calls[0]!.body.id).toBe(39);
+		const raw = String(calls[0]!.body.raw_email);
+		expect(raw).toMatch(/^From: <?shop@a\.test>?\r$/m);
+		expect(raw).toMatch(/^To: <?bob@store\.test>?\r$/m);
+		expect(raw).toMatch(/^In-Reply-To: <p@x>\r$/m);
+		expect(raw).toMatch(/^Message-ID: <[^>]+@a\.test>\r$/m);
+		// Bodies are base64: the text part carries the reply.
+		expect(raw).toContain(btoa("Thanks").slice(0, 8));
+	});
+
+	it("are bounced back when Mail.baby refuses them", async () => {
+		await db.prepare("INSERT INTO config (key, value) VALUES ('outboundProvider', 'mailbaby'), ('outboundApiKey', 'mb-key-test')").run();
+		stubProvider(() => Response.json({ code: 401, message: "API key is missing or invalid" }, { status: 401 }));
+		const reverse = await reverseAliasOfBob();
+		const { msg, rejected } = inbound(reverse, "owner@gmail.test", `${PASS}\r\nFrom: owner@gmail.test`, "Thanks");
+		await deliver(msg);
+		expect(calls[0]!.body.id).toBeUndefined();
+		expect(rejected()).toMatch(/could not be sent/);
+	});
+
+	it("keep only a numeric mail order id", async () => {
+		const { normalizeOutboundOptions } = await import("../src/outbound");
+		expect(normalizeOutboundOptions({ mailbabyOrderId: " 66 " }).mailbabyOrderId).toBe("66");
+		expect(normalizeOutboundOptions({ mailbabyOrderId: "mb66" }).mailbabyOrderId).toBe("");
+	});
+});
+
 describe("replies through Brevo", () => {
 	beforeEach(async () => {
 		await db.prepare("INSERT INTO config (key, value) VALUES ('outboundProvider', 'brevo'), ('outboundApiKey', 'xkeysib-test')").run();

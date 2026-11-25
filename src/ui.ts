@@ -847,6 +847,7 @@ ${group(
 <select id="mailgunRegion" name="mailgunRegion" ${off}><option value="us" ${options.mailgunRegion === "us" ? "selected" : ""}>US</option><option value="eu" ${options.mailgunRegion === "eu" ? "selected" : ""}>EU</option></select>
 <p class="help">${t("conn.mailgunHelp")}</p>`,
 )}
+${group("mailbaby", input("mailbabyOrderId", t("conn.mailbabyOrder"), t("conn.mailbabyOrderHelp"), 'inputmode="numeric" pattern="[0-9]*" placeholder="12345"'))}
 ${group("ses", html`${input("sesRegion", t("conn.sesRegion"), "", 'placeholder="us-east-1"')}${input("sesAccessKeyId", t("conn.sesAccessKey"), t("conn.sesHelp"), 'autocomplete="off"')}`)}
 ${group(
 	"custom",

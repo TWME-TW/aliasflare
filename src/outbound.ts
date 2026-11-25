@@ -2,7 +2,7 @@
  * Mail to other people: replies through a reverse alias and the sender's own mailto
  * unsubscribe. Cloudflare Email Sending sends it on the Workers Paid plan; on the Free plan
  * it only delivers to verified destination addresses, so another service can send it instead:
- * one with an HTTP API (Resend, SMTP2GO, Brevo, Postmark, Mailgun, Amazon SES), any SMTP
+ * one with an HTTP API (Resend, SMTP2GO, Brevo, Postmark, Mailgun, Amazon SES, Mail.baby), any SMTP
  * server, or a request of the user's own design. Forwards to the owner's own mailbox always use
  * Email Sending: that mailbox is a verified destination, so they work on either plan.
  */
@@ -13,7 +13,7 @@ import { buildMime, formatAddress, newMessageId } from "./mime";
 import { sendSmtp, type SmtpSecurity } from "./smtp";
 import { readTextLimited } from "./streams";
 
-export const OUTBOUND_PROVIDERS = ["cloudflare", "resend", "smtp2go", "brevo", "postmark", "mailgun", "ses", "smtp", "custom"] as const;
+export const OUTBOUND_PROVIDERS = ["cloudflare", "resend", "smtp2go", "brevo", "postmark", "mailgun", "ses", "mailbaby", "smtp", "custom"] as const;
 export type OutboundProvider = (typeof OUTBOUND_PROVIDERS)[number];
 
 export function isOutboundProvider(value: unknown): value is OutboundProvider {
@@ -21,7 +21,7 @@ export function isOutboundProvider(value: unknown): value is OutboundProvider {
 }
 
 /** Attachments each provider takes in one message. */
-export const OUTBOUND_ATTACHMENT_LIMITS: Record<OutboundProvider, number> = { cloudflare: 32, resend: 50, smtp2go: 50, brevo: 50, postmark: 50, mailgun: 50, ses: 50, smtp: 50, custom: 50 };
+export const OUTBOUND_ATTACHMENT_LIMITS: Record<OutboundProvider, number> = { cloudflare: 32, resend: 50, smtp2go: 50, brevo: 50, postmark: 50, mailgun: 50, ses: 50, mailbaby: 50, smtp: 50, custom: 50 };
 
 /**
  * What the providers need besides the secret (the API key, SMTP password or AWS secret key,
@@ -35,6 +35,8 @@ export type OutboundOptions = {
 	mailgunRegion: "us" | "eu";
 	sesRegion: string;
 	sesAccessKeyId: string;
+	/** Which Mail.baby mail order sends (its numeric id); empty for the account's first active one. */
+	mailbabyOrderId: string;
 	/** A custom request: https URL, "Name: value" header lines and a body with {{placeholders}}. */
 	customUrl: string;
 	customHeaders: string;
@@ -51,6 +53,7 @@ export const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {
 	mailgunRegion: "us",
 	sesRegion: "us-east-1",
 	sesAccessKeyId: "",
+	mailbabyOrderId: "",
 	customUrl: "",
 	customHeaders: "Authorization: Bearer {{api_key}}",
 	customBody: '{"from": {{from_header}}, "to": [{{to}}], "subject": {{subject}}, "html": {{html}}, "text": {{text}}, "reply_to": {{reply_to}}, "headers": {{headers}}}',
@@ -74,6 +77,7 @@ export function normalizeOutboundOptions(raw: unknown): OutboundOptions {
 		mailgunRegion: value.mailgunRegion === "eu" ? "eu" : "us",
 		sesRegion: SES_REGION.test(region) ? region : DEFAULT_OUTBOUND_OPTIONS.sesRegion,
 		sesAccessKeyId: (str("sesAccessKeyId", 128) ?? "").replace(/[^A-Z0-9]/g, ""),
+		mailbabyOrderId: /^\d{1,18}$/.test(str("mailbabyOrderId", 18) ?? "") ? (str("mailbabyOrderId", 18) as string) : "",
 		customUrl: str("customUrl", 2000) ?? "",
 		customHeaders: str("customHeaders", 4000) ?? DEFAULT_OUTBOUND_OPTIONS.customHeaders,
 		customBody: str("customBody", 20_000) ?? DEFAULT_OUTBOUND_OPTIONS.customBody,
@@ -325,6 +329,24 @@ async function viaSes(secret: string, options: OutboundOptions, message: Outboun
 	return typeof id === "string" ? id : undefined;
 }
 
+/**
+ * Mail.baby (InterServer's relay) through /mail/rawsend: the message goes as built, so the
+ * thread headers, inline parts and Message-ID stay as they are. Its own sending endpoints set
+ * Reply-To to the sender and take no other headers.
+ */
+async function viaMailbaby(apiKey: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
+	const messageId = newMessageId(message.from);
+	const { json } = await post(
+		"https://api.mailbaby.net/mail/rawsend",
+		{ "X-API-KEY": apiKey },
+		{ raw_email: buildMime(message, messageId), ...(options.mailbabyOrderId ? { id: Number(options.mailbabyOrderId) } : {}) },
+		apiKey,
+	);
+	const answer = json as { status?: unknown; text?: unknown; message?: unknown } | null;
+	if (answer?.status !== "ok") throw new OutboundError(`Mail.baby did not send the message: ${JSON.stringify(json).slice(0, 300)}`);
+	return messageId;
+}
+
 async function viaSmtp(password: string, options: OutboundOptions, message: OutboundMessage, blockedHosts: string[] = []): Promise<string | undefined> {
 	if (!options.smtpHost || !isPublicHost(options.smtpHost, blockedHosts)) throw new OutboundError("No valid public SMTP server is set");
 	const messageId = newMessageId(message.from);
@@ -439,17 +461,24 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 	if (!config.outboundApiKey && !(provider === "smtp" && !options.smtpUsername) && provider !== "custom") throw new OutboundError(`No API key is set for ${provider}`);
 	const key = config.outboundApiKey;
 	const blockedHosts = [config.publicUrl, config.siteOrigin, config.mailflareUrl].map(hostnameOf).filter((host): host is string => !!host);
-	const messageId =
-		provider === "postmark"
-			? await viaPostmark(key, message)
-			: provider === "mailgun"
-				? await viaMailgun(key, options, message)
-				: provider === "ses"
-					? await viaSes(key, options, message)
-					: provider === "smtp"
-						? await viaSmtp(key, options, message, blockedHosts)
-						: provider === "custom"
-							? await viaCustom(key, options, message, blockedHosts)
-							: await { resend: viaResend, smtp2go: viaSmtp2go, brevo: viaBrevo }[provider](key, message);
-	return { messageId };
+	switch (provider) {
+		case "resend":
+			return { messageId: await viaResend(key, message) };
+		case "smtp2go":
+			return { messageId: await viaSmtp2go(key, message) };
+		case "brevo":
+			return { messageId: await viaBrevo(key, message) };
+		case "postmark":
+			return { messageId: await viaPostmark(key, message) };
+		case "mailgun":
+			return { messageId: await viaMailgun(key, options, message) };
+		case "ses":
+			return { messageId: await viaSes(key, options, message) };
+		case "mailbaby":
+			return { messageId: await viaMailbaby(key, options, message) };
+		case "smtp":
+			return { messageId: await viaSmtp(key, options, message, blockedHosts) };
+		case "custom":
+			return { messageId: await viaCustom(key, options, message, blockedHosts) };
+	}
 }

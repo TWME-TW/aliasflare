@@ -118,7 +118,7 @@ function checkEnv(env: Env): void {
 		if (value(name) && !validOrigin(value(name))) throw new ConfigError(`${name} must be an https:// URL without a user name or password`);
 	}
 	if (value("OUTBOUND_PROVIDER") && !isOutboundProvider(value("OUTBOUND_PROVIDER").toLowerCase())) {
-		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend, smtp2go, brevo, postmark, mailgun, ses, smtp or custom");
+		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend, smtp2go, brevo, postmark, mailgun, ses, mailbaby, smtp or custom");
 	}
 	if (value("OUTBOUND_OPTIONS")) {
 		let parsed: unknown;

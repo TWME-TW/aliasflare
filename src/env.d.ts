@@ -13,7 +13,7 @@ interface Env {
 	CLOUDFLARE_API_TOKEN?: string;
 	/** Name of this Worker, when it is not "aliasflare". */
 	WORKER_NAME?: string;
-	/** What sends mail to other people: cloudflare (Email Sending, Workers Paid), resend, smtp2go, brevo, postmark, mailgun, ses, smtp or custom. */
+	/** What sends mail to other people: cloudflare (Email Sending, Workers Paid), resend, smtp2go, brevo, postmark, mailgun, ses, mailbaby, smtp or custom. */
 	OUTBOUND_PROVIDER?: string;
 	/** The provider's secret: API key, SMTP password or AWS secret access key. */
 	OUTBOUND_API_KEY?: string;

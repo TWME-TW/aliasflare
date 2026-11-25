@@ -755,7 +755,7 @@ app.post("/connection", async (c) => {
 		if (!isOutboundProvider(text("outboundProvider"))) return redirectWithNotice(c, "/connection", "notice.badProvider");
 		values.outboundProvider = text("outboundProvider");
 	}
-	const optionKeys = ["smtpHost", "smtpPort", "smtpSecurity", "smtpUsername", "mailgunRegion", "sesRegion", "sesAccessKeyId", "customUrl", "customHeaders", "customBody", "customIdPath"] as const;
+	const optionKeys = ["smtpHost", "smtpPort", "smtpSecurity", "smtpUsername", "mailgunRegion", "sesRegion", "sesAccessKeyId", "mailbabyOrderId", "customUrl", "customHeaders", "customBody", "customIdPath"] as const;
 	const hasOutboundOptions = optionKeys.some((key) => typeof form[key] === "string");
 	if (!fixed.has("outboundOptions") && hasOutboundOptions) {
 		const raw = (name: string) => (typeof form[name] === "string" ? (form[name] as string) : "");
@@ -767,6 +767,7 @@ app.post("/connection", async (c) => {
 			mailgunRegion: raw("mailgunRegion"),
 			sesRegion: raw("sesRegion"),
 			sesAccessKeyId: raw("sesAccessKeyId"),
+			mailbabyOrderId: raw("mailbabyOrderId"),
 			customUrl: raw("customUrl"),
 			customHeaders: raw("customHeaders"),
 			customBody: raw("customBody"),
