@@ -473,6 +473,11 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Inchangé (réception seule)",
 	"settings.forwardMethodHelp": "Via un alias inversé, le courrier vient d'une adresse qui masque celle de l'expéditeur, donc vos réponses partent sous l'alias ; les traqueurs sont supprimés et la bannière peut s'afficher. Inchangé, Email Routing transmet le message tel quel : rien n'est jamais envoyé depuis votre compte et aucun service d'envoi n'est nécessaire, mais la réponse est adressée directement à l'expéditeur depuis votre propre adresse. Le courrier reçu via Mailflare est toujours réécrit.",
 	"settings.forwardMethodDirectNote": "Réception seule : lorsque vous répondez à un courrier transféré, l'expéditeur voit votre adresse réelle. Le blocage, la liste de blocage, le filtrage des promotions et la redirection d'un expéditeur fonctionnent toujours.",
+	"theme.label": "Thème",
+	"theme.help": "S’applique uniquement à ce navigateur.",
+	"theme.system": "Système",
+	"theme.light": "Clair",
+	"theme.dark": "Sombre",
 };
 
 export default dictionary;

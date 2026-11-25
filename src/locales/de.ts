@@ -458,6 +458,11 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Unverändert (nur Empfang)",
 	"settings.forwardMethodHelp": "Über einen Reverse-Alias kommt die Mail von einer Adresse, die die des Absenders verbirgt, sodass deine Antworten als Alias hinausgehen; Tracker werden entfernt und das Banner kann angezeigt werden. Unverändert gibt Email Routing die Nachricht unverändert weiter: Von deinem Konto wird nie etwas gesendet und kein Versanddienst ist nötig, aber beim Antworten schreibst du dem Absender direkt von deiner eigenen Adresse. Über Mailflare empfangene Mails werden immer umgeschrieben.",
 	"settings.forwardMethodDirectNote": "Nur Empfang: Wenn du auf weitergeleitete Mails antwortest, sieht der Absender deine echte Adresse. Blockieren, die Sperrliste, die Filterung von Werbung und das Umleiten eines Absenders funktionieren weiterhin.",
+	"theme.label": "Erscheinungsbild",
+	"theme.help": "Gilt nur für diesen Browser.",
+	"theme.system": "System",
+	"theme.light": "Hell",
+	"theme.dark": "Dunkel",
 };
 
 export default dictionary;

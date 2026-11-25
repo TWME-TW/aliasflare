@@ -10,8 +10,8 @@
  * domain works here once that domain's mail reaches Mailflare.
  */
 import { newId, now } from "./db";
-import { domainOf, extractEmail, makeReverseLocal, normalizeEmail } from "./format";
-import { aliasDomainOfReverse, isOwnAddress, isReverseDomainOf } from "./domains";
+import { cleanDisplayName, domainOf, extractEmail, makeReverseLocal, normalizeEmail } from "./format";
+import { aliasDomainOfReverse, isOwnAddress } from "./domains";
 import type { Settings } from "./settings";
 import { discard, readTextLimited } from "./streams";
 
@@ -250,10 +250,11 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 				const display = text(raw.contact, 300);
 				const email = extractEmail(display);
 				if (!email) continue;
-				const name = display?.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]?.trim() ?? null;
+				const rawName = display?.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]?.trim() ?? null;
+				const name = cleanDisplayName(rawName);
 				contacts.push({
 					email,
-					name: name && name !== email ? name.slice(0, 100) : null,
+					name: name && name.toLowerCase() !== email ? name : null,
 					createdAt: toTimestamp(raw.creation_timestamp),
 					lastSentAt: toTimestamp(raw.last_email_sent_timestamp),
 					blocked: raw.block_forward === true,
@@ -307,7 +308,7 @@ export async function fetchAddy(base: string, apiKey: string, budget: FetchBudge
 			});
 		}
 		const last = Number(body.meta?.last_page ?? page);
-		if (body.data.length === 0 || page >= last) break;
+		if (body.data.length === 0 || !(page < last)) break;
 	}
 	return out;
 }
@@ -329,13 +330,19 @@ export function parseCsv(input: string, maxRows = Infinity): string[][] {
 		else if (char === ",") row.push(field), (field = "");
 		else if (char === "\n" || char === "\r") {
 			if (char === "\r" && source[i + 1] === "\n") i += 1;
-			row.push(field), rows.push(row), (row = []), (field = "");
+			row.push(field);
+			if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+			row = [];
+			field = "";
 			// Enough rows read: the rest of a long file is not parsed at all.
-			if (rows.length >= maxRows) return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+			if (rows.length >= maxRows) return rows;
 		} else field += char;
 	}
-	if (field !== "" || row.length) row.push(field), rows.push(row);
-	return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+	if (field !== "" || row.length) {
+		row.push(field);
+		if (row.some((cell) => cell.trim() !== "")) rows.push(row);
+	}
+	return rows;
 }
 
 const COLUMNS = {
@@ -453,12 +460,12 @@ export async function importAliases(
 		.prepare("SELECT DISTINCT destination FROM aliases WHERE destination IS NOT NULL AND imported_from IS NULL AND deleted_at IS NULL")
 		.all<{ destination: string }>();
 	for (const row of used) known.add(row.destination.toLowerCase());
-	const ownDomain = (domain: string) => settings.aliasDomains.includes(domain) || isReverseDomainOf(domain, settings.aliasDomains);
+	const allOwnDomains = [...new Set([...settings.aliasDomains, ...list.map((alias) => domainOf(alias.email))])];
 	const newDestinations = new Set<string>();
 	const destinationFor = (alias: ImportedAlias): string | null => {
 		const destination = alias.destination?.toLowerCase();
-		// The alias's own domain counts too, so an import before the domain is added cannot set up a loop.
-		if (!destination || destination === alias.email || ownDomain(domainOf(destination)) || isOwnAddress(destination, [domainOf(alias.email)])) return null;
+		// All domains in this import batch count too, so an import before domains are added cannot set up a loop.
+		if (!destination || destination === alias.email || isOwnAddress(destination, allOwnDomains)) return null;
 		if (destination === settings.defaultDestination.toLowerCase()) return null;
 		if (known.has(destination)) return destination;
 		if (!options.keepDestinations) return null;
@@ -499,6 +506,7 @@ export async function importAliases(
 		detailsJson(alias.details),
 	];
 	const statements: D1PreparedStatement[] = list.map((alias) => {
+		const name = cleanDisplayName(alias.name);
 		if (existing.has(alias.email)) {
 			return db
 				.prepare(
@@ -507,7 +515,7 @@ export async function importAliases(
 					 imported_last_forward_at = ?, imported_last_block_at = ?, imported_last_reply_at = ?, imported_last_sent_at = ?, imported_details = ?,
 					 updated_at = ? WHERE address = ?`,
 				)
-				.bind(alias.note, alias.name, alias.createdAt, ...history(alias), timestamp, alias.email);
+				.bind(alias.note, name, alias.createdAt, ...history(alias), timestamp, alias.email);
 		}
 		const destination = destinationFor(alias);
 		return db
@@ -525,7 +533,7 @@ export async function importAliases(
 				alias.enabled ? "all" : "none",
 				destination,
 				alias.note,
-				alias.name,
+				name,
 				alias.pinned ? 1 : 0,
 				crypto.randomUUID(),
 				alias.createdAt ?? timestamp,
@@ -537,7 +545,7 @@ export async function importAliases(
 	let contacts = 0;
 	for (const alias of list) {
 		for (const contact of alias.contacts ?? []) {
-			if (isReverseDomainOf(domainOf(contact.email), [...settings.aliasDomains, domainOf(alias.email)])) continue;
+			if (isOwnAddress(contact.email, allOwnDomains)) continue;
 			contacts += 1;
 			statements.push(
 				db
@@ -554,7 +562,7 @@ export async function importAliases(
 						newId("ct"),
 						alias.email,
 						normalizeEmail(contact.email),
-						contact.name,
+						cleanDisplayName(contact.name),
 						makeReverseLocal(contact.email, settings.includeSenderInReverseAlias),
 						contact.blocked ? 1 : 0,
 						contact.lastSentAt,
@@ -563,8 +571,8 @@ export async function importAliases(
 			);
 		}
 	}
-	// A batch is one query, so larger batches keep a big import inside the per-request query limit.
-	const batchSize = options.batchSize ?? 100;
+	// A batch is one query; scale up dynamically so large imports with many contacts stay well below Workers' subrequest limit.
+	const batchSize = Math.max(options.batchSize ?? 100, Math.ceil(statements.length / 400));
 	for (let i = 0; i < statements.length; i += batchSize) await db.batch(statements.slice(i, i + batchSize));
 	// The imported history (the other service's last forward, reply or send, and the contacts'
 	// own) counts toward when each alias was last used.

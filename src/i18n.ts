@@ -84,6 +84,13 @@ export const LOCALES = {
 export type Locale = keyof typeof LOCALES;
 export const LOCALE_LIST = Object.keys(LOCALES) as Locale[];
 export const LANG_COOKIE = "af_lang";
+export const THEME_COOKIE = "af_theme";
+export const THEMES = ["system", "light", "dark"] as const;
+export type Theme = (typeof THEMES)[number];
+
+export function isTheme(value: unknown): value is Theme {
+	return typeof value === "string" && (THEMES as readonly string[]).includes(value);
+}
 
 const RTL = new Set<Locale>(["ar", "fa", "ur"]);
 
@@ -131,14 +138,14 @@ export function negotiateLocale(acceptLanguage: string | null | undefined): Loca
 	return "en";
 }
 
-export type Translate = ((key: MessageKey, params?: Record<string, string | number>) => string) & { locale: Locale };
+export type Translate = ((key: MessageKey, params?: Record<string, string | number>) => string) & { locale: Locale; theme?: Theme };
 
 /** True for a notice message key; notices travel in URLs as keys, never as text. */
 export function isNoticeKey(value: unknown): value is MessageKey {
 	return typeof value === "string" && value.startsWith("notice.") && Object.hasOwn(en, value);
 }
 
-export function translator(locale: Locale): Translate {
+export function translator(locale: Locale, theme: Theme = "system"): Translate {
 	const dictionary: Dictionary = LOCALES[locale];
 	const t = ((key: MessageKey, params?: Record<string, string | number>) => {
 		// Own keys only, never inherited ones ("constructor"); an unknown key comes back as itself.
@@ -146,5 +153,6 @@ export function translator(locale: Locale): Translate {
 		return params ? template.replace(/\{(\w+)\}/g, (match, name: string) => (Object.hasOwn(params, name) ? String(params[name]) : match)) : template;
 	}) as Translate;
 	t.locale = locale;
+	t.theme = theme;
 	return t;
 }

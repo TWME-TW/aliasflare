@@ -2,7 +2,8 @@ import { mailflareReady, type AppConfig } from "./config";
 import { sendOutbound } from "./outbound";
 import { verifyToken } from "./crypto";
 import { getAlias, now, recordEvent, setForwardMode, type ForwardRow } from "./db";
-import { domainOf, extractEmail } from "./format";
+import { domainOf, extractEmail, safeHttpsUrl } from "./format";
+export { safeHttpsUrl };
 import type { Translate } from "./i18n";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings, unsubscribeRuleFor, type UnsubscribeBehavior, type UnsubscribeFallback } from "./settings";
@@ -79,7 +80,8 @@ export async function resolveLink(
 					ownDomains: [...settings.aliasDomains, loaded.forward.alias_address.split("@").pop() ?? ""].filter(Boolean),
 				})
 			: null;
-	return { ...loaded, action, kind, plan, fallback: rule.fallback, redirect: rule.redirect, ownDomains, token };
+	const canonicalToken = `${kind}:${token}`;
+	return { ...loaded, action, kind, plan, fallback: rule.fallback, redirect: rule.redirect, ownDomains, token: canonicalToken };
 }
 
 export function describeAction(target: LinkTarget, t: Translate): string {
@@ -113,29 +115,6 @@ function parseUris(value: string): string[] {
 	return (value.match(/<[^<>]+>/g) ?? []).map((uri) => uri.slice(1, -1).trim());
 }
 
-const PRIVATE_SUFFIXES = /(^|\.)(localhost|local|internal|intranet|lan|home|corp|arpa|test|invalid|example)$/;
-
-/**
- * The URL when it is a public https address this Worker may call: no IP literals, no
- * internal or single-label names, no other port, no credentials, and none of this
- * service's own hosts.
- */
-export function safeHttpsUrl(value: string, blockedHosts: string[] = []): URL | null {
-	let url: URL;
-	try {
-		url = new URL(value);
-	} catch {
-		return null;
-	}
-	if (url.protocol !== "https:" || url.username || url.password || url.port !== "") return null;
-	const host = url.hostname.toLowerCase().replace(/\.$/, "");
-	// The URL parser has already turned 0x7f.1 and similar into dotted IPv4.
-	if (host.startsWith("[") || /^[\d.]+$/.test(host)) return null;
-	if (!host.includes(".") || PRIVATE_SUFFIXES.test(host)) return null;
-	if (blockedHosts.some((blocked) => blocked && (host === blocked.toLowerCase() || host.endsWith(`.${blocked.toLowerCase()}`)))) return null;
-	return url;
-}
-
 /** Second-level labels under a country code that are public suffixes (co.uk, gouv.fr, com.au). */
 const COUNTRY_SECOND_LEVELS = new Set(
 	"ac asso co com edu go gob gouv gov govt info ltd mil ne net nhs nom or org plc police priv sch".split(" "),
@@ -151,7 +130,7 @@ const SHARED_SUFFIXES = new Set(
  * domain with everyone else's mailbox, so no address there counts as the sender's own site.
  */
 const SHARED_MAILBOX_DOMAINS = new Set(
-	"gmail.com googlemail.com outlook.com hotmail.com live.com msn.com yahoo.com ymail.com rocketmail.com icloud.com me.com mac.com aol.com proton.me protonmail.com pm.me gmx.com gmx.de gmx.net web.de mail.com yandex.com yandex.ru mail.ru qq.com 163.com 126.com zoho.com fastmail.com hey.com tutanota.com tuta.io".split(" "),
+	"gmail.com googlemail.com outlook.com outlook.co.uk outlook.de outlook.fr outlook.jp outlook.es hotmail.com hotmail.co.uk hotmail.fr hotmail.de hotmail.es hotmail.it live.com live.co.uk live.fr live.de live.jp msn.com yahoo.com yahoo.co.uk yahoo.co.jp yahoo.fr yahoo.de yahoo.es yahoo.it yahoo.ca yahoo.com.au yahoo.com.tw yahoo.com.hk ymail.com rocketmail.com icloud.com me.com mac.com aol.com proton.me protonmail.com protonmail.ch pm.me gmx.com gmx.de gmx.net gmx.at gmx.ch gmx.fr web.de t-online.de orange.fr free.fr laposte.net sfr.fr mail.com yandex.com yandex.ru mail.ru qq.com 163.com 126.com zoho.com fastmail.com hey.com tutanota.com tuta.io naver.com daum.net hanmail.net seznam.cz wp.pl o2.pl interia.pl onet.pl".split(" "),
 );
 
 /** The registrable part of a domain, roughly: example.com, example.co.uk or name.github.io. */

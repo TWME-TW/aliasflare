@@ -14,6 +14,8 @@ export const UNSUBSCRIBE_FALLBACKS: UnsubscribeFallback[] = ["block_contact", "d
 
 /** The unsubscribe settings, for all alias domains or one. An empty redirect uses the general one. */
 export type UnsubscribeRule = { behavior: UnsubscribeBehavior; fallback: UnsubscribeFallback; redirect: string };
+/** Per-domain unsubscribe overrides; omitted fields inherit the general setting. */
+export type UnsubscribeDomainRule = { behavior?: UnsubscribeBehavior; fallback?: UnsubscribeFallback; redirect: string };
 
 /** How new random aliases are named: two words and digits, random characters, or a UUID. */
 export type RandomAliasFormat = "random_words" | "random_characters" | "uuid";
@@ -48,7 +50,7 @@ export type Settings = {
 	/** Where an unsubscribed sender's mail goes with "redirect_contact" (a separate mailbox, say). */
 	unsubscribeRedirect: string;
 	/** Alias domains with unsubscribe settings of their own. */
-	unsubscribeDomains: Record<string, UnsubscribeRule>;
+	unsubscribeDomains: Record<string, UnsubscribeDomainRule>;
 	defaultDestination: string;
 	autoForwardNewAliases: boolean;
 	/**
@@ -112,15 +114,22 @@ function cleanAddress(value: unknown): string {
 	return typeof value === "string" ? (extractEmail(value.trim())?.toLowerCase() ?? "") : "";
 }
 
-function normalizeRules(raw: unknown, domains: string[]): Record<string, UnsubscribeRule> {
-	const rules: Record<string, UnsubscribeRule> = {};
+function normalizeRules(raw: unknown, domains: string[]): Record<string, UnsubscribeDomainRule> {
+	const rules: Record<string, UnsubscribeDomainRule> = {};
 	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return rules;
 	for (const domain of domains) {
 		const rule: unknown = Object.hasOwn(raw, domain) ? (raw as Record<string, unknown>)[domain] : null;
 		if (!rule || typeof rule !== "object") continue;
 		const { behavior, fallback, redirect } = rule as Record<string, unknown>;
-		if (!isUnsubscribeBehavior(behavior)) continue;
-		rules[domain] = { behavior, fallback: isUnsubscribeFallback(fallback) ? fallback : DEFAULT_SETTINGS.unsubscribeFallback, redirect: cleanAddress(redirect) };
+		const validBehavior = isUnsubscribeBehavior(behavior) ? behavior : undefined;
+		const validFallback = isUnsubscribeFallback(fallback) ? fallback : undefined;
+		const validRedirect = cleanAddress(redirect);
+		if (!validBehavior && !validFallback && !validRedirect) continue;
+		rules[domain] = {
+			...(validBehavior ? { behavior: validBehavior } : {}),
+			...(validFallback ? { fallback: validFallback } : validBehavior ? { fallback: DEFAULT_SETTINGS.unsubscribeFallback } : {}),
+			redirect: validRedirect,
+		};
 	}
 	return rules;
 }

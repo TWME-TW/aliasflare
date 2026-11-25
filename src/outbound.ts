@@ -8,6 +8,7 @@
  */
 import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
+import { isPublicHost, safeHttpsUrl } from "./format";
 import { buildMime, formatAddress, newMessageId } from "./mime";
 import { sendSmtp, type SmtpSecurity } from "./smtp";
 import { readTextLimited } from "./streams";
@@ -56,7 +57,6 @@ export const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {
 	customIdPath: "id",
 };
 
-const HOST = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 export const SES_REGION = /^[a-z]{2}(?:-[a-z]+)+-\d$/;
 
 /** Keeps known fields with usable values; anything else is the default. */
@@ -67,7 +67,7 @@ export function normalizeOutboundOptions(raw: unknown): OutboundOptions {
 	const host = str("smtpHost", 253)?.toLowerCase() ?? "";
 	const region = str("sesRegion", 30)?.toLowerCase() ?? "";
 	return {
-		smtpHost: HOST.test(host) ? host : "",
+		smtpHost: isPublicHost(host) ? host : "",
 		smtpPort: Number.isInteger(port) && port > 0 && port < 65536 && port !== 25 ? port : DEFAULT_OUTBOUND_OPTIONS.smtpPort,
 		smtpSecurity: value.smtpSecurity === "tls" ? "tls" : "starttls",
 		smtpUsername: (str("smtpUsername", 320) ?? "").replace(/[\u0000-\u001f]/g, ""),
@@ -275,7 +275,8 @@ async function viaMailgun(apiKey: string, options: OutboundOptions, message: Out
 		form.append(inline ? "inline" : "attachment", new Blob([attachment.content], { type: attachment.type }), inline ? attachment.contentId : attachment.filename);
 	}
 	const host = options.mailgunRegion === "eu" ? "api.eu.mailgun.net" : "api.mailgun.net";
-	const { json } = await request(`https://${host}/v3/${encodeURIComponent(domain)}/messages`, { Authorization: `Basic ${btoa(`api:${apiKey}`)}`, Accept: "application/json" }, form);
+	const auth = bytesToBase64(new TextEncoder().encode(`api:${apiKey}`));
+	const { json } = await request(`https://${host}/v3/${encodeURIComponent(domain)}/messages`, { Authorization: `Basic ${auth}`, Accept: "application/json" }, form);
 	const id = (json as { id?: unknown } | null)?.id;
 	return typeof id === "string" ? id : undefined;
 }
@@ -317,7 +318,7 @@ async function viaSes(secret: string, options: OutboundOptions, message: Outboun
 }
 
 async function viaSmtp(password: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
-	if (!options.smtpHost) throw new OutboundError("No SMTP server is set");
+	if (!options.smtpHost || !isPublicHost(options.smtpHost)) throw new OutboundError("No valid public SMTP server is set");
 	const messageId = newMessageId(message.from);
 	const from = typeof message.from === "string" ? message.from : message.from.email;
 	await sendSmtp(
@@ -377,13 +378,14 @@ export function parseHeaderLines(lines: string): [string, string][] {
 	return out;
 }
 
-async function viaCustom(apiKey: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
-	if (!options.customUrl || !options.customUrl.startsWith("https://")) throw new OutboundError("No https URL is set for the custom request");
+async function viaCustom(apiKey: string, options: OutboundOptions, message: OutboundMessage, blockedHosts: string[] = []): Promise<string | undefined> {
+	const safeUrl = options.customUrl ? safeHttpsUrl(options.customUrl, blockedHosts) : null;
+	if (!safeUrl) throw new OutboundError("No valid public https URL is set for the custom request");
 	const messageId = newMessageId(message.from);
 	const values = customValues(message, apiKey, messageId, () => buildMime(message, messageId));
 	const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
 	for (const [name, value] of parseHeaderLines(options.customHeaders)) headers[name] = fillTemplate(value, values, "text");
-	const { json } = await request(options.customUrl, headers, fillTemplate(options.customBody, values, "json"));
+	const { json } = await request(safeUrl.href, headers, fillTemplate(options.customBody, values, "json"));
 	if (!options.customIdPath) return undefined;
 	let found: unknown = json;
 	for (const key of options.customIdPath.split(".")) found = found && typeof found === "object" && Object.hasOwn(found, key) ? (found as Record<string, unknown>)[key] : undefined;
@@ -418,6 +420,7 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 	// An SMTP server may take mail without a password; everything else needs its secret.
 	if (!config.outboundApiKey && !(provider === "smtp" && !options.smtpUsername) && provider !== "custom") throw new OutboundError(`No API key is set for ${provider}`);
 	const key = config.outboundApiKey;
+	const blockedHosts = [config.publicUrl, config.siteOrigin, config.mailflareUrl].filter(Boolean).map((url) => new URL(url).hostname);
 	const messageId =
 		provider === "postmark"
 			? await viaPostmark(key, message)
@@ -428,7 +431,7 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 					: provider === "smtp"
 						? await viaSmtp(key, options, message)
 						: provider === "custom"
-							? await viaCustom(key, options, message)
+							? await viaCustom(key, options, message, blockedHosts)
 							: await { resend: viaResend, smtp2go: viaSmtp2go, brevo: viaBrevo }[provider](key, message);
 	return { messageId };
 }

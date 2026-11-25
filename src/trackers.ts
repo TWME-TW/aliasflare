@@ -9,9 +9,9 @@ const TRACKING_PARAMS = new Set([
 	"fbclid", "gclid", "dclid", "gbraid", "wbraid", "msclkid", "yclid", "twclid", "ttclid", "igshid", "li_fat_id",
 	"mc_cid", "mc_eid", "_hsenc", "_hsmi", "__hssc", "__hstc", "__hsfp", "hsctatracking", "mkt_tok", "vero_id", "vero_conv",
 	"oly_anon_id", "oly_enc_id", "rb_clickid", "s_cid", "ml_subscriber", "ml_subscriber_hash", "wickedid", "_kx", "ck_subscriber_id",
-	"sc_cid", "trk", "trkcampaign", "mbid", "cmpid", "elqtrackid", "elqtrack", "elq", "elqaid", "elqat", "spm", "ref_src",
+	"sc_cid", "trk", "trkcampaign", "mbid", "cmpid", "elqtrackid", "elqtrack", "elq", "elqaid", "elqat", "spm", "ref_src", "_ga",
 ]);
-const TRACKING_PARAM_PREFIXES = ["utm_", "pk_", "mtm_", "hmb_", "ga_", "_ga"];
+const TRACKING_PARAM_PREFIXES = ["utm_", "pk_", "mtm_", "hmb_", "ga_", "_ga_"];
 
 const MAX_SRC_LENGTH = 2048;
 
@@ -94,10 +94,12 @@ export function isTrackerImage(attributes: { src: string | null; width: string |
 /** Plain-text links: strip tracking parameters from every http(s) URL. */
 export function cleanText(text: string): { text: string; removed: number } {
 	let removed = 0;
-	const out = text.replace(/https?:\/\/[^\s<>"')\]]+/gi, (link) => {
+	const out = text.replace(/https?:\/\/[^\s<>"')\]]+/gi, (match) => {
+		const trail = match.match(/[.,;:!?]+$/)?.[0] ?? "";
+		const link = trail ? match.slice(0, -trail.length) : match;
 		const cleaned = cleanLink(link);
 		if (cleaned.changed) removed += 1;
-		return cleaned.href;
+		return cleaned.href + trail;
 	});
 	return { text: out, removed };
 }

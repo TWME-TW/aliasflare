@@ -458,6 +458,11 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Invariato (solo ricezione)",
 	"settings.forwardMethodHelp": "Tramite alias inverso, la posta arriva da un indirizzo che nasconde quello del mittente, quindi le tue risposte partono come alias; i tracker vengono rimossi e il banner può essere mostrato. Invariato, Email Routing inoltra il messaggio così com'è: dal tuo account non parte mai nulla e non serve alcun servizio di invio, ma rispondere scrive direttamente al mittente dal tuo indirizzo. La posta ricevuta tramite Mailflare viene sempre riscritta.",
 	"settings.forwardMethodDirectNote": "Solo ricezione: quando rispondi a una posta inoltrata, il mittente vede il tuo indirizzo reale. Blocco, lista di blocco, filtro promozioni e reindirizzamento di un mittente funzionano comunque.",
+	"theme.label": "Tema",
+	"theme.help": "Si applica solo a questo browser.",
+	"theme.system": "Sistema",
+	"theme.light": "Chiaro",
+	"theme.dark": "Scuro",
 };
 
 export default dictionary;

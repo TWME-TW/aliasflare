@@ -473,6 +473,11 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Ba tare da canji ba (karɓa kawai)",
 	"settings.forwardMethodHelp": "Ta sunan madadin baya, imel yana zuwa daga adireshin da ke ɓoye mai aikawa, don haka amsoshinka suna fita a matsayin sunan madadin; ana cire masu bin diddigi kuma ana iya nuna banner. Ba tare da canji ba, Email Routing yana wuce saƙon kamar yadda yake: ba a aika komai daga asusunka ba kuma ba a buƙatar sabis na aikawa, amma idan ka amsa, kana rubuta kai tsaye ga mai aikawa daga adireshinka. Imel da aka karɓa ta Mailflare koyaushe ana sake rubuta shi.",
 	"settings.forwardMethodDirectNote": "Karɓa kawai: idan ka amsa imel ɗin da aka tura, mai aikawa yana ganin ainihin adireshinka. Toshewa, jerin toshewa, tace tallace-tallace da tura mai aikawa suna ci gaba da aiki.",
+	"theme.label": "Jigo",
+	"theme.help": "Yana aiki a wannan burauzar ne kawai.",
+	"theme.system": "Tsari",
+	"theme.light": "Haske",
+	"theme.dark": "Duhu",
 };
 
 export default dictionary;

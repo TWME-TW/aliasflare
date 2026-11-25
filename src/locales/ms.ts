@@ -458,6 +458,11 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "Tidak diubah (terima sahaja)",
 	"settings.forwardMethodHelp": "Melalui alias terbalik, emel datang daripada alamat yang menyembunyikan pengirim, jadi balasan anda dihantar sebagai alias; penjejak dialih keluar dan sepanduk boleh dipaparkan. Tidak diubah, Email Routing menghantar mesej seperti sedia ada: tiada apa-apa yang dihantar daripada akaun anda dan perkhidmatan penghantaran tidak diperlukan, tetapi apabila membalas, anda menulis terus kepada pengirim daripada alamat anda sendiri. Emel yang diterima melalui Mailflare sentiasa ditulis semula.",
 	"settings.forwardMethodDirectNote": "Terima sahaja: apabila anda membalas emel yang dimajukan, pengirim melihat alamat sebenar anda. Sekatan, senarai sekatan, penapisan promosi dan mengubah hala pengirim masih berfungsi.",
+	"theme.label": "Tema",
+	"theme.help": "Terpakai untuk pelayar ini sahaja.",
+	"theme.system": "Sistem",
+	"theme.light": "Cerah",
+	"theme.dark": "Gelap",
 };
 
 export default dictionary;

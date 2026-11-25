@@ -4,7 +4,7 @@
  * which is why new aliases may only use the configured alias domains (catch-all in Mailflare).
  */
 import { now, type AliasRow, type ContactRow } from "../db";
-import { normalizeEmail } from "../format";
+import { cleanDisplayName, normalizeEmail } from "../format";
 import type { RandomAliasFormat, Settings } from "../settings";
 
 export type AliasStats = {
@@ -87,6 +87,21 @@ export async function latestContact(db: D1Database, address: string): Promise<Co
 		)
 		.bind(address)
 		.first<ContactRow>();
+}
+
+/** Batch version of latestContact for a page of aliases (one D1 batch instead of N queries). */
+export async function latestContacts(db: D1Database, addresses: string[]): Promise<Map<string, ContactRow>> {
+	const map = new Map<string, ContactRow>();
+	if (!addresses.length) return map;
+	const stmt = db.prepare(
+		"SELECT * FROM contacts WHERE alias_address = ? AND COALESCE(last_forward_at, last_reply_at) IS NOT NULL ORDER BY MAX(COALESCE(last_forward_at, 0), COALESCE(last_reply_at, 0)) DESC LIMIT 1",
+	);
+	const results = await db.batch(addresses.map((address) => stmt.bind(address)));
+	addresses.forEach((address, index) => {
+		const row = (results[index]?.results?.[0] as ContactRow | undefined) ?? null;
+		if (row) map.set(address, row);
+	});
+	return map;
 }
 
 export async function totals(db: D1Database): Promise<{ aliases: number; active: number; deleted: number; pinned: number; forwarded: number; replied: number; blocked: number }> {
@@ -202,9 +217,9 @@ export function cleanPrefix(prefix: string): string {
 		.slice(0, 50);
 }
 
-export type CreateAliasInput = { localPart: string; domain: string; note?: string | null; name?: string | null; destination?: string | null };
+export type CreateAliasInput = { localPart: string; domain: string; note?: string | null; name?: string | null; destination?: string | null; allowRestore?: boolean };
 
-/** Creates an alias, or restores a deleted one with the same address. */
+/** Creates an alias, or restores a deleted one with the same address (unless allowRestore is false). */
 export async function createAlias(db: D1Database, settings: Settings, input: CreateAliasInput): Promise<AliasView> {
 	const domain = input.domain.trim().toLowerCase();
 	const localPart = input.localPart.trim().toLowerCase();
@@ -213,13 +228,14 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 	}
 	if (!LOCAL_PART.test(localPart) || localPart.includes("..")) throw new ClientError(400, "The alias contains characters that are not allowed.");
 	const address = normalizeEmail(`${localPart}@${domain}`);
+	const name = cleanDisplayName(input.name);
 	const existing = await db.prepare("SELECT * FROM aliases WHERE address = ?").bind(address).first<AliasRow>();
 	const timestamp = now();
-	if (existing && !existing.deleted_at) throw new ClientError(409, "This alias already exists.");
+	if (existing && (!existing.deleted_at || input.allowRestore === false)) throw new ClientError(409, "This alias already exists.");
 	if (existing) {
 		await db
 			.prepare("UPDATE aliases SET deleted_at = NULL, forward_mode = 'all', forward_enabled = 1, note = ?, name = ?, destination = ?, updated_at = ? WHERE address = ?")
-			.bind(input.note ?? null, input.name ?? null, input.destination ?? null, timestamp, address)
+			.bind(input.note ?? null, name, input.destination ?? null, timestamp, address)
 			.run();
 	} else {
 		// Replies need a Mailflare mailbox; until the alias first receives mail, borrow the one of
@@ -235,7 +251,7 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 					`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, num_id, uid, created_at, updated_at)
 					 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
 				)
-				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, input.note ?? null, input.name ?? null, crypto.randomUUID(), timestamp, timestamp)
+				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, input.note ?? null, name, crypto.randomUUID(), timestamp, timestamp)
 				.run();
 		for (let attempt = 0; ; attempt += 1) {
 			if ((await insert()).meta.changes > 0) break;
@@ -276,7 +292,7 @@ export async function updateAlias(
 	const sets: string[] = [];
 	const params: unknown[] = [];
 	if (fields.note !== undefined) sets.push("note = ?"), params.push(fields.note?.slice(0, 500) || null);
-	if (fields.name !== undefined) sets.push("name = ?"), params.push(fields.name?.replace(/[\r\n"<>\\]/g, "").trim().slice(0, 100) || null);
+	if (fields.name !== undefined) sets.push("name = ?"), params.push(cleanDisplayName(fields.name));
 	if (fields.pinned !== undefined) sets.push("pinned = ?"), params.push(fields.pinned ? 1 : 0);
 	if (fields.enabled !== undefined) {
 		// Re-enabling keeps "Block promotions" if that was chosen before; disabling is "Forward nothing".

@@ -1,4 +1,4 @@
-import { domainOf, makeReverseLocal } from "./format";
+import { domainOf, makeReverseLocal, normalizeEmail } from "./format";
 
 export type ForwardMode = "all" | "no_promotions" | "none";
 
@@ -132,7 +132,7 @@ export async function ensureAlias(
 		row = await getAlias(db, address);
 	}
 	if (!row) throw new Error(`Alias ${address} could not be created`);
-	if (row.mailbox_id !== mailboxId) {
+	if (mailboxId && row.mailbox_id !== mailboxId) {
 		// The address moved to another Mailflare mailbox; replies must be sent from the new one.
 		await db.prepare("UPDATE aliases SET mailbox_id = ?, updated_at = ? WHERE address = ?").bind(mailboxId, timestamp, address).run();
 		row.mailbox_id = mailboxId;
@@ -267,11 +267,12 @@ export type BlocklistRow = { id: string; kind: "address" | "domain"; value: stri
 
 /** Candidate blocklist values for a sender: the address, its domain and every parent domain. */
 export function blocklistCandidates(email: string): string[] {
+	const normalized = normalizeEmail(email);
 	// A real domain has at most 127 labels; the cap keeps a crafted one inside D1's limits.
-	const labels = domainOf(email).split(".").slice(-60);
+	const labels = domainOf(normalized).split(".").slice(-60);
 	const domains: string[] = [];
 	for (let index = 0; index < labels.length - 1; index += 1) domains.push(labels.slice(index).join("."));
-	return [email, ...domains];
+	return [normalized, ...domains];
 }
 
 /** Returns the matching blocklist entry, counting the hit. */

@@ -151,12 +151,16 @@ async function readRaw(stream: ReadableStream<Uint8Array>, declared: number): Pr
 export async function handleDirectInbound(message: ForwardableEmailMessage, env: Env, config: AppConfig): Promise<ForwardOutcome> {
 	const aliasAddress = normalizeEmail(message.to);
 	const messageId = message.headers.get("Message-ID")?.trim();
+	const date = message.headers.get("Date")?.trim() ?? "";
 	// A retry of the same delivery has the same Message-ID, recipient, envelope sender, Date
 	// and size. Someone else reusing a Message-ID they saw cannot match all of them, so they
-	// cannot get a real message dropped as a duplicate.
+	// cannot get a real message dropped as a duplicate. Without a Message-ID, Date+Subject+size
+	// still caps retries of a failing delivery at MAX_ATTEMPTS.
 	const parts = messageId
-		? [messageId, aliasAddress, normalizeEmail(message.from ?? ""), message.headers.get("Date")?.trim() ?? "", String(message.rawSize)]
-		: [crypto.randomUUID()];
+		? [messageId, aliasAddress, normalizeEmail(message.from ?? ""), date, String(message.rawSize)]
+		: date
+			? ["no-mid", aliasAddress, normalizeEmail(message.from ?? ""), date, message.headers.get("Subject")?.trim() ?? "", String(message.rawSize)]
+			: [crypto.randomUUID()];
 	const key = `cf:${await sha256Hex(parts.join("\n"))}`;
 	return forwardMessage(env, config, {
 		key,

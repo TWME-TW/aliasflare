@@ -473,6 +473,11 @@ const dictionary: Dictionary = {
 	"forwardMethod.direct": "변경 없음(수신 전용)",
 	"settings.forwardMethodHelp": "역방향 별칭을 통하면 메일은 발신자 주소를 숨긴 별칭에서 오고, 답장도 별칭으로 나갑니다. 추적기는 제거되며 배너를 표시할 수 있습니다. 변경 없음을 선택하면 Email Routing이 메시지를 그대로 전달합니다. 계정에서 보내는 메일은 없고 발송 서비스도 필요하지 않지만, 답장은 내 주소에서 발신자에게 직접 갑니다. Mailflare로 받은 메일은 항상 다시 작성됩니다.",
 	"settings.forwardMethodDirectNote": "수신 전용: 전달된 메일에 답장하면 발신자에게 실제 주소가 보입니다. 차단, 차단 목록, 프로모션 필터링, 발신자 리디렉션은 계속 작동합니다.",
+	"theme.label": "테마",
+	"theme.help": "이 브라우저에만 적용됩니다.",
+	"theme.system": "시스템",
+	"theme.light": "라이트",
+	"theme.dark": "다크",
 };
 
 export default dictionary;

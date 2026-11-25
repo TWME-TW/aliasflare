@@ -128,17 +128,7 @@ export function stripSignedLinks(body: string): string {
 }
 
 /** The ways a "+" is written in mail bodies: in mailto: links (%2B) and as HTML entities. */
-const ENCODED_PLUS = ["%2B", "&#43;", "&#x2b;", "&#x002b;", "&#043;", "&plus;"];
 const ENCODED_PLUS_PATTERN = /%2b|&#0*43;|&#x0*2b;|&plus;/gi;
-
-/** Each replacement, and also its forms with "+" encoded (matched without regard to case). */
-function withEncodedPlus(replacements: Replacement[]): Replacement[] {
-	return replacements.flatMap((replacement) =>
-		replacement.from.includes("+")
-			? [replacement, ...ENCODED_PLUS.map((plus) => ({ from: replacement.from.replaceAll("+", plus), to: replacement.to }))]
-			: [replacement],
-	);
-}
 
 /**
  * Message-IDs to send on in In-Reply-To and References. A forwarded copy's ID becomes the
@@ -275,9 +265,8 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			{ from: `${found.reverse_local}@${reverseDomain}`, to: found.email },
 		]);
 		for (const owner of owners) replacements.push({ from: owner, to: contact.alias_address });
-		const all = withEncodedPlus(replacements);
-		if (html) html = replaceAddresses(html, all);
-		if (text) text = replaceAddresses(text, all);
+		if (html) html = replaceAddresses(html, replacements, { encodedPlus: true });
+		if (text) text = replaceAddresses(text, replacements, { encodedPlus: true });
 	}
 
 	const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
@@ -302,7 +291,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	const subject = cleanSubjectLine(email.subject) || "(no subject)";
-	const name = alias.name?.replace(/["\\\r\n<>]/g, "") || "";
+	const name = alias.name?.replace(/[\u0000-\u001f\u007f"\\<>]/g, "").trim() || "";
 
 	try {
 		if (viaMailflare) {
