@@ -1,3 +1,5 @@
 # Optional for `npm run dev`. Every setting can be entered on the dashboard instead;
 # values here override the dashboard. A fixed setup code saves looking in the logs.
-SETUP_CODE=LOCALDEV123
+# Left commented out so the Deploy to Cloudflare button never offers a known code as a
+# default: anyone holding the setup code can register the first passkey.
+# SETUP_CODE=choose-a-long-random-code

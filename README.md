@@ -2,6 +2,8 @@
 
 SimpleLogin-style **email aliases with reverse aliases**, on one Cloudflare Worker with Cloudflare Email Routing and Email Sending.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/TWME-TW/aliasflare)
+
 Give every site its own address on your domains. aliasflare forwards their mail to the inbox you already use, like Gmail. When you reply there, the reply goes out from the alias, so the other side never sees your real address.
 
 ## Screenshots
@@ -80,6 +82,10 @@ On a phone:
 ## Setup
 
 ### 1. Deploy
+
+**One click:** press **Deploy to Cloudflare** above. Cloudflare copies this repository to your GitHub or GitLab account, creates the D1 database, applies the migrations and deploys the Worker. Later updates: pull this repository into your copy, and each push redeploys.
+
+**By hand:**
 
 ```bash
 git clone https://github.com/TWME-TW/aliasflare.git
@@ -270,6 +276,8 @@ npm install
 npm run check
 cp .dev.vars.example .dev.vars && npm run db:migrate:local && npm run dev
 ```
+
+To skip reading the setup code from the logs, uncomment `SETUP_CODE` in `.dev.vars`.
 
 Translations live in `src/locales/`. A test fails if any language misses a key or a placeholder.
 
