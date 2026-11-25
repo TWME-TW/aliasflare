@@ -13,10 +13,12 @@ interface Env {
 	CLOUDFLARE_API_TOKEN?: string;
 	/** Name of this Worker, when it is not "aliasflare". */
 	WORKER_NAME?: string;
-	/** "cloudflare" (Email Sending, Workers Paid), "resend", "smtp2go" or "brevo": what sends mail to other people. */
+	/** What sends mail to other people: cloudflare (Email Sending, Workers Paid), resend, smtp2go, brevo, postmark, mailgun, ses, smtp or custom. */
 	OUTBOUND_PROVIDER?: string;
-	/** API key of the Resend, SMTP2GO or Brevo account. */
+	/** The provider's secret: API key, SMTP password or AWS secret access key. */
 	OUTBOUND_API_KEY?: string;
+	/** The provider's other settings as JSON (smtpHost, smtpPort, sesRegion, customUrl…). */
+	OUTBOUND_OPTIONS?: string;
 	/** "free" or "paid": the Workers plan, which sets how much one request may do. */
 	WORKERS_PLAN?: string;
 	/** Optional service binding to the Mailflare Worker, used instead of its public URL. */

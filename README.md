@@ -57,7 +57,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 
 ## Requirements
 
-- A Cloudflare account. The **Workers Free** plan works: forwards to your own mailbox use Cloudflare Email Sending, which delivers to verified destination addresses on any plan. Mail to other people (replies through reverse aliases, senders' mailto unsubscribe) needs either **Workers Paid** for Email Sending or a free account with **Resend** (3,000 a month, 100 a day) **SMTP2GO** (1,000 a month) or **Brevo** (300 a day), with each alias domain verified there.
+- A Cloudflare account. The **Workers Free** plan works: forwards to your own mailbox use Cloudflare Email Sending, which delivers to verified destination addresses on any plan. Mail to other people (replies through reverse aliases, senders' mailto unsubscribe) needs either **Workers Paid** for Email Sending or another sending service (Resend, SMTP2GO, Brevo, Postmark, Mailgun, Amazon SES, any SMTP server or a custom HTTP request), with each alias domain verified there. Most have a free plan. If you only want to receive, none is needed: choose receive-only forwarding (step 8).
 - One or more **alias domains** on Cloudflare. Each one must be a **zone apex** (`a.com`, not `mail.a.com`), because Email Routing has catch-all rules only on the apex, and it should receive no other mail: Email Routing takes over its MX records.
 
 ## Setup
@@ -130,7 +130,22 @@ On **Connection → Mailflare**, enter the Mailflare URL, a **personal** API key
 
 ### 8. Workers plan and sending provider
 
-On **Connection → Sending mail**, choose your Workers plan (Free is assumed) and what sends replies: Cloudflare Email Sending, Resend, SMTP2GO or Brevo, with the provider's API key. On the Free plan, with 10 ms of CPU and 50 subrequests per request:
+On **Connection → Sending mail**, choose your Workers plan (Free is assumed) and what sends replies, with its key:
+
+| Service | What it needs |
+| --- | --- |
+| Cloudflare Email Sending | Workers Paid to send to other people |
+| Resend, SMTP2GO, Brevo, Postmark | an API key |
+| Mailgun | an API key and the region (US or EU); each alias domain is a Mailgun sending domain |
+| Amazon SES | an IAM access key ID and secret allowed `ses:SendRawEmail`, and the region |
+| SMTP server | host, port (587 STARTTLS or 465 TLS; port 25 is closed to Workers), user name and password: works with almost any provider or your own server |
+| Custom HTTP request | an https URL, header lines and a JSON body with placeholders such as `{{to}}`, `{{subject}}`, `{{html}}`, `{{attachments}}` or `{{raw}}` (the whole message in base64); the key is `{{api_key}}` |
+
+How much you can send is set by your plan with that service, not by aliasflare.
+
+**Receive only.** If you never want to reply through aliases, set **Settings → How mail is forwarded** to *Unchanged (receive only)*. Email Routing then passes each message on as it is: nothing is sent from your account and no sending service is needed, but tracker removal and the banner are off, and replying writes to the sender from your real address. Blocking, the blocklist, the promotions filter and redirecting a sender keep working. Mail received through Mailflare is always rewritten.
+
+On the Free plan, with 10 ms of CPU and 50 subrequests per request:
 
 - messages larger than 512 KB are forwarded unchanged with Email Routing's own forward (no tracker removal, and replies to them do not go through the alias);
 - replies larger than 512 KB are refused with a bounce that says why;

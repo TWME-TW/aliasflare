@@ -1,15 +1,18 @@
 /**
  * Mail to other people: replies through a reverse alias and the sender's own mailto
  * unsubscribe. Cloudflare Email Sending sends it on the Workers Paid plan; on the Free plan
- * it only delivers to verified destination addresses, so a free service with an HTTP API
- * (Resend, SMTP2GO or Brevo) can send it instead. Forwards to the owner's own mailbox always use
+ * it only delivers to verified destination addresses, so another service can send it instead:
+ * one with an HTTP API (Resend, SMTP2GO, Brevo, Postmark, Mailgun, Amazon SES), any SMTP
+ * server, or a request of the user's own design. Forwards to the owner's own mailbox always use
  * Email Sending: that mailbox is a verified destination, so they work on either plan.
  */
 import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
+import { buildMime, formatAddress, newMessageId } from "./mime";
+import { sendSmtp, type SmtpSecurity } from "./smtp";
 import { readTextLimited } from "./streams";
 
-export const OUTBOUND_PROVIDERS = ["cloudflare", "resend", "smtp2go", "brevo"] as const;
+export const OUTBOUND_PROVIDERS = ["cloudflare", "resend", "smtp2go", "brevo", "postmark", "mailgun", "ses", "smtp", "custom"] as const;
 export type OutboundProvider = (typeof OUTBOUND_PROVIDERS)[number];
 
 export function isOutboundProvider(value: unknown): value is OutboundProvider {
@@ -17,7 +20,66 @@ export function isOutboundProvider(value: unknown): value is OutboundProvider {
 }
 
 /** Attachments each provider takes in one message. */
-export const OUTBOUND_ATTACHMENT_LIMITS: Record<OutboundProvider, number> = { cloudflare: 32, resend: 50, smtp2go: 50, brevo: 50 };
+export const OUTBOUND_ATTACHMENT_LIMITS: Record<OutboundProvider, number> = { cloudflare: 32, resend: 50, smtp2go: 50, brevo: 50, postmark: 50, mailgun: 50, ses: 50, smtp: 50, custom: 50 };
+
+/**
+ * What the providers need besides the secret (the API key, SMTP password or AWS secret key,
+ * which stays in outboundApiKey). Stored as one JSON value; OUTBOUND_OPTIONS can set it.
+ */
+export type OutboundOptions = {
+	smtpHost: string;
+	smtpPort: number;
+	smtpSecurity: SmtpSecurity;
+	smtpUsername: string;
+	mailgunRegion: "us" | "eu";
+	sesRegion: string;
+	sesAccessKeyId: string;
+	/** A custom request: https URL, "Name: value" header lines and a body with {{placeholders}}. */
+	customUrl: string;
+	customHeaders: string;
+	customBody: string;
+	/** Where the response's message id is, as a dotted path ("data.id"); empty for none. */
+	customIdPath: string;
+};
+
+export const DEFAULT_OUTBOUND_OPTIONS: OutboundOptions = {
+	smtpHost: "",
+	smtpPort: 587,
+	smtpSecurity: "starttls",
+	smtpUsername: "",
+	mailgunRegion: "us",
+	sesRegion: "us-east-1",
+	sesAccessKeyId: "",
+	customUrl: "",
+	customHeaders: "Authorization: Bearer {{api_key}}",
+	customBody: '{"from": {{from_header}}, "to": [{{to}}], "subject": {{subject}}, "html": {{html}}, "text": {{text}}, "reply_to": {{reply_to}}, "headers": {{headers}}}',
+	customIdPath: "id",
+};
+
+const HOST = /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+export const SES_REGION = /^[a-z]{2}(?:-[a-z]+)+-\d$/;
+
+/** Keeps known fields with usable values; anything else is the default. */
+export function normalizeOutboundOptions(raw: unknown): OutboundOptions {
+	const value = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+	const str = (key: keyof OutboundOptions, max: number) => (typeof value[key] === "string" ? (value[key] as string).trim().slice(0, max) : undefined);
+	const port = Number(value.smtpPort);
+	const host = str("smtpHost", 253)?.toLowerCase() ?? "";
+	const region = str("sesRegion", 30)?.toLowerCase() ?? "";
+	return {
+		smtpHost: HOST.test(host) ? host : "",
+		smtpPort: Number.isInteger(port) && port > 0 && port < 65536 && port !== 25 ? port : DEFAULT_OUTBOUND_OPTIONS.smtpPort,
+		smtpSecurity: value.smtpSecurity === "tls" ? "tls" : "starttls",
+		smtpUsername: (str("smtpUsername", 320) ?? "").replace(/[\u0000-\u001f]/g, ""),
+		mailgunRegion: value.mailgunRegion === "eu" ? "eu" : "us",
+		sesRegion: SES_REGION.test(region) ? region : DEFAULT_OUTBOUND_OPTIONS.sesRegion,
+		sesAccessKeyId: (str("sesAccessKeyId", 128) ?? "").replace(/[^A-Z0-9]/g, ""),
+		customUrl: str("customUrl", 2000) ?? "",
+		customHeaders: str("customHeaders", 4000) ?? DEFAULT_OUTBOUND_OPTIONS.customHeaders,
+		customBody: str("customBody", 20_000) ?? DEFAULT_OUTBOUND_OPTIONS.customBody,
+		customIdPath: (str("customIdPath", 100) ?? DEFAULT_OUTBOUND_OPTIONS.customIdPath).replace(/[^\w.]/g, ""),
+	};
+}
 
 /** File types Brevo accepts as attachments; it refuses the whole message for any other. */
 const BREVO_EXTENSIONS = new Set(
@@ -61,13 +123,12 @@ function mailbox(from: OutboundMessage["from"]): string {
 }
 
 async function post(url: string, headers: Record<string, string>, body: unknown): Promise<{ status: number; json: unknown }> {
-	const response = await fetch(url, {
-		method: "POST",
-		redirect: "manual",
-		signal: AbortSignal.timeout(TIMEOUT_MS),
-		headers: { "Content-Type": "application/json", Accept: "application/json", ...headers },
-		body: JSON.stringify(body),
-	});
+	return request(url, { "Content-Type": "application/json", Accept: "application/json", ...headers }, JSON.stringify(body));
+}
+
+/** POSTs a body as it is; a status of 300 or more is an error, with the start of the answer. */
+async function request(url: string, headers: Record<string, string>, body: string | FormData): Promise<{ status: number; json: unknown }> {
+	const response = await fetch(url, { method: "POST", redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS), headers, body });
 	const text = (await readTextLimited(response, 64 * 1024).catch(() => null)) ?? "";
 	let json: unknown = null;
 	try {
@@ -166,6 +227,169 @@ async function viaBrevo(apiKey: string, message: OutboundMessage): Promise<strin
 	return typeof id === "string" ? id : undefined;
 }
 
+async function viaPostmark(apiKey: string, message: OutboundMessage): Promise<string | undefined> {
+	const headers = Object.entries(message.headers ?? {}).map(([Name, Value]) => ({ Name, Value }));
+	const { json } = await post(
+		"https://api.postmarkapp.com/email",
+		{ "X-Postmark-Server-Token": apiKey },
+		{
+			From: mailbox(message.from),
+			To: message.to,
+			Subject: message.subject,
+			...(message.replyTo ? { ReplyTo: message.replyTo } : {}),
+			...(message.html ? { HtmlBody: message.html } : {}),
+			...(message.text !== undefined ? { TextBody: message.text } : {}),
+			...(headers.length ? { Headers: headers } : {}),
+			...(message.attachments?.length
+				? {
+						Attachments: message.attachments.map((attachment) => ({
+							Name: attachment.filename,
+							Content: bytesToBase64(new Uint8Array(attachment.content)),
+							ContentType: attachment.type,
+							...(attachment.disposition === "inline" && attachment.contentId ? { ContentID: `cid:${attachment.contentId}` } : {}),
+						})),
+					}
+				: {}),
+		},
+	);
+	const id = (json as { MessageID?: unknown; ErrorCode?: unknown } | null)?.MessageID;
+	if ((json as { ErrorCode?: unknown } | null)?.ErrorCode) throw new OutboundError(`Postmark did not send the message: ${JSON.stringify(json).slice(0, 300)}`);
+	return typeof id === "string" ? id : undefined;
+}
+
+async function viaMailgun(apiKey: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
+	// Mailgun sends for one domain per URL: the alias's own, verified there.
+	const address = typeof message.from === "string" ? message.from : message.from.email;
+	const domain = address.split("@").pop() ?? "";
+	const form = new FormData();
+	form.append("from", mailbox(message.from));
+	form.append("to", message.to);
+	form.append("subject", message.subject);
+	if (message.text !== undefined) form.append("text", message.text);
+	if (message.html) form.append("html", message.html);
+	if (message.replyTo) form.append("h:Reply-To", message.replyTo);
+	for (const [name, value] of Object.entries(message.headers ?? {})) form.append(`h:${name}`, value);
+	for (const attachment of message.attachments ?? []) {
+		const inline = attachment.disposition === "inline" && attachment.contentId;
+		// Mailgun gives an inline part the file name as its Content-ID.
+		form.append(inline ? "inline" : "attachment", new Blob([attachment.content], { type: attachment.type }), inline ? attachment.contentId : attachment.filename);
+	}
+	const host = options.mailgunRegion === "eu" ? "api.eu.mailgun.net" : "api.mailgun.net";
+	const { json } = await request(`https://${host}/v3/${encodeURIComponent(domain)}/messages`, { Authorization: `Basic ${btoa(`api:${apiKey}`)}`, Accept: "application/json" }, form);
+	const id = (json as { id?: unknown } | null)?.id;
+	return typeof id === "string" ? id : undefined;
+}
+
+const hex = (buffer: ArrayBuffer) => [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+const sha256 = async (text: string) => hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)));
+async function hmac(key: ArrayBuffer | Uint8Array, text: string): Promise<ArrayBuffer> {
+	const imported = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+	return crypto.subtle.sign("HMAC", imported, new TextEncoder().encode(text));
+}
+
+/** AWS Signature Version 4 for one POST to SES. */
+export async function signSes(input: { region: string; accessKeyId: string; secret: string; body: string; date: Date }): Promise<Record<string, string>> {
+	const host = `email.${input.region}.amazonaws.com`;
+	const amzDate = input.date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+	const day = amzDate.slice(0, 8);
+	const signed = "content-type;host;x-amz-date";
+	const canonical = ["POST", "/v2/email/outbound-emails", "", `content-type:application/json\nhost:${host}\nx-amz-date:${amzDate}\n`, signed, await sha256(input.body)].join("\n");
+	const scope = `${day}/${input.region}/ses/aws4_request`;
+	const toSign = ["AWS4-HMAC-SHA256", amzDate, scope, await sha256(canonical)].join("\n");
+	let key = await hmac(new TextEncoder().encode(`AWS4${input.secret}`), day);
+	for (const part of [input.region, "ses", "aws4_request"]) key = await hmac(key, part);
+	return {
+		"Content-Type": "application/json",
+		"X-Amz-Date": amzDate,
+		Authorization: `AWS4-HMAC-SHA256 Credential=${input.accessKeyId}/${scope}, SignedHeaders=${signed}, Signature=${hex(await hmac(key, toSign))}`,
+	};
+}
+
+async function viaSes(secret: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
+	if (!options.sesAccessKeyId) throw new OutboundError("No AWS access key ID is set for Amazon SES");
+	const from = typeof message.from === "string" ? message.from : message.from.email;
+	const raw = buildMime(message, newMessageId(message.from));
+	const body = JSON.stringify({ FromEmailAddress: from, Destination: { ToAddresses: [message.to] }, Content: { Raw: { Data: bytesToBase64(new TextEncoder().encode(raw)) } } });
+	const headers = await signSes({ region: options.sesRegion, accessKeyId: options.sesAccessKeyId, secret, body, date: new Date() });
+	const { json } = await request(`https://email.${options.sesRegion}.amazonaws.com/v2/email/outbound-emails`, headers, body);
+	const id = (json as { MessageId?: unknown } | null)?.MessageId;
+	return typeof id === "string" ? id : undefined;
+}
+
+async function viaSmtp(password: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
+	if (!options.smtpHost) throw new OutboundError("No SMTP server is set");
+	const messageId = newMessageId(message.from);
+	const from = typeof message.from === "string" ? message.from : message.from.email;
+	await sendSmtp(
+		{ host: options.smtpHost, port: options.smtpPort, security: options.smtpSecurity, username: options.smtpUsername, password },
+		{ from, to: message.to },
+		buildMime(message, messageId),
+	);
+	return messageId;
+}
+
+/** The values a custom request can use, each as JSON ({{subject}} becomes "Hello"). */
+export function customValues(message: OutboundMessage, apiKey: string, messageId: string, raw: () => string): Record<string, () => unknown> {
+	const from = typeof message.from === "string" ? { email: message.from, name: "" } : message.from;
+	return {
+		from: () => from.email,
+		from_name: () => from.name || null,
+		from_header: () => formatAddress(message.from).replace(/^<(.*)>$/, "$1"),
+		to: () => message.to,
+		reply_to: () => message.replyTo ?? null,
+		subject: () => message.subject,
+		text: () => message.text ?? null,
+		html: () => message.html ?? null,
+		headers: () => message.headers ?? {},
+		attachments: () =>
+			(message.attachments ?? []).map((attachment) => ({
+				filename: attachment.filename,
+				content_type: attachment.type,
+				content: bytesToBase64(new Uint8Array(attachment.content)),
+				disposition: attachment.disposition,
+				content_id: attachment.contentId ?? null,
+			})),
+		raw: () => bytesToBase64(new TextEncoder().encode(raw())),
+		message_id: () => messageId,
+		api_key: () => apiKey,
+	};
+}
+
+/** Fills {{name}} placeholders: as JSON in a body, as plain text in a header. Unknown ones are an error. */
+export function fillTemplate(template: string, values: Record<string, () => unknown>, as: "json" | "text"): string {
+	return template.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_match, name: string) => {
+		if (!Object.hasOwn(values, name)) throw new OutboundError(`Unknown placeholder {{${name}}}`);
+		const value = values[name]!();
+		return as === "json" ? JSON.stringify(value) : String(value ?? "").replace(/[\r\n]+/g, " ");
+	});
+}
+
+/** "Name: value" lines as headers; blank lines are skipped. */
+export function parseHeaderLines(lines: string): [string, string][] {
+	const out: [string, string][] = [];
+	for (const line of lines.split(/\r?\n/)) {
+		if (!line.trim()) continue;
+		const at = line.indexOf(":");
+		const name = at > 0 ? line.slice(0, at).trim() : "";
+		if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(name)) throw new OutboundError(`Not a header line: ${line.slice(0, 60)}`);
+		out.push([name, line.slice(at + 1).trim()]);
+	}
+	return out;
+}
+
+async function viaCustom(apiKey: string, options: OutboundOptions, message: OutboundMessage): Promise<string | undefined> {
+	if (!options.customUrl || !options.customUrl.startsWith("https://")) throw new OutboundError("No https URL is set for the custom request");
+	const messageId = newMessageId(message.from);
+	const values = customValues(message, apiKey, messageId, () => buildMime(message, messageId));
+	const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
+	for (const [name, value] of parseHeaderLines(options.customHeaders)) headers[name] = fillTemplate(value, values, "text");
+	const { json } = await request(options.customUrl, headers, fillTemplate(options.customBody, values, "json"));
+	if (!options.customIdPath) return undefined;
+	let found: unknown = json;
+	for (const key of options.customIdPath.split(".")) found = found && typeof found === "object" && Object.hasOwn(found, key) ? (found as Record<string, unknown>)[key] : undefined;
+	return typeof found === "string" ? found : typeof found === "number" ? String(found) : undefined;
+}
+
 /** Sends mail to someone other than the owner, with the provider chosen on the Connection page. */
 export async function sendOutbound(env: Env, config: AppConfig, message: OutboundMessage): Promise<{ messageId?: string }> {
 	if (config.outboundProvider === "cloudflare") {
@@ -189,8 +413,22 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 		} as Parameters<SendEmail["send"]>[0]);
 		return { messageId: (result as { messageId?: string } | undefined)?.messageId };
 	}
-	if (!config.outboundApiKey) throw new OutboundError(`No API key is set for ${config.outboundProvider}`);
-	const send = { resend: viaResend, smtp2go: viaSmtp2go, brevo: viaBrevo }[config.outboundProvider];
-	const messageId = await send(config.outboundApiKey, message);
+	const provider = config.outboundProvider;
+	const options = config.outboundOptions;
+	// An SMTP server may take mail without a password; everything else needs its secret.
+	if (!config.outboundApiKey && !(provider === "smtp" && !options.smtpUsername) && provider !== "custom") throw new OutboundError(`No API key is set for ${provider}`);
+	const key = config.outboundApiKey;
+	const messageId =
+		provider === "postmark"
+			? await viaPostmark(key, message)
+			: provider === "mailgun"
+				? await viaMailgun(key, options, message)
+				: provider === "ses"
+					? await viaSes(key, options, message)
+					: provider === "smtp"
+						? await viaSmtp(key, options, message)
+						: provider === "custom"
+							? await viaCustom(key, options, message)
+							: await { resend: viaResend, smtp2go: viaSmtp2go, brevo: viaBrevo }[provider](key, message);
 	return { messageId };
 }

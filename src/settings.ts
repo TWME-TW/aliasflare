@@ -29,7 +29,16 @@ const DOMAIN = DOMAIN_PATTERN;
 /** Alias domains one installation can have. */
 export const MAX_ALIAS_DOMAINS = 20;
 
+/**
+ * How mail reaches the owner: rewritten (from a reverse alias, so replies go through the alias,
+ * with trackers removed and the banner) or passed on unchanged by Email Routing (receive only:
+ * nothing is sent, but replies go from the owner's own address).
+ */
+export type ForwardMethod = "rewrite" | "direct";
+export const FORWARD_METHODS: ForwardMethod[] = ["rewrite", "direct"];
+
 export type Settings = {
+	forwardMethod: ForwardMethod;
 	senderFormat: SenderFormat;
 	reverseAliasReplacement: boolean;
 	includeSenderInReverseAlias: boolean;
@@ -68,6 +77,7 @@ export type Settings = {
 };
 
 export const DEFAULT_SETTINGS: Settings = {
+	forwardMethod: "rewrite",
 	senderFormat: "AT",
 	reverseAliasReplacement: true,
 	includeSenderInReverseAlias: false,
@@ -132,6 +142,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, MAX_ALIAS_DOMAINS)
 		: [];
 	return {
+		forwardMethod: raw.forwardMethod === "direct" ? "direct" : "rewrite",
 		senderFormat: isSenderFormat(raw.senderFormat) ? raw.senderFormat : DEFAULT_SETTINGS.senderFormat,
 		reverseAliasReplacement:
 			typeof raw.reverseAliasReplacement === "boolean" ? raw.reverseAliasReplacement : DEFAULT_SETTINGS.reverseAliasReplacement,

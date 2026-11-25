@@ -9,9 +9,9 @@ import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
-import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, UNSUBSCRIBE_FALLBACKS, type Settings } from "./settings";
+import { FORWARD_METHODS, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, UNSUBSCRIBE_FALLBACKS, type Settings } from "./settings";
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
-import { OUTBOUND_PROVIDERS, type OutboundProvider } from "./outbound";
+import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from "./outbound";
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -579,6 +579,13 @@ ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${
 <input id="defaultDestination" name="defaultDestination" type="email" value="${settings.defaultDestination}" placeholder="you@gmail.com" />
 <p class="help">${t("settings.destinationHelp")}</p>
 
+<label for="forwardMethod">${t("settings.forwardMethod")}</label>
+<select id="forwardMethod" name="forwardMethod">
+${FORWARD_METHODS.map((method) => html`<option value="${method}" ${settings.forwardMethod === method ? "selected" : ""}>${t(`forwardMethod.${method}`)}</option>`)}
+</select>
+<p class="help">${t("settings.forwardMethodHelp")}</p>
+${settings.forwardMethod === "direct" ? html`<p class="notice">${t("settings.forwardMethodDirectNote")}</p>` : ""}
+
 <label for="senderFormat">${t("settings.senderFormat")}</label>
 <select id="senderFormat" name="senderFormat">
 ${SENDER_FORMATS.map(
@@ -665,10 +672,49 @@ const TOKEN_PERMISSIONS: ["zone" | "account", string, string][] = [
 	["account", "Email Sending", "Edit"],
 ];
 
+/** The fields of each provider that needs more than a key; the chosen one's are shown. */
+function providerFields(t: Translate, options: OutboundOptions, provider: OutboundProvider, fixed: boolean): Html {
+	const off = fixed ? "disabled" : "";
+	const group = (name: OutboundProvider, body: Html) =>
+		html`<div class="provider-fields" data-provider="${name}" ${provider === name ? "" : "hidden"}>${body}</div>`;
+	const input = (name: keyof OutboundOptions, label: string, help: string, attrs = "") => html`
+<label for="${name}">${label}</label>
+<input id="${name}" name="${name}" type="text" value="${String(options[name])}" autocapitalize="none" spellcheck="false" ${raw(attrs)} ${off} />
+${help ? html`<p class="help">${help}</p>` : ""}`;
+	return html`${group(
+	"smtp",
+	html`${input("smtpHost", t("conn.smtpHost"), "", 'placeholder="smtp.example.com"')}
+<label for="smtpPortField">${t("conn.smtpPort")}</label>
+<div class="row"><input id="smtpPortField" name="smtpPort" type="number" min="1" max="65535" value="${String(options.smtpPort)}" ${off} />
+<select name="smtpSecurity" aria-label="${t("conn.smtpSecurity")}" ${off}>
+<option value="starttls" ${options.smtpSecurity === "starttls" ? "selected" : ""}>STARTTLS (587)</option>
+<option value="tls" ${options.smtpSecurity === "tls" ? "selected" : ""}>TLS (465)</option></select></div>
+<p class="help">${t("conn.smtpPortHelp")}</p>
+${input("smtpUsername", t("conn.smtpUsername"), t("conn.smtpUsernameHelp"), 'autocomplete="off"')}`,
+)}
+${group(
+	"mailgun",
+	html`<label for="mailgunRegion">${t("conn.mailgunRegion")}</label>
+<select id="mailgunRegion" name="mailgunRegion" ${off}><option value="us" ${options.mailgunRegion === "us" ? "selected" : ""}>US</option><option value="eu" ${options.mailgunRegion === "eu" ? "selected" : ""}>EU</option></select>
+<p class="help">${t("conn.mailgunHelp")}</p>`,
+)}
+${group("ses", html`${input("sesRegion", t("conn.sesRegion"), "", 'placeholder="us-east-1"')}${input("sesAccessKeyId", t("conn.sesAccessKey"), t("conn.sesHelp"), 'autocomplete="off"')}`)}
+${group(
+	"custom",
+	html`${input("customUrl", t("conn.customUrl"), "", 'placeholder="https://api.example.com/send"')}
+<label for="customHeaders">${t("conn.customHeaders")}</label>
+<textarea id="customHeaders" name="customHeaders" rows="3" spellcheck="false" class="mono" ${off}>${options.customHeaders}</textarea>
+<label for="customBody">${t("conn.customBody")}</label>
+<textarea id="customBody" name="customBody" rows="6" spellcheck="false" class="mono" ${off}>${options.customBody}</textarea>
+<p class="help">${t("conn.customHelp")}<br /><code>{{from}} {{from_name}} {{from_header}} {{to}} {{reply_to}} {{subject}} {{text}} {{html}} {{headers}} {{attachments}} {{raw}} {{message_id}} {{api_key}}</code></p>
+${input("customIdPath", t("conn.customIdPath"), t("conn.customIdPathHelp"), 'placeholder="id"')}`,
+)}`;
+}
+
 export function connectionPage(
 	t: Translate,
 	input: {
-		values: { mailflareUrl: string; publicUrl: string; outboundProvider: OutboundProvider; workersPlan: WorkersPlan };
+		values: { mailflareUrl: string; publicUrl: string; outboundProvider: OutboundProvider; workersPlan: WorkersPlan; outboundOptions: OutboundOptions };
 		hasOutboundKey: boolean;
 		hasApiKey: boolean;
 		hasWebhookSecret: boolean;
@@ -753,6 +799,7 @@ ${OUTBOUND_PROVIDERS.map((provider) => html`<option value="${provider}" ${values
 </select>
 <p class="help">${t("conn.providerHelp")}</p>${fixedNote("outboundProvider")}
 ${values.outboundProvider === "brevo" ? html`<p class="notice">${t("conn.brevoLimits")}</p>` : ""}
+${providerFields(t, values.outboundOptions, values.outboundProvider, fixed.has("outboundOptions"))}
 ${secretField("outboundApiKey", t("conn.providerKey"), hasOutboundKey, t("conn.providerKeyHelp"))}
 <p><button class="primary">${t("conn.saveButton")}</button></p>
 </section>

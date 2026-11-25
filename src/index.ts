@@ -19,7 +19,7 @@ import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api, apiThrottled } from "./compat/api";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias, forgetStatements } from "./compat/aliases";
 import { ConfigError, DOMAIN_PATTERN, envOverrides, isWorkersPlan, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
-import { isOutboundProvider } from "./outbound";
+import { customValues, fillTemplate, isOutboundProvider, normalizeOutboundOptions, parseHeaderLines, SES_REGION, type OutboundOptions } from "./outbound";
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
@@ -538,6 +538,7 @@ app.post("/settings", async (c) => {
 		simpleloginApi: form.simpleloginApi === "1",
 		addyApi: form.addyApi === "1",
 		mcpServer: form.mcpServer === "1",
+		forwardMethod: form.forwardMethod,
 		aliasDomains,
 		randomAliasFormat: form.randomAliasFormat,
 		appSettings: form.appSettings === "1",
@@ -564,7 +565,7 @@ async function renderConnection(c: C, config: AppConfig, setup?: DomainSetup[]) 
 	const settings = await loadSettings(c.env.DB);
 	return c.html(
 		connectionPage(c.get("t"), {
-			values: { mailflareUrl: config.mailflareUrl, publicUrl: config.publicUrl, outboundProvider: config.outboundProvider, workersPlan: config.workersPlan },
+			values: { mailflareUrl: config.mailflareUrl, publicUrl: config.publicUrl, outboundProvider: config.outboundProvider, workersPlan: config.workersPlan, outboundOptions: config.outboundOptions },
 			hasOutboundKey: !!config.outboundApiKey,
 			hasApiKey: !!config.mailflareApiKey,
 			hasWebhookSecret: !!config.webhookSecret,
@@ -637,6 +638,41 @@ app.post("/connection", async (c) => {
 	if (!fixed.has("outboundProvider") && text("outboundProvider")) {
 		if (!isOutboundProvider(text("outboundProvider"))) return redirectWithNotice(c, "/connection", "notice.badProvider");
 		values.outboundProvider = text("outboundProvider");
+	}
+	if (!fixed.has("outboundOptions") && typeof form.smtpPort === "string") {
+		const raw = (name: string) => (typeof form[name] === "string" ? (form[name] as string) : "");
+		const options: OutboundOptions = normalizeOutboundOptions({
+			smtpHost: raw("smtpHost"),
+			smtpPort: raw("smtpPort"),
+			smtpSecurity: raw("smtpSecurity"),
+			smtpUsername: raw("smtpUsername"),
+			mailgunRegion: raw("mailgunRegion"),
+			sesRegion: raw("sesRegion"),
+			sesAccessKeyId: raw("sesAccessKeyId"),
+			customUrl: raw("customUrl"),
+			customHeaders: raw("customHeaders"),
+			customBody: raw("customBody"),
+			customIdPath: raw("customIdPath"),
+		});
+		if (raw("smtpHost").trim() && !options.smtpHost) return redirectWithNotice(c, "/connection", "notice.badSmtp");
+		if (Number(raw("smtpPort")) === 25) return redirectWithNotice(c, "/connection", "notice.badSmtp");
+		if (raw("sesRegion").trim() && !SES_REGION.test(raw("sesRegion").trim().toLowerCase())) return redirectWithNotice(c, "/connection", "notice.badSes");
+		if (options.customUrl) {
+			// The key and messages go to this URL: a public https host, not this Worker.
+			if (!safeHttpsUrl(options.customUrl, [new URL(c.req.url).hostname, ...[c.get("config").publicUrl, c.get("config").siteOrigin].filter(Boolean).map((url) => new URL(url).hostname)])) {
+				return redirectWithNotice(c, "/connection", "notice.badCustom");
+			}
+			try {
+				// A sample message must give valid JSON, so a mistake shows now and not on the first reply.
+				const sample = customValues({ from: { name: "A", email: "a@example.com" }, to: "b@example.com", subject: "s", text: "t", html: "<p>h</p>" }, "key", "<id@example.com>", () => "raw");
+				for (const [, value] of parseHeaderLines(options.customHeaders)) fillTemplate(value, sample, "text");
+				const json = /content-type:\s*(?!application\/json)/i.test(options.customHeaders) ? null : fillTemplate(options.customBody, sample, "json");
+				if (json !== null) JSON.parse(json);
+			} catch {
+				return redirectWithNotice(c, "/connection", "notice.badCustom");
+			}
+		}
+		values.outboundOptions = JSON.stringify(options);
 	}
 	if (!fixed.has("workersPlan") && text("workersPlan")) {
 		if (!isWorkersPlan(text("workersPlan"))) return redirectWithNotice(c, "/connection", "notice.badProvider");

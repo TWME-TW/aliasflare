@@ -115,6 +115,15 @@ export const APP_SCRIPT = `(() => {
     select.addEventListener("change", () => select.form && select.form.requestSubmit());
   }
 
+  // The sending provider's own fields show as soon as it is chosen.
+  const provider = document.getElementById("outboundProvider");
+  if (provider) {
+    const show = () => {
+      for (const group of document.querySelectorAll(".provider-fields")) group.hidden = group.dataset.provider !== provider.value;
+    };
+    provider.addEventListener("change", show);
+  }
+
   // Import forms carry the domains chosen in the shared box above them.
   const domainSource = document.querySelector("[data-domains-source]");
   for (const form of document.querySelectorAll("form[data-import]")) {

@@ -5,7 +5,7 @@
  */
 import { randomToken } from "./format";
 import type { MessageKey } from "./i18n";
-import { isOutboundProvider, type OutboundProvider } from "./outbound";
+import { isOutboundProvider, normalizeOutboundOptions, type OutboundOptions, type OutboundProvider } from "./outbound";
 
 export type AppConfig = {
 	mailflareUrl: string;
@@ -25,6 +25,8 @@ export type AppConfig = {
 	/** What sends mail to other people (replies, unsubscribe mail). */
 	outboundProvider: OutboundProvider;
 	outboundApiKey: string;
+	/** The provider's other settings (SMTP server, AWS region, the custom request…). */
+	outboundOptions: OutboundOptions;
 	/**
 	 * The Workers plan. Free allows 50 subrequests (fetches and D1 queries) and 10 ms of CPU per
 	 * request, so imports are smaller and large messages are passed through unchanged.
@@ -47,6 +49,7 @@ type StoredKey =
 	| "workerName"
 	| "outboundProvider"
 	| "outboundApiKey"
+	| "outboundOptions"
 	| "workersPlan";
 
 const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
@@ -59,6 +62,7 @@ const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	workerName: "WORKER_NAME",
 	outboundProvider: "OUTBOUND_PROVIDER",
 	outboundApiKey: "OUTBOUND_API_KEY",
+	outboundOptions: "OUTBOUND_OPTIONS",
 	workersPlan: "WORKERS_PLAN",
 };
 
@@ -114,13 +118,28 @@ function checkEnv(env: Env): void {
 		if (value(name) && !validOrigin(value(name))) throw new ConfigError(`${name} must be an https:// URL without a user name or password`);
 	}
 	if (value("OUTBOUND_PROVIDER") && !isOutboundProvider(value("OUTBOUND_PROVIDER").toLowerCase())) {
-		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend, smtp2go or brevo");
+		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend, smtp2go, brevo, postmark, mailgun, ses, smtp or custom");
+	}
+	if (value("OUTBOUND_OPTIONS")) {
+		try {
+			JSON.parse(value("OUTBOUND_OPTIONS"));
+		} catch {
+			throw new ConfigError("OUTBOUND_OPTIONS must be a JSON object");
+		}
 	}
 	if (value("WORKERS_PLAN") && !isWorkersPlan(value("WORKERS_PLAN").toLowerCase())) throw new ConfigError("WORKERS_PLAN must be free or paid");
 	// The setup code is all that stands between anyone and the first passkey.
 	if (value("SETUP_CODE") && value("SETUP_CODE").length < 10) throw new ConfigError("SETUP_CODE must be at least 10 characters long");
 	const worker = value("WORKER_NAME").toLowerCase();
 	if (worker && !WORKER_NAME_PATTERN.test(worker)) throw new ConfigError("WORKER_NAME is not a valid Worker name");
+}
+
+function parseJson(text: string): unknown {
+	try {
+		return text ? JSON.parse(text) : {};
+	} catch {
+		return {};
+	}
 }
 
 export async function loadConfig(env: Env): Promise<AppConfig> {
@@ -154,6 +173,7 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 		workerName: pick("workerName").toLowerCase() || "aliasflare",
 		outboundProvider: ((provider) => (isOutboundProvider(provider) ? provider : "cloudflare"))(pick("outboundProvider").toLowerCase()),
 		outboundApiKey: pick("outboundApiKey"),
+		outboundOptions: normalizeOutboundOptions(parseJson(pick("outboundOptions"))),
 		// Free unless told otherwise: the stricter limits work on both plans.
 		workersPlan: pick("workersPlan").toLowerCase() === "paid" ? "paid" : "free",
 		mailflareService: env.MAILFLARE_SERVICE,

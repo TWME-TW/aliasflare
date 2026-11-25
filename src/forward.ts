@@ -231,7 +231,11 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (known?.forward_mode === "none") return await skip("forwarding is off for this alias");
 		// A copy this Worker sent itself is recognised from its headers, before it is read.
 		if (input.headers?.get(LOOP_HEADER)) return await skip("already forwarded by this Worker");
-		const passThrough = config.workersPlan === "free" && input.passThrough && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES ? input.passThrough : null;
+		// Mail is passed through unchanged in receive-only mode, and on the Free plan when it is too
+		// large to rewrite in 10 ms of CPU. Only mail from Email Routing can be: Mailflare's is not ours to pass on.
+		const direct = settings.forwardMethod === "direct";
+		const tooLarge = config.workersPlan === "free" && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES;
+		const passThrough = input.passThrough && (direct || tooLarge) ? input.passThrough : null;
 		const stored = passThrough ? null : await input.load();
 		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", {
 			forwardEnabled: settings.autoForwardNewAliases,
@@ -264,14 +268,18 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			if (alias.forward_mode === "no_promotions" && isPromotional([...headers].map(([key, value]) => ({ key, value })))) {
 				return await skip("promotional mail is blocked for this alias");
 			}
+			// The sender is kept as a contact, so it can be blocked or redirected like any other.
+			const contact = await ensureContact(db, aliasAddress, senders[senders.length - 1]!, null, settings.includeSenderInReverseAlias);
 			await passThrough(target);
 			const sentAt = now();
+			const why = direct
+				? "forwarded unchanged (receive-only mode): replies go from your own address"
+				: `passed through unchanged: larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB on the Workers Free plan, so replies to it do not go through the alias`;
 			try {
 				await db.batch([
-					db
-						.prepare("UPDATE forwards SET status = 'sent', error = ?, updated_at = ? WHERE id = ?")
-						.bind(`passed through unchanged: larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB on the Workers Free plan, so replies to it do not go through the alias`, sentAt, forwardId),
+					db.prepare("UPDATE forwards SET status = 'sent', error = ?, contact_id = ?, updated_at = ? WHERE id = ?").bind(why, contact.id, sentAt, forwardId),
 					db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(sentAt, aliasAddress),
+					db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(sentAt, contact.id),
 				]);
 			} catch (error) {
 				console.error("Passed through, but recording it failed", event.messageId, error instanceof Error ? error.message : error);
