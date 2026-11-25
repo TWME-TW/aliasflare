@@ -259,7 +259,7 @@ const dictionary: Dictionary = {
 	"imp.err.fetch": "無法從 {server} 讀取別名：{detail}",
 	"imp.err.format": "回應或檔案的格式無法匯入。",
 	"imp.err.empty": "請選擇要匯入的 CSV 檔案。",
-	"imp.err.badServer": "伺服器必須是 https:// 開頭的網址。",
+	"imp.err.badServer": "伺服器必須是公開的 https:// 網址。",
 	"imp.contacts": "一併匯入聯絡人",
 	"imp.contactsHelp": "帶過每個別名在 SimpleLogin 的聯絡人，包括加入時間、你最近一次寫信給對方的時間，以及是否封鎖。聯絡人在這裡會有新的反向別名，原本 SimpleLogin 的反向別名只在 SimpleLogin 有效。每個有活動的別名都要另外發一次請求，所以會比較久。",
 	"imp.doneContacts": "匯入了 {count} 位聯絡人。",

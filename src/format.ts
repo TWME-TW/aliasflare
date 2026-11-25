@@ -105,13 +105,43 @@ export function normalizeEmail(value: string): string {
 	return value.trim().toLowerCase();
 }
 
-/** Extracts the bare address from `"Name" <a@b>` or `a@b`. */
+/**
+ * A plain address: a dot-atom local part (no quoted local part, so nothing like
+ * `"<ceo@victim.com>"@attacker.com`) at a dotted host name.
+ */
+const BARE_ADDRESS =
+	/^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+$/;
+
+/** The address, lower-cased, when the whole value is one plain address; otherwise null. */
+export function parseBareEmail(value: string | null | undefined): string | null {
+	const candidate = value?.trim() ?? "";
+	return candidate.length <= 254 && BARE_ADDRESS.test(candidate) ? normalizeEmail(candidate) : null;
+}
+
+/**
+ * The bare address of `a@b` or `Name <a@b>`. The angle brackets must close the value and be
+ * the only ones in it, so an address hidden inside a quoted local part is never picked out.
+ */
 export function extractEmail(value: string | null | undefined): string | null {
 	if (!value) return null;
-	const angle = value.match(/<([^<>\s]+@[^<>\s]+)>/);
-	const candidate = angle ? angle[1] : value.trim();
-	if (!candidate || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate)) return null;
-	return normalizeEmail(candidate);
+	const bare = parseBareEmail(value);
+	if (bare) return bare;
+	const named = value.trim().match(/^[^<>]*<([^<>]*)>$/);
+	return named ? parseBareEmail(named[1]) : null;
+}
+
+/** Drops control characters (a decoded CR or LF among them) from a subject. */
+export function cleanSubjectLine(value: string | null | undefined): string {
+	return (value ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
+}
+
+/** The longest note an alias keeps, wherever it is set (dashboard, apps or import). */
+export const MAX_NOTE_LENGTH = 500;
+
+/** A page number from a query string: a whole number from `min` to a million, else `fallback`. */
+export function pageParam(value: string | null | undefined, fallback: number, min = 1): number {
+	const number = Number(value);
+	return value != null && value !== "" && Number.isSafeInteger(number) && number >= min && number <= 1_000_000 ? number : fallback;
 }
 
 export function domainOf(email: string): string {

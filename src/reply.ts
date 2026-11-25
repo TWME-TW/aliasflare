@@ -3,6 +3,7 @@ import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
 import { getAlias, getContactByReverseLocal, getContactsByReverseLocals, mapForwardedToOriginal, now, recordEvent } from "./db";
 import {
+	cleanSubjectLine,
 	domainOf,
 	extractEmail,
 	findAddressesOnDomain,
@@ -17,6 +18,8 @@ import { mailflareReady } from "./config";
 import { aliasDomainOfReverse } from "./domains";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings } from "./settings";
+import { MAX_MESSAGE_BYTES } from "./mailflare";
+import { readLimited } from "./streams";
 
 /** Mailflare's limit per message. */
 const MAX_ATTACHMENTS = 10;
@@ -100,16 +103,31 @@ export function singleSender(rawHeaders: string, parsedFrom: string | undefined)
 	// More than one address (a list or a group) shows up as more than one "@" outside quotes.
 	const value = fromHeaders[0]!.replace(/^from\s*:/i, "").replace(/"(?:[^"\\]|\\.)*"/g, '""');
 	if ((value.match(/@/g) ?? []).length !== 1 || /[,;:]/.test(value.replace(/<[^<>]*>/g, ""))) return null;
-	const sender = unfolded.find((line) => /^sender\s*:/i.test(line));
-	if (sender && extractEmail(sender.replace(/^sender\s*:/i, "")) !== from) return null;
+	// Every Sender header, not just the first, has to name the same address.
+	const senders = unfolded.filter((line) => /^sender\s*:/i.test(line));
+	if (senders.length > 1) return null;
+	if (senders.length === 1 && extractEmail(senders[0]!.replace(/^sender\s*:/i, "")) !== from) return null;
 	return from;
 }
 
 /** Signed block, turn-off and unsubscribe links of this service, with any host in front. */
 const SIGNED_LINK = /https?:\/\/[^\s"'<>]+\/(?:action|unsubscribe)\/(?:(?:block|disable)~)?fw_[0-9a-f]{32}\.\d+\.[A-Za-z0-9_-]+/gi;
+/**
+ * The token of such a link on its own, wherever it appears: with "~" written as %7E or an HTML
+ * entity, or inside a link a mail filter wrapped (Safe Links and the like), the URL above does
+ * not match, but the token still works, so it is removed too.
+ */
+const SIGNED_TOKEN = /(?:(?:block|disable)(?:~|%7e|&#126;|&#x0*7e;|&tilde;))?fw_[0-9a-f]{32}(?:\.|%2e)\d+(?:\.|%2e)[A-Za-z0-9_-]+/gi;
 
 export function stripSignedLinks(body: string): string {
-	return body.replace(SIGNED_LINK, "[link removed]");
+	return body.replace(SIGNED_LINK, "[link removed]").replace(SIGNED_TOKEN, "[link removed]");
+}
+
+/** Each replacement, and also its form with "+" written as %2B, as it appears in mailto: links. */
+function withEncodedPlus(replacements: Replacement[]): Replacement[] {
+	return replacements.flatMap((replacement) =>
+		replacement.from.includes("+") ? [replacement, { from: replacement.from.replaceAll("+", "%2B"), to: replacement.to }] : [replacement],
+	);
 }
 
 /** Drops the forwarding banner from quoted HTML (where the mail client kept its attribute). */
@@ -125,11 +143,15 @@ async function removeBanner(html: string): Promise<string> {
 		.text();
 }
 
-function headerSection(raw: Uint8Array): string {
-	// Headers end at the first blank line; 64 KiB is far more than any real header block.
+/**
+ * The header block. Headers end at the first blank line; 64 KiB is far more than any real
+ * header block, so one that does not end by then is refused (null) rather than read in part:
+ * a second From or Sender past the cut would be seen by the parser but not by the checks.
+ */
+function headerSection(raw: Uint8Array): string | null {
 	const head = new TextDecoder().decode(raw.subarray(0, 65536));
 	const end = head.search(/\r?\n\r?\n/);
-	return end >= 0 ? head.slice(0, end) : head;
+	return end >= 0 ? head.slice(0, end) : null;
 }
 
 /**
@@ -162,11 +184,17 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	const settings = await loadSettings(db);
 	const destination = alias.destination || settings.defaultDestination;
 
-	const raw = new Uint8Array(await new Response(message.raw).arrayBuffer());
+	const raw = message.rawSize > MAX_MESSAGE_BYTES ? null : await readLimited(message.raw, MAX_MESSAGE_BYTES);
+	if (!raw) {
+		await message.raw.cancel().catch(() => undefined);
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Larger than ${MAX_MESSAGE_BYTES} bytes` });
+		message.setReject(`Message too large: at most ${MAX_MESSAGE_BYTES} bytes`);
+		return;
+	}
 	const headers = headerSection(raw);
-	const authResults = firstAuthenticationResults(headers);
+	const authResults = headers === null ? null : firstAuthenticationResults(headers);
 	const email = await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" });
-	const headerFrom = singleSender(headers, email.from?.address);
+	const headerFrom = headers === null ? null : singleSender(headers, email.from?.address);
 
 	// Only the alias owner may write through a reverse alias, or anyone could send as the alias.
 	const dmarcPass = !!destination && dmarcPassedByCloudflare(authResults, domainOf(destination));
@@ -196,7 +224,8 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	let text = email.text ? stripSignedLinks(email.text) : undefined;
 	if (settings.reverseAliasReplacement) {
 		const body = `${html ?? ""}\n${text ?? ""}`;
-		const reverseLocals = findAddressesOnDomain(body, reverseDomain)
+		// mailto: links may write the "+" of a reverse alias as %2B.
+		const reverseLocals = findAddressesOnDomain(body.replace(/%2b/gi, "+"), reverseDomain)
 			.map(reverseLocalOf)
 			.filter((local): local is string => !!local);
 		// Only this alias's own correspondents: a reverse alias of another alias stays as it is.
@@ -206,8 +235,9 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			{ from: `${found.reverse_local}@${reverseDomain}`, to: found.email },
 		]);
 		replacements.push({ from: destination, to: contact.alias_address });
-		if (html) html = replaceAddresses(html, replacements);
-		if (text) text = replaceAddresses(text, replacements);
+		const all = withEncodedPlus(replacements);
+		if (html) html = replaceAddresses(html, all);
+		if (text) text = replaceAddresses(text, all);
 	}
 
 	const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
@@ -226,7 +256,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(`Too many attachments: at most ${limit} per message`);
 		return;
 	}
-	const subject = email.subject?.trim() || "(no subject)";
+	const subject = cleanSubjectLine(email.subject) || "(no subject)";
 	const name = alias.name?.replace(/["\\\r\n<>]/g, "") || "";
 
 	try {

@@ -1,4 +1,4 @@
-import type { AppConfig } from "./config";
+import { mailflareReady, type AppConfig } from "./config";
 import { verifyToken } from "./crypto";
 import { getAlias, now, recordEvent, setForwardMode, type ForwardRow } from "./db";
 import { domainOf, extractEmail } from "./format";
@@ -62,7 +62,7 @@ export async function resolveLink(
 	const plan =
 		action === "preserve_original"
 			? unsubscribePlan(loaded.forward, loaded.contactEmail, {
-					blockedHosts: [...blockedHosts, ...[config.mailflareUrl, config.publicUrl].filter(Boolean).map((url) => new URL(url).hostname)],
+					blockedHosts: [...blockedHosts, ...[config.mailflareUrl, config.publicUrl, config.siteOrigin].filter(Boolean).map((url) => new URL(url).hostname)],
 					// An alias domain also covers its reverse-alias domain r.<domain>.
 					ownDomains: [...settings.aliasDomains, loaded.forward.alias_address.split("@").pop() ?? ""].filter(Boolean),
 				})
@@ -155,14 +155,13 @@ async function runOriginalUnsubscribe(env: Env, config: AppConfig, forward: Forw
 	if (plan.kind === "mail") {
 		const alias = await getAlias(env.DB, forward.alias_address);
 		if (!alias || alias.deleted_at) throw new Error("The alias no longer exists");
-		await sendViaMailflare(mailflareConfig(config), {
-			mailboxId: alias.mailbox_id,
-			from: alias.address,
-			to: [plan.to],
-			subject: plan.subject,
-			// Never the body the sender suggested: this mail goes out under the alias's name.
-			text: "unsubscribe",
-		});
+		// Never the body the sender suggested: this mail goes out under the alias's name.
+		// Sent the way replies are: through Mailflare for an alias it receives, otherwise with Email Sending.
+		if (alias.mailbox_id && mailflareReady(config)) {
+			await sendViaMailflare(mailflareConfig(config), { mailboxId: alias.mailbox_id, from: alias.address, to: [plan.to], subject: plan.subject, text: "unsubscribe" });
+		} else {
+			await env.EMAIL.send({ from: alias.address, to: plan.to, subject: plan.subject, text: "unsubscribe" });
+		}
 		return `unsubscribe email to ${plan.to}`;
 	}
 	const response = await fetch(plan.url, {
@@ -193,8 +192,13 @@ async function tokenHash(token: string): Promise<string> {
  * example in a quoted reply) cannot be replayed.
  */
 export async function claimLink(db: D1Database, token: string): Promise<boolean> {
-	const result = await db.prepare("INSERT INTO used_links (token_hash, used_at) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(await tokenHash(token), now()).run();
-	return result.meta.changes > 0;
+	const timestamp = now();
+	// Links expire after LINK_TTL_SECONDS, so older records are no longer needed to stop a replay.
+	const [, inserted] = await db.batch([
+		db.prepare("DELETE FROM used_links WHERE used_at < ?").bind(timestamp - LINK_TTL_SECONDS - 86400),
+		db.prepare("INSERT INTO used_links (token_hash, used_at) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(await tokenHash(token), timestamp),
+	]);
+	return (inserted?.meta.changes ?? 0) > 0;
 }
 
 /** Makes a link usable again after its action failed, so the user can retry. */
@@ -202,9 +206,14 @@ export async function releaseLink(db: D1Database, token: string): Promise<void> 
 	await db.prepare("DELETE FROM used_links WHERE token_hash = ?").bind(await tokenHash(token)).run();
 }
 
-export async function performAction(env: Env, config: AppConfig, target: LinkTarget): Promise<string> {
+/**
+ * Carries out a link's action. Returns what was done, which is the block instead of the
+ * sender's own unsubscribe when that one failed, so the page can say so.
+ */
+export async function performAction(env: Env, config: AppConfig, target: LinkTarget): Promise<{ detail: string; done: LinkTarget }> {
 	const { forward, action, plan } = target;
 	let detail: string;
+	let done: LinkTarget = target;
 	try {
 		if (action === "disable_alias") {
 			await setForwardMode(env.DB, forward.alias_address, "none");
@@ -216,6 +225,7 @@ export async function performAction(env: Env, config: AppConfig, target: LinkTar
 				// Still stop the mail, even when the sender's own mechanism is broken.
 				const reason = error instanceof Error ? error.message : String(error);
 				detail = `${await blockContact(env, forward)}; the sender's unsubscribe failed: ${reason}`;
+				done = { ...target, action: "block_contact", plan: null };
 			}
 		} else {
 			detail = await blockContact(env, forward);
@@ -226,6 +236,6 @@ export async function performAction(env: Env, config: AppConfig, target: LinkTar
 		throw error;
 	}
 	await recordEvent(env.DB, { kind: target.kind, contactId: forward.contact_id, aliasAddress: forward.alias_address, status: "done", detail });
-	return detail;
+	return { detail, done };
 }
 

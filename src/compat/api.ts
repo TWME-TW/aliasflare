@@ -7,11 +7,12 @@
  * addy.io:     https://app.addy.io/docs/
  */
 import { Hono, type Context } from "hono";
-import { presentedKey, verifyApiKey } from "../apikeys";
+import { presentedKey, verifyApiKey, type ApiKeyRow } from "../apikeys";
+import { readTextLimited } from "../streams";
 import type { AppEnv } from "../auth";
 import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
-import { domainOf, extractEmail, isSenderFormat, reverseAddress } from "../format";
+import { domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
 import {
@@ -34,7 +35,14 @@ import {
 	type AliasView,
 } from "./aliases";
 
-type ApiEnv = AppEnv & { Variables: AppEnv["Variables"] & { settings: Settings } };
+type ApiEnv = AppEnv & { Variables: AppEnv["Variables"] & { settings: Settings; apiKey: ApiKeyRow } };
+
+/** JSON bodies from apps are small; anything larger is refused before it is parsed. */
+const MAX_API_BODY_BYTES = 64 * 1024;
+
+/** Marks an address that kept presenting wrong keys, so its next attempts stop before D1. */
+const lockoutUrl = (ip: string) => `https://aliasflare.invalid/api-lockout/${encodeURIComponent(ip)}`;
+const lockoutCache = (): Cache | null => (typeof caches === "undefined" ? null : (caches as unknown as { default: Cache }).default);
 type C = Context<ApiEnv>;
 
 const VERSION = { version: "0.2.0", major: 0, minor: 2, patch: 0 };
@@ -77,26 +85,43 @@ api.use("*", async (c, next) => {
 	if (c.env.API_RATE_LIMIT && !(await c.env.API_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
 		return c.json({ error: "Too many requests", message: "Too Many Attempts." }, 429);
 	}
+	// An address over the failed-key limit is turned away here, before any key is looked up.
+	const cache = lockoutCache();
+	if (cache && (await cache.match(lockoutUrl(ip)))) return c.json({ error: "Too many attempts", message: "Too Many Attempts." }, 429);
 	const valid = key ? await verifyApiKey(c.env.DB, key) : null;
 	if (!valid) {
 		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
+			await cache?.put(lockoutUrl(ip), new Response("1", { headers: { "Cache-Control": "max-age=60" } }));
 			return c.json({ error: "Too many attempts", message: "Too Many Attempts." }, 429);
 		}
 		return c.json({ error: "Wrong api key", message: "Unauthenticated." }, 401);
 	}
 	c.set("settings", settings);
+	c.set("apiKey", valid);
 	await next();
 });
 
-async function body(c: C): Promise<Record<string, unknown>> {
-	if (!/json/i.test(c.req.header("Content-Type") ?? "")) return {};
+/**
+ * The JSON object a request carries, read up to MAX_API_BODY_BYTES. `lenient` reads it
+ * whatever the Content-Type and treats bad JSON as empty (the settings screens of some apps
+ * send it that way); otherwise only a JSON Content-Type is read and bad JSON is a 400.
+ */
+async function readBody(c: C, lenient: boolean): Promise<Record<string, unknown>> {
+	if (!lenient && !/json/i.test(c.req.header("Content-Type") ?? "")) return {};
+	const text = await readTextLimited(c.req.raw, MAX_API_BODY_BYTES);
+	if (text === null) throw new ClientError(413, "The request body is too large.");
+	if (!text.trim()) return {};
+	let parsed: unknown;
 	try {
-		const parsed = await c.req.json();
-		return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+		parsed = JSON.parse(text);
 	} catch {
+		if (lenient) return {};
 		throw new ClientError(400, "The request body is not valid JSON.");
 	}
+	return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
 }
+
+const body = (c: C) => readBody(c, false);
 
 const str = (value: unknown, max = 500): string | undefined => (typeof value === "string" ? value.slice(0, max) : undefined);
 
@@ -174,8 +199,7 @@ async function slFindContact(c: C): Promise<ContactRow> {
 }
 
 function pageId(c: C): number {
-	const value = Number(c.req.query("page_id") ?? 0);
-	return Number.isInteger(value) && value >= 0 ? value : 0;
+	return pageParam(c.req.query("page_id"), 0, 0);
 }
 
 api.get("/user_info", (c) =>
@@ -390,10 +414,7 @@ function requireAppSettings(c: C): void {
 	}
 }
 
-async function jsonBody(c: C): Promise<Record<string, unknown>> {
-	const body = await c.req.json().catch(() => null);
-	return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-}
+const jsonBody = (c: C) => readBody(c, true);
 
 function slSetting(settings: Settings) {
 	return {
@@ -521,9 +542,9 @@ async function addyFind(c: C, id: string, includeDeleted = false): Promise<Alias
 }
 
 api.get("/v1/api-token-details", async (c) => {
-	const key = presentedKey(c.req.raw.headers);
-	const row = key ? await verifyApiKey(c.env.DB, key) : null;
-	return c.json({ name: row?.name ?? "API key", created_at: addyDate(row?.created_at), expires_at: null });
+	// The key was checked on the way in; no second lookup.
+	const row = c.get("apiKey");
+	return c.json({ name: row.name, created_at: addyDate(row.created_at), expires_at: null });
 });
 
 api.get("/v1/account-details", async (c) => {
@@ -636,7 +657,7 @@ api.get("/v1/blocklist", async (c) => {
 	const sort = c.req.query("sort") ?? "-created_at";
 	const column = BLOCKLIST_SORT.get(sort.replace(/^-/, "")) ?? "created_at";
 	const size = Math.min(Math.max(Number(c.req.query("page[size]")) || 100, 1), 100);
-	const pageNumber = Math.max(Number(c.req.query("page[number]")) || 1, 1);
+	const pageNumber = pageParam(c.req.query("page[number]"), 1);
 	const where: string[] = [];
 	const params: unknown[] = [];
 	if (search) where.push("value LIKE ? ESCAPE '!'"), params.push(`%${search.replace(/[!%_]/g, "!$&")}%`);
@@ -708,7 +729,7 @@ api.get("/v1/aliases", async (c) => {
 	const active = c.req.query("filter[active]");
 	const pinned = c.req.query("filter[pinned]");
 	const size = Math.min(100, Math.max(1, Number(c.req.query("page[size]") ?? 100) || 100));
-	const page = Math.max(1, Number(c.req.query("page[number]") ?? 1) || 1);
+	const page = pageParam(c.req.query("page[number]"), 1);
 	const { aliases, total } = await listAliasViews(c.env.DB, {
 		deleted: deleted === "with" || deleted === "only" ? deleted : "without",
 		enabled: active === "true" ? true : active === "false" ? false : undefined,

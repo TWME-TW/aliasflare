@@ -13,6 +13,7 @@ import { newId, now } from "./db";
 import { domainOf, extractEmail, makeReverseLocal, normalizeEmail } from "./format";
 import { aliasDomainOfReverse, isReverseDomainOf } from "./domains";
 import type { Settings } from "./settings";
+import { discard, readTextLimited } from "./streams";
 
 export type ImportSource = "simplelogin" | "addy" | "csv";
 
@@ -72,8 +73,15 @@ const MAX_ALIASES = 10_000;
 const MAX_PAGES = 1_000;
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const MAX_DETAILS_BYTES = 8 * 1024;
-/** Contact pages fetched from SimpleLogin per import, to stay well inside Workers' subrequest limit. */
-const MAX_CONTACT_FETCHES = 2_000;
+/**
+ * Requests to the other service in one import, retries included. Workers allow 1,000
+ * subrequests per request on the Paid plan; this leaves room for the rest of the import.
+ */
+const MAX_FETCHES = 900;
+
+/** Counts the requests of one import against MAX_FETCHES. */
+export type FetchBudget = { left: number };
+export const newFetchBudget = (): FetchBudget => ({ left: MAX_FETCHES });
 
 const text = (value: unknown, max = 500): string | null => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
 const count = (value: unknown): number => {
@@ -119,8 +127,10 @@ function clean(object: Record<string, unknown>): Record<string, unknown> {
 	return Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined && value !== null && value !== ""));
 }
 
-async function getJson(url: string, headers: Record<string, string>): Promise<unknown> {
+async function getJson(url: string, headers: Record<string, string>, budget: FetchBudget): Promise<unknown> {
 	for (let attempt = 0; ; attempt += 1) {
+		if (budget.left <= 0) throw new ImportError("fetch", `more than ${MAX_FETCHES} requests needed; import in parts`);
+		budget.left -= 1;
 		let response: Response;
 		try {
 			// No redirects: the key travels in a custom header that fetch would carry to any host.
@@ -133,6 +143,7 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 			throw new ImportError("fetch", error instanceof Error ? error.message : String(error));
 		}
 		// Workers cannot refuse redirects outright: they come back as a 3xx and are not followed.
+		if (!response.ok) await discard(response);
 		if (response.status >= 300 && response.status < 400) throw new ImportError("fetch", `HTTP ${response.status} redirect, not followed`);
 		if (response.status === 429 && attempt < 4) {
 			// Rate limited: wait as asked (capped at 10 s), then try again.
@@ -142,9 +153,8 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 		}
 		if (response.status === 401 || response.status === 403) throw new ImportError("auth");
 		if (!response.ok) throw new ImportError("fetch", `HTTP ${response.status}`);
-		if (Number(response.headers.get("Content-Length") ?? 0) > MAX_RESPONSE_BYTES) throw new ImportError("format", "response too large");
-		const text = await response.text();
-		if (text.length > MAX_RESPONSE_BYTES) throw new ImportError("format", "response too large");
+		const text = await readTextLimited(response, MAX_RESPONSE_BYTES);
+		if (text === null) throw new ImportError("format", "response too large");
 		try {
 			return JSON.parse(text);
 		} catch {
@@ -154,10 +164,10 @@ async function getJson(url: string, headers: Record<string, string>): Promise<un
 }
 
 /** SimpleLogin: GET /api/v2/aliases?page_id=N, 20 per page, until a page comes back empty. */
-export async function fetchSimpleLogin(base: string, apiKey: string): Promise<ImportedAlias[]> {
+export async function fetchSimpleLogin(base: string, apiKey: string, budget: FetchBudget = newFetchBudget()): Promise<ImportedAlias[]> {
 	const out: ImportedAlias[] = [];
 	for (let page = 0; out.length < MAX_ALIASES && page < MAX_PAGES; page += 1) {
-		const body = (await getJson(`${base}/api/v2/aliases?page_id=${page}`, { Authentication: apiKey })) as { aliases?: unknown[] };
+		const body = (await getJson(`${base}/api/v2/aliases?page_id=${page}`, { Authentication: apiKey }, budget)) as { aliases?: unknown[] };
 		if (!Array.isArray(body?.aliases)) throw new ImportError("format");
 		if (body.aliases.length === 0) break;
 		for (const raw of body.aliases as Record<string, unknown>[]) {
@@ -202,15 +212,14 @@ export async function fetchSimpleLogin(base: string, apiKey: string): Promise<Im
 }
 
 /** SimpleLogin: GET /api/aliases/:id/contacts?page_id=N for each alias that has had any activity. */
-export async function addSimpleLoginContacts(base: string, apiKey: string, aliases: ImportedAlias[]): Promise<void> {
-	let fetches = 0;
+export async function addSimpleLoginContacts(base: string, apiKey: string, aliases: ImportedAlias[], budget: FetchBudget = newFetchBudget()): Promise<void> {
 	for (const alias of aliases) {
 		const active = alias.forwarded + alias.blocked + alias.replied > 0 || alias.details.latest_activity !== undefined;
 		if (alias.sourceId === undefined || !active) continue;
 		const contacts: ImportedContact[] = [];
-		for (let page = 0; fetches < MAX_CONTACT_FETCHES && page < MAX_PAGES; page += 1) {
-			fetches += 1;
-			const body = (await getJson(`${base}/api/aliases/${alias.sourceId}/contacts?page_id=${page}`, { Authentication: apiKey })) as { contacts?: unknown[] };
+		// Contacts are extra: when the budget runs low they stop, and the aliases still import.
+		for (let page = 0; budget.left > 5 && page < MAX_PAGES; page += 1) {
+			const body = (await getJson(`${base}/api/aliases/${alias.sourceId}/contacts?page_id=${page}`, { Authentication: apiKey }, budget)) as { contacts?: unknown[] };
 			if (!Array.isArray(body?.contacts) || body.contacts.length === 0) break;
 			for (const raw of body.contacts as Record<string, unknown>[]) {
 				const display = text(raw.contact, 300);
@@ -232,13 +241,13 @@ export async function addSimpleLoginContacts(base: string, apiKey: string, alias
 }
 
 /** addy.io: GET /api/v1/aliases?page[size]=100&page[number]=N until meta.last_page. Deleted aliases are left out. */
-export async function fetchAddy(base: string, apiKey: string): Promise<ImportedAlias[]> {
+export async function fetchAddy(base: string, apiKey: string, budget: FetchBudget = newFetchBudget()): Promise<ImportedAlias[]> {
 	const out: ImportedAlias[] = [];
 	for (let page = 1; out.length < MAX_ALIASES && page <= MAX_PAGES; page += 1) {
 		const body = (await getJson(`${base}/api/v1/aliases?page%5Bsize%5D=100&page%5Bnumber%5D=${page}`, {
 			Authorization: `Bearer ${apiKey}`,
 			"X-Requested-With": "XMLHttpRequest",
-		})) as { data?: unknown[]; meta?: { last_page?: number } };
+		}, budget)) as { data?: unknown[]; meta?: { last_page?: number } };
 		if (!Array.isArray(body?.data)) throw new ImportError("format");
 		for (const raw of body.data as Record<string, unknown>[]) {
 			const email = extractEmail(text(raw.email));
@@ -479,7 +488,8 @@ export async function importAliases(
 				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, pinned, num_id, uid, created_at, updated_at,
 				 imported_from, imported_at, imported_forwarded, imported_blocked, imported_replied, imported_sent,
 				 imported_last_forward_at, imported_last_block_at, imported_last_reply_at, imported_last_sent_at, imported_details)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT (address) DO NOTHING`,
 			)
 			.bind(
 				alias.email,

@@ -3,7 +3,7 @@ import type { HtmlEscapedString } from "hono/utils/html";
 import type { AliasRow, BlocklistRow, ContactRow } from "./db";
 import { FORWARD_MODES } from "./db";
 import { contactReverseAddress, reverseDomainFor } from "./domains";
-import { SENDER_FORMATS } from "./format";
+import { MAX_NOTE_LENGTH, SENDER_FORMATS } from "./format";
 import { LOCALE_LIST, LOCALES, textDirection, type MessageKey, type Translate } from "./i18n";
 import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
@@ -459,7 +459,7 @@ ${aliases.map((alias) => {
 <td data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
 <td data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
-<input type="text" name="note" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
+<input type="text" name="note" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
 <noscript><button>${t("common.save")}</button></noscript></form></td>
 <td data-label="${t("dash.colForwardTo")}"><form class="row" method="post" action="${base}/destination">
 <input type="email" name="destination" value="${alias.destination ?? ""}" placeholder="${settings.defaultDestination || t("dash.default")}" aria-label="${t("dash.colForwardTo")}" />
@@ -742,7 +742,7 @@ ${noticeBox(notice)}
 <p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)}</p>
 <form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <label for="note">${t("alias.note")}</label>
-<div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="200" placeholder="${t("alias.notePlaceholder")}" /><noscript><button>${t("common.save")}</button></noscript></div>
+<div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" /><noscript><button>${t("common.save")}</button></noscript></div>
 </form>
 <form method="post" action="${base}/contacts">
 <label for="email">${t("alias.writeNew")}</label>

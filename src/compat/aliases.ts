@@ -227,13 +227,21 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 			.prepare("SELECT mailbox_id FROM aliases WHERE address LIKE ? AND mailbox_id != '' ORDER BY updated_at DESC LIMIT 1")
 			.bind(`%@${domain}`)
 			.first<{ mailbox_id: string }>();
-		await db
-			.prepare(
-				`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, num_id, uid, created_at, updated_at)
-				 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?)`,
-			)
-			.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, input.note ?? null, input.name ?? null, crypto.randomUUID(), timestamp, timestamp)
-			.run();
+		// Mail to the same address can create it at the same moment; that is a taken name, not a crash.
+		const insert = () =>
+			db
+				.prepare(
+					`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, num_id, uid, created_at, updated_at)
+					 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
+				)
+				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, input.note ?? null, input.name ?? null, crypto.randomUUID(), timestamp, timestamp)
+				.run();
+		for (let attempt = 0; ; attempt += 1) {
+			if ((await insert()).meta.changes > 0) break;
+			if (await db.prepare("SELECT 1 FROM aliases WHERE address = ?").bind(address).first()) throw new ClientError(409, "This alias already exists.");
+			// Another alias took the same number at the same moment: try once more with the next one.
+			if (attempt >= 2) throw new ClientError(503, "The alias could not be created. Try again.");
+		}
 	}
 	const view = await getAliasView(db, { address });
 	if (!view) throw new ClientError(500, "The alias could not be created.");

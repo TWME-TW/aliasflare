@@ -21,10 +21,11 @@ import { ConfigError, DOMAIN_PATTERN, envOverrides, loadConfig, mailflareReady, 
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
-import { domainOf, extractEmail, normalizeEmail } from "./format";
+import { domainOf, extractEmail, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
 import { handleDirectInbound, handleInbound, type InboundEvent } from "./forward";
 import {
 	addSimpleLoginContacts,
+	newFetchBudget,
 	defaultImportDomains,
 	fetchAddy,
 	fetchSimpleLogin,
@@ -67,7 +68,8 @@ import {
 	DEFAULT_ALIAS_PAGE_SIZE,
 	type ActivityItem,
 } from "./ui";
-import { claimLink, describeAction, performAction, releaseLink, resolveLink } from "./unsubscribe";
+import { readTextLimited } from "./streams";
+import { claimLink, describeAction, performAction, releaseLink, resolveLink, safeHttpsUrl } from "./unsubscribe";
 
 const MAX_WEBHOOK_BYTES = 64 * 1024;
 const MAX_JSON_BYTES = 32 * 1024;
@@ -127,37 +129,8 @@ function publicOrigin(c: C): string {
 	return c.get("config").publicUrl || new URL(c.req.url).origin;
 }
 
-/**
- * Reads a request body up to `max` bytes, or returns null when it is larger. A declared
- * Content-Length is checked first, and a streamed body stops being read past the limit.
- */
-async function readLimited(request: Request, max: number): Promise<string | null> {
-	if (Number(request.headers.get("Content-Length") ?? 0) > max) return null;
-	if (!request.body) return "";
-	const reader = request.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	for (;;) {
-		const { done, value } = await reader.read();
-		if (done) break;
-		total += value.byteLength;
-		if (total > max) {
-			await reader.cancel();
-			return null;
-		}
-		chunks.push(value);
-	}
-	const bytes = new Uint8Array(total);
-	let offset = 0;
-	for (const chunk of chunks) {
-		bytes.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return new TextDecoder().decode(bytes);
-}
-
 async function readJson<T>(c: C): Promise<T | null> {
-	const text = await readLimited(c.req.raw, MAX_JSON_BYTES);
+	const text = await readTextLimited(c.req.raw, MAX_JSON_BYTES);
 	if (text === null) return null;
 	try {
 		return JSON.parse(text || "{}") as T;
@@ -226,7 +199,7 @@ app.route("/api", api);
 app.post("/webhook", async (c) => {
 	const config = c.get("config");
 	if (!mailflareReady(config)) return c.json({ error: "Mailflare is not configured" }, 503);
-	const body = await readLimited(c.req.raw, MAX_WEBHOOK_BYTES);
+	const body = await readTextLimited(c.req.raw, MAX_WEBHOOK_BYTES);
 	if (body === null) return c.json({ error: "Payload too large" }, 413);
 	if (!(await verifyWebhookSignature(config.webhookSecret, body, c.req.header("X-Email-Platform-Signature") ?? null))) {
 		return c.json({ error: "Invalid signature" }, 401);
@@ -271,14 +244,16 @@ for (const kind of ["unsubscribe", "action"] as const) {
 		if (!(await claimLink(c.env.DB, target.token))) {
 			return c.html(messagePage(t, t("link.done"), html`<p>${t("link.used")}</p>`));
 		}
+		let done;
 		try {
-			await performAction(c.env, c.get("config"), target);
+			({ done } = await performAction(c.env, c.get("config"), target));
 		} catch (error) {
 			await releaseLink(c.env.DB, target.token);
 			console.error("Link action failed", kind, error instanceof Error ? error.message : error);
 			return c.html(messagePage(t, t("link.error"), html`<p>${t("link.tryAgain")}</p>`), 500);
 		}
-		return c.html(messagePage(t, t("link.done"), html`<p>${describeAction(target, t)}</p>`));
+		// What actually happened: a block, when the sender's own unsubscribe could not be run.
+		return c.html(messagePage(t, t("link.done"), html`<p>${describeAction(done, t)}</p>`));
 	});
 }
 
@@ -392,7 +367,7 @@ app.get("/", async (c) => {
 	const query = (c.req.query("q") ?? "").trim().slice(0, 100);
 	const requested = c.req.query("filter") as AliasFilter;
 	const filter: AliasFilter = ALIAS_FILTERS.includes(requested) ? requested : "all";
-	const pageNumber = Math.max(1, Math.floor(Number(c.req.query("page")) || 1));
+	const pageNumber = pageParam(c.req.query("page"), 1);
 	const requestedSize = Number(c.req.query("per"));
 	const perPage = (ALIAS_PAGE_SIZES as readonly number[]).includes(requestedSize) ? requestedSize : DEFAULT_ALIAS_PAGE_SIZE;
 	const where = [filter === "deleted" ? "deleted_at IS NOT NULL" : "deleted_at IS NULL"];
@@ -487,7 +462,8 @@ app.post("/settings", async (c) => {
 		showBanner: form.showBanner === "1",
 		unsubscribeBehavior: form.unsubscribeBehavior,
 		language: form.language,
-		defaultDestination: destination,
+		// The bare address, so "Owner <owner@example.com>" is stored as owner@example.com.
+		defaultDestination: destination ? (extractEmail(destination) ?? "") : "",
 	});
 	await saveSettings(c.env.DB, settings);
 	return reply("notice.settingsSaved", true);
@@ -626,11 +602,19 @@ app.post("/import/:source", async (c) => {
 			if (!apiKey) return render({ error: t("imp.err.auth") });
 			const url = new URL(typeof form.server === "string" && form.server.trim() ? form.server.trim() : source.server);
 			if (url.protocol !== "https:") return render({ error: t("imp.err.badServer") });
+			// A public host only: not an IP address, an internal name or this service itself. A
+			// port is allowed, for self-hosted servers.
+			const host = new URL(url.href);
+			host.port = "";
+			const ownHosts = [new URL(c.req.url).hostname, ...[c.get("config").publicUrl, c.get("config").siteOrigin, c.get("config").mailflareUrl].filter(Boolean).map((value) => new URL(value).hostname)];
+			if (!safeHttpsUrl(host.href, ownHosts)) return render({ error: t("imp.err.badServer") });
 			server = url.origin;
-			aliases = await source.fetch(server, apiKey);
+			// One budget for the whole import, so aliases and contacts together stay inside Workers' subrequest limit.
+			const budget = newFetchBudget();
+			aliases = await source.fetch(server, apiKey, budget);
 			selection = selectByDomain(aliases, domains);
 			// Contacts are fetched only for the aliases being imported, one list per alias.
-			if (sourceName === "simplelogin" && form.contacts === "1") await addSimpleLoginContacts(server, apiKey, selection.chosen);
+			if (sourceName === "simplelogin" && form.contacts === "1") await addSimpleLoginContacts(server, apiKey, selection.chosen, budget);
 		} else {
 			const file = form.file;
 			if (!(file instanceof File) || file.size === 0) return render({ error: t("imp.err.empty") });
@@ -737,7 +721,7 @@ app.post("/aliases/bulk", async (c) => {
 			: action === "pin" || action === "unpin"
 				? statement("UPDATE aliases SET pinned = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL", action === "pin" ? 1 : 0, timestamp)
 				: action === "note"
-					? statement("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?", value.slice(0, 200) || null, timestamp)
+					? statement("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?", value.slice(0, MAX_NOTE_LENGTH) || null, timestamp)
 					: action === "destination"
 						? statement("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ?", destination, timestamp)
 						: action === "delete"
@@ -820,7 +804,7 @@ app.post("/aliases/:address/destination", async (c) => {
 app.post("/aliases/:address/note", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
 	const form = await c.req.parseBody();
-	const note = (typeof form.note === "string" ? form.note : "").trim().slice(0, 200) || null;
+	const note = (typeof form.note === "string" ? form.note : "").trim().slice(0, MAX_NOTE_LENGTH) || null;
 	const result = await c.env.DB.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(note, now(), address).run();
 	if (c.req.header("X-Autosave") === "1") {
 		// Saved in place from the alias list or alias page.

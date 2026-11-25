@@ -2,14 +2,15 @@ import PostalMime, { type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { signToken } from "./crypto";
 import { ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
-import { domainOf, ensureAngle, extractEmail, formatSenderName, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
+import { domainOf, ensureAngle, extractEmail, cleanSubjectLine, formatSenderName, parseBareEmail, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
 import { translator } from "./i18n";
 import { getStoredMessage, mailflareConfig, MailflareError, MAX_MESSAGE_BYTES, type StoredMessage } from "./mailflare";
 import { sha256Hex } from "./apikeys";
 import { isOwnAddress, isReverseDomainOf, reverseDomainFor } from "./domains";
 import { LINK_TTL_SECONDS } from "./unsubscribe";
-import { firstAuthenticationResults } from "./reply";
+import { authResultClauses, firstAuthenticationResults } from "./reply";
 import { loadSettings } from "./settings";
+import { readLimited } from "./streams";
 import { transformForward, type BannerInfo } from "./transform";
 
 export const LOOP_HEADER = "X-Aliasflare";
@@ -92,15 +93,23 @@ export function isPromotional(headers: { key: string; value: string }[]): boolea
 	});
 }
 
-/** True only when Cloudflare checked the message and DMARC explicitly failed. */
+/**
+ * True only when Cloudflare checked the message and DMARC explicitly failed. The header is
+ * split like the reply check splits it, so quoted text, comments and look-alike hosts
+ * (mx.cloudflare.net.example) are not read as Cloudflare's verdict.
+ */
 export function dmarcFailedAtCloudflare(authResults: string | null): boolean {
-	return !!authResults && /^\s*mx\.cloudflare\.net\b/i.test(authResults) && /\bdmarc\s*=\s*fail\b/i.test(authResults);
+	if (!authResults) return false;
+	const [authserv, ...results] = authResultClauses(authResults);
+	if (authserv?.split(/\s+/)[0]?.toLowerCase() !== "mx.cloudflare.net") return false;
+	return results.some((result) => /^dmarc\s*=\s*fail\b/i.test(result));
 }
 
-function rawHeaderSection(raw: ArrayBuffer): string {
+/** The header block, or null when it does not end within 64 KiB (then nothing in it is trusted). */
+function rawHeaderSection(raw: ArrayBuffer): string | null {
 	const head = new TextDecoder().decode(new Uint8Array(raw).subarray(0, 65536));
 	const end = head.search(/\r?\n\r?\n/);
-	return end >= 0 ? head.slice(0, end) : head;
+	return end >= 0 ? head.slice(0, end) : null;
 }
 
 /** Forwards one message Mailflare received (its message.inbound webhook) to the alias's destination. */
@@ -118,10 +127,13 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 
 /** Reads a message stream up to MAX_MESSAGE_BYTES. */
 async function readRaw(stream: ReadableStream<Uint8Array>, declared: number): Promise<ArrayBuffer> {
-	if (declared > MAX_MESSAGE_BYTES) throw new MailflareError(`The message is ${declared} bytes; at most ${MAX_MESSAGE_BYTES} are forwarded`, 413);
-	const buffer = await new Response(stream).arrayBuffer();
-	if (buffer.byteLength > MAX_MESSAGE_BYTES) throw new MailflareError(`The message is larger than ${MAX_MESSAGE_BYTES} bytes`, 413);
-	return buffer;
+	if (declared > MAX_MESSAGE_BYTES) {
+		await stream.cancel().catch(() => undefined);
+		throw new MailflareError(`The message is ${declared} bytes; at most ${MAX_MESSAGE_BYTES} are forwarded`, 413);
+	}
+	const bytes = await readLimited(stream, MAX_MESSAGE_BYTES);
+	if (!bytes) throw new MailflareError(`The message is larger than ${MAX_MESSAGE_BYTES} bytes`, 413);
+	return bytes.buffer as ArrayBuffer;
 }
 
 /**
@@ -132,7 +144,13 @@ async function readRaw(stream: ReadableStream<Uint8Array>, declared: number): Pr
 export async function handleDirectInbound(message: ForwardableEmailMessage, env: Env, config: AppConfig): Promise<ForwardOutcome> {
 	const aliasAddress = normalizeEmail(message.to);
 	const messageId = message.headers.get("Message-ID")?.trim();
-	const key = `cf:${await sha256Hex(`${messageId || crypto.randomUUID()}\n${aliasAddress}`)}`;
+	// A retry of the same delivery has the same Message-ID, recipient, envelope sender, Date
+	// and size. Someone else reusing a Message-ID they saw cannot match all of them, so they
+	// cannot get a real message dropped as a duplicate.
+	const parts = messageId
+		? [messageId, aliasAddress, normalizeEmail(message.from ?? ""), message.headers.get("Date")?.trim() ?? "", String(message.rawSize)]
+		: [crypto.randomUUID()];
+	const key = `cf:${await sha256Hex(parts.join("\n"))}`;
 	return forwardMessage(env, config, {
 		key,
 		aliasAddress,
@@ -188,7 +206,12 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const email = await PostalMime.parse(stored.raw, { attachmentEncoding: "arraybuffer" });
 		if (headerValue(email, LOOP_HEADER)) return await skip("already forwarded by this Worker");
 
-		const senderEmail = extractEmail(email.from?.address ?? event.from ?? null);
+		// The parsed From address must itself be one plain address. One that is not (a quoted
+		// local part hiding another address, say) is not trusted: the envelope sender stands in,
+		// and the message is marked as from an unverified sender.
+		const headerSender = parseBareEmail(email.from?.address);
+		const malformedFrom = !!email.from?.address && !headerSender;
+		const senderEmail = headerSender ?? parseBareEmail(event.from);
 		if (!senderEmail || isReverseDomainOf(domainOf(senderEmail), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
 		await finish(db, forwardId, {
 			original_message_id: ensureAngle(email.messageId),
@@ -198,7 +221,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		});
 		// Filters run before a contact is made, so a blocked sender gets no reverse alias. The
 		// envelope sender is checked too: the From header alone is the sender's to choose.
-		const envelopeSender = extractEmail(event.from ?? null);
+		const envelopeSender = parseBareEmail(event.from);
 		for (const candidate of new Set([senderEmail, envelopeSender].filter((value): value is string => !!value))) {
 			const blocked = await matchBlocklist(db, candidate);
 			if (blocked) return await skip(`blocklist: ${blocked.value}`);
@@ -206,7 +229,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias");
 		if (email.attachments.length > MAX_ATTACHMENTS) return await skip(`${email.attachments.length} attachments (at most ${MAX_ATTACHMENTS})`);
 
-		const spoofed = dmarcFailedAtCloudflare(firstAuthenticationResults(rawHeaderSection(stored.raw)));
+		const headerBlock = rawHeaderSection(stored.raw);
+		const spoofed = malformedFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
 		// A display name from a message that failed DMARC is not trusted to rename a contact.
 		const senderName = spoofed ? null : email.from?.name?.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, MAX_NAME_LENGTH) || null;
 		const contact = await ensureContact(db, aliasAddress, senderEmail, senderName, settings.includeSenderInReverseAlias);
@@ -222,7 +246,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			.slice(-MAX_REFERENCES);
 
 		const sign = (purpose: string, payload: string) => signToken(config.signingSecret, purpose, payload, LINK_TTL_SECONDS);
-		const banner: BannerInfo | null = settings.showBanner
+		// Without a known origin there is nowhere for the banner's links to point.
+		const banner: BannerInfo | null = settings.showBanner && origin
 			? {
 					alias: aliasAddress,
 					sender: contact.name ? `${sanitizeDisplayName(contact.name)} <${contact.email}>` : contact.email,
@@ -239,16 +264,19 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const reverseAddress = reverseAddressOf(contact.reverse_local, reverseDomain);
 		const displayName = formatSenderName(settings.senderFormat, contact.name, contact.email);
 		const headers: Record<string, string> = {
-			"List-Unsubscribe": `<${origin}/unsubscribe/${await sign("unsubscribe", forwardId)}>`,
-			"List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
 			[LOOP_HEADER]: aliasAddress,
 			"X-Original-To": aliasAddress,
 		};
+		// A relative unsubscribe link would be useless; leave the header out until the origin is known.
+		if (origin) {
+			headers["List-Unsubscribe"] = `<${origin}/unsubscribe/${await sign("unsubscribe", forwardId)}>`;
+			headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+		}
 		if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
 		if (references.length) headers.References = references.join(" ");
 
 		// The banner can be hidden by the message's own CSS; a subject prefix cannot.
-		const subject = email.subject?.trim() || "(no subject)";
+		const subject = cleanSubjectLine(email.subject) || "(no subject)";
 		const result = await env.EMAIL.send({
 			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
 			// Cloudflare will not take a To header of our own, so the alias goes in the display name:
@@ -269,12 +297,19 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			}),
 		});
 
-		await finish(db, forwardId, {
-			status: "sent",
-			forwarded_message_id: ensureAngle(result.messageId),
-			trackers_removed: body.trackersRemoved,
-		});
-		await db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(now(), contact.id).run();
+		// The message is out. Record that in one batch, and never report a failure from here on:
+		// a retry would send it a second time.
+		const sentAt = now();
+		try {
+			await db.batch([
+				db
+					.prepare("UPDATE forwards SET status = 'sent', forwarded_message_id = ?, trackers_removed = ?, updated_at = ? WHERE id = ?")
+					.bind(ensureAngle(result.messageId) ?? null, body.trackersRemoved, sentAt, forwardId),
+				db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(sentAt, contact.id),
+			]);
+		} catch (error) {
+			console.error("Forwarded, but recording it failed", event.messageId, error instanceof Error ? error.message : error);
+		}
 		return { status: 200, result: "forwarded" };
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);

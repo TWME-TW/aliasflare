@@ -29,6 +29,7 @@ export class CloudflareError extends Error {
 	constructor(
 		message: string,
 		readonly codes: number[],
+		readonly status = 0,
 	) {
 		super(message);
 	}
@@ -50,7 +51,7 @@ async function cf<T>(token: string, path: string, init: RequestInit = {}): Promi
 	if (!response.ok || !body?.success) {
 		const errors = body?.errors ?? [];
 		const message = errors.map((error) => `${error.message} (${error.code})`).join("; ") || `HTTP ${response.status}`;
-		throw new CloudflareError(message, errors.map((error) => error.code));
+		throw new CloudflareError(message, errors.map((error) => error.code), response.status);
 	}
 	return body.result;
 }
@@ -142,7 +143,12 @@ export async function setUpDomain(input: { token: string; domain: string; worker
 			throw new Error(`Catch-all rules only exist on a zone's apex (${found.name}). Use the apex as the alias domain, or let Mailflare receive ${domain}.`);
 		}
 		await enableRouting(token, found, domain);
-		const current = await cf<Rule>(token, `${zonePath}/email/routing/rules/catch_all`).catch(() => null);
+		// Only a catch-all that is not there counts as none. Any other failure stops here, so a
+		// passing network or server error cannot get an existing catch-all overwritten.
+		const current = await cf<Rule>(token, `${zonePath}/email/routing/rules/catch_all`).catch((error) => {
+			if (error instanceof CloudflareError && error.status === 404) return null;
+			throw error;
+		});
 		if (current?.enabled && !toWorker(current.actions, workerName) && !input.replaceCatchAll) {
 			const where = current.actions.map((action) => [action.type, ...(action.value ?? [])].join(" ")).join(", ");
 			throw new Error(`The catch-all of ${domain} already sends mail elsewhere (${where}); it was left unchanged. If this domain is only for aliases, tick “Replace existing catch-alls” and run the setup again.`);

@@ -282,7 +282,7 @@ export const en = {
 	"imp.err.fetch": "Could not read aliases from {server}: {detail}",
 	"imp.err.format": "The response or file is not in a format that can be imported.",
 	"imp.err.empty": "Choose a CSV file to import.",
-	"imp.err.badServer": "The server must be an https:// address.",
+	"imp.err.badServer": "The server must be a public https:// address.",
 	"imp.contacts": "Also import contacts",
 	"imp.contactsHelp": "Brings each alias's SimpleLogin contacts, with when they were added, when you last wrote to them and whether they are blocked. They get new reverse aliases here; their SimpleLogin reverse aliases keep working only at SimpleLogin. This takes longer, since each alias with activity needs its own request.",
 	"imp.doneContacts": "{count} contacts imported.",
