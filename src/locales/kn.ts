@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
 	"settings.section": "ಫಾರ್ವರ್ಡ್ ಮತ್ತು ಉತ್ತರಗಳು",
+	"settings.display": "ಥೀಮ್ ಮತ್ತು ಭಾಷೆ",
 	"settings.destination": "ಡೀಫಾಲ್ಟ್ ಫಾರ್ವರ್ಡ್ ವಿಳಾಸ",
 	"settings.destinationHelp": "ನಿಮ್ಮ ನಿಜವಾದ ಇನ್‌ಬಾಕ್ಸ್. ಈ ವಿಳಾಸದಿಂದ, DMARC ಪಾಸ್ ಆದ ಮೇಲ್ ಮಾತ್ರ ರಿವರ್ಸ್ ಅಲಿಯಾಸ್‌ಗಳ ಮೂಲಕ ಕಳುಹಿಸಬಹುದು (ಅಲಿಯಾಸ್‌ಗೆ ತನ್ನದೇ ವಿಳಾಸವಿದ್ದರೆ ಹೊರತು).",
 	"settings.senderFormat": "ಕಳುಹಿಸುವವರ ವಿಳಾಸದ ಸ್ವರೂಪ",

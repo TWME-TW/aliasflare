@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "Mipangilio",
 	"settings.section": "Kutuma na majibu",
+	"settings.display": "Mandhari na lugha",
 	"settings.destination": "Anwani chaguomsingi ya kutuma",
 	"settings.destinationHelp":
 		"Kikasha chako halisi. Ni barua tu kutoka anwani hii, zenye DMARC iliyofaulu, zinazoweza kutumwa kupitia lakabu za kinyume (isipokuwa lakabu ina anwani yake yenyewe).",

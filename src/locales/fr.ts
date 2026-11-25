@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "Paramètres",
 	"settings.section": "Transfert et réponses",
+	"settings.display": "Thème et langue",
 	"settings.destination": "Adresse de transfert par défaut",
 	"settings.destinationHelp":
 		"Votre vraie boîte de réception. Seuls les e-mails provenant de cette adresse, avec un DMARC valide, peuvent être envoyés via les alias inversés (sauf si un alias a sa propre adresse).",

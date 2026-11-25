@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "ترتیبات",
 	"settings.section": "فارورڈنگ اور جوابات",
+	"settings.display": "تھیم اور زبان",
 	"settings.destination": "ڈیفالٹ فارورڈنگ ایڈریس",
 	"settings.destinationHelp":
 		"آپ کا اصل ان باکس۔ صرف اسی ایڈریس سے آنے والی میل، جو DMARC پاس کرے، ریورس عرف کے ذریعے بھیجی جا سکتی ہے (جب تک کسی عرف کا اپنا ایڈریس نہ ہو)۔",

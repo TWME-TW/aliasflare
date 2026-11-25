@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "Saituna",
 	"settings.section": "Tura saƙo da amsoshi",
+	"settings.display": "Jigo da harshe",
 	"settings.destination": "Adireshin tura saƙo na asali",
 	"settings.destinationHelp":
 		"Akwatin saƙonka na gaske. Saƙonni daga wannan adireshin kaɗai, masu cin DMARC, ne za a iya aika ta laƙabin juyawa (sai dai idan laƙabi yana da adireshinsa).",

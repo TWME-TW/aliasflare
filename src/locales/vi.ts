@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "đang xử lý",
 	"settings.title": "Cài đặt",
 	"settings.section": "Chuyển tiếp và trả lời",
+	"settings.display": "Giao diện và ngôn ngữ",
 	"settings.destination": "Địa chỉ chuyển tiếp mặc định",
 	"settings.destinationHelp":
 		"Hộp thư thật của bạn. Chỉ thư từ địa chỉ này, và đạt DMARC, mới được gửi qua bí danh ngược (trừ khi bí danh có địa chỉ riêng).",

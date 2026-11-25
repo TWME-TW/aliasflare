@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "обрабатывается",
 	"settings.title": "Настройки",
 	"settings.section": "Пересылка и ответы",
+	"settings.display": "Тема и язык",
 	"settings.destination": "Адрес пересылки по умолчанию",
 	"settings.destinationHelp":
 		"Ваш настоящий ящик. Через обратные алиасы можно отправлять только письма с этого адреса, прошедшие проверку DMARC (если у алиаса нет собственного адреса).",

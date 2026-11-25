@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "Definições",
 	"settings.section": "Reencaminhamento e respostas",
+	"settings.display": "Tema e idioma",
 	"settings.destination": "Endereço de reencaminhamento predefinido",
 	"settings.destinationHelp":
 		"A sua caixa de entrada real. Só o email deste endereço, com DMARC aprovado, pode ser enviado através de aliases inversos (a menos que um alias tenha o seu próprio endereço).",

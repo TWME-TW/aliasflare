@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "ਸੈਟਿੰਗਾਂ",
 	"settings.section": "ਅੱਗੇ ਭੇਜਣਾ ਅਤੇ ਜਵਾਬ",
+	"settings.display": "ਥੀਮ ਅਤੇ ਭਾਸ਼ਾ",
 	"settings.destination": "ਮੂਲ ਅੱਗੇ ਭੇਜਣ ਦਾ ਪਤਾ",
 	"settings.destinationHelp": "ਤੁਹਾਡਾ ਅਸਲੀ ਇਨਬਾਕਸ। ਸਿਰਫ਼ ਇਸ ਪਤੇ ਤੋਂ, DMARC ਪਾਸ ਨਾਲ ਆਈ ਮੇਲ ਹੀ ਰਿਵਰਸ ਉਪਨਾਮਾਂ ਰਾਹੀਂ ਭੇਜੀ ਜਾ ਸਕਦੀ ਹੈ (ਜਦ ਤੱਕ ਕਿਸੇ ਉਪਨਾਮ ਦਾ ਆਪਣਾ ਪਤਾ ਨਾ ਹੋਵੇ)।",
 	"settings.senderFormat": "ਭੇਜਣ ਵਾਲੇ ਦੇ ਪਤੇ ਦਾ ਫਾਰਮੈਟ",

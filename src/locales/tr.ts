@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "işleniyor",
 	"settings.title": "Ayarlar",
 	"settings.section": "Yönlendirme ve yanıtlar",
+	"settings.display": "Tema ve dil",
 	"settings.destination": "Varsayılan yönlendirme adresi",
 	"settings.destinationHelp":
 		"Gerçek gelen kutunuz. Yalnızca bu adresten gelen ve DMARC'ı geçen e-postalar ters takma adlar üzerinden gönderilebilir (bir takma adın kendi adresi yoksa).",

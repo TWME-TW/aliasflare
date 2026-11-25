@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "الإعدادات",
 	"settings.section": "إعادة التوجيه والردود",
+	"settings.display": "المظهر واللغة",
 	"settings.destination": "عنوان إعادة التوجيه الافتراضي",
 	"settings.destinationHelp":
 		"صندوق بريدك الحقيقي. لا يُسمح بإرسال الرسائل عبر الأسماء المستعارة العكسية إلا من هذا العنوان وبشرط اجتياز DMARC (ما لم يكن للاسم المستعار عنوانه الخاص).",

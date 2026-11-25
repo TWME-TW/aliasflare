@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "تنظیمات",
 	"settings.section": "ارسال و پاسخ‌ها",
+	"settings.display": "پوسته و زبان",
 	"settings.destination": "نشانی پیش‌فرض ارسال",
 	"settings.destinationHelp":
 		"صندوق ورودی واقعی شما. فقط ایمیل‌هایی از این نشانی، با قبولی DMARC، می‌توانند از طریق نام‌های مستعار معکوس فرستاده شوند (مگر اینکه نام مستعار نشانی خودش را داشته باشد).",

@@ -98,6 +98,9 @@ app.use("*", async (c, next) => {
 	c.header("X-Frame-Options", "DENY");
 	if (new URL(c.req.url).protocol === "https:") c.header("Strict-Transport-Security", "max-age=31536000");
 	if (NO_STORE.test(c.req.path)) c.header("Cache-Control", "no-store");
+	// Dashboard pages let the browser fetch a link's page while the pointer rests on it (or a finger
+	// presses it), so most clicks open a page that has already arrived. Only GET pages, which change nothing.
+	else if (c.req.method === "GET" && c.res.headers.get("Content-Type")?.startsWith("text/html")) c.header("Speculation-Rules", `"${SPECULATION_PATH}"`);
 	c.header(
 		"Content-Security-Policy",
 		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
@@ -111,7 +114,24 @@ const MAX_IMPORT_UPLOAD = 5_100_000;
 const NO_STORE = /^\/(?:unsubscribe|action|setup|login)(?:\/|$)/;
 
 /** Static files: they need neither the configuration (a D1 read) nor a language. */
-const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/app.css", "/favicon.svg"]);
+const SPECULATION_PATH = "/assets/speculation.json";
+const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/app.css", "/favicon.svg", SPECULATION_PATH]);
+/** Which links may be fetched ahead: this site's pages, never a one-time link, sign-in step or API. */
+const SPECULATION_RULES = JSON.stringify({
+	prefetch: [
+		{
+			source: "document",
+			where: {
+				and: [
+					{ href_matches: "/*" },
+					{ not: { href_matches: ["/assets/*", "/unsubscribe/*", "/action/*", "/setup", "/setup/*", "/login", "/login/*", "/logout", "/webhook", "/api", "/api/*", "/mcp", "/mcp/*"] } },
+					{ not: { selector_matches: "[data-no-prefetch], [download], [target]" } },
+				],
+			},
+			eagerness: "moderate",
+		},
+	],
+});
 /** A year, for a versioned asset URL; an unversioned one is kept briefly so a deploy shows soon. */
 const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
 
@@ -246,6 +266,11 @@ app.get("/favicon.svg", (c) => {
 app.get("/assets/app.css", (c) => {
 	c.header("Cache-Control", assetCache(c));
 	return c.body(String(STYLE), 200, { "Content-Type": "text/css; charset=utf-8" });
+});
+
+app.get(SPECULATION_PATH, (c) => {
+	c.header("Cache-Control", "public, max-age=3600");
+	return c.body(SPECULATION_RULES, 200, { "Content-Type": "application/speculationrules+json" });
 });
 
 app.get("/assets/app.js", (c) => {

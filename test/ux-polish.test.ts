@@ -231,3 +231,38 @@ describe("review follow-ups", () => {
 		expect(list).toContain('placeholder="default" title="me@home.test"');
 	});
 });
+
+describe("moving between pages", () => {
+	it("lets dashboard pages fetch links ahead, but not sign-in or one-time pages", async () => {
+		const dashboard = await app.fetch(new Request(`${ORIGIN}/`, { headers: { cookie } }), env);
+		expect(dashboard.headers.get("Speculation-Rules")).toBe('"/assets/speculation.json"');
+		const login = await app.fetch(new Request(`${ORIGIN}/login`), env);
+		expect(login.headers.get("Speculation-Rules")).toBeNull();
+		const css = await (await app.fetch(new Request(`${ORIGIN}/assets/app.css`), env)).text();
+		expect(css).toContain("@view-transition");
+		expect(css).toContain("html[data-navigating]");
+		const rules = await app.fetch(new Request(`${ORIGIN}/assets/speculation.json`), env);
+		expect(rules.headers.get("Content-Type")).toBe("application/speculationrules+json");
+		const json = await rules.json<{ prefetch: { where: { and: { not?: { href_matches?: string[] } }[] }; eagerness: string }[] }>();
+		expect(json.prefetch[0]!.eagerness).toBe("moderate");
+		const excluded = json.prefetch[0]!.where.and.flatMap((part) => part.not?.href_matches ?? []);
+		for (const path of ["/unsubscribe/*", "/action/*", "/login", "/api/*", "/mcp"]) expect(excluded).toContain(path);
+	});
+
+	it("puts a jump bar on the settings page and the theme in its own section", async () => {
+		const { html } = await getHtml("/settings");
+		expect(html).toContain('<nav class="jump"');
+		for (const id of ["language-settings", "forwarding", "unsubscribe", "clients"]) {
+			expect(html).toContain(`href="#${id}"`);
+			expect(html).toContain(`<section id="${id}">`);
+		}
+		expect(html).toContain("<h2>Display and language</h2>");
+	});
+
+	it("folds each label's palette behind one colour dot", async () => {
+		await createLabel(db, { name: "Work", colour: LABEL_COLOURS[0] });
+		const { html } = await getHtml("/labels");
+		expect([...html.matchAll(/<details class="colour-pick">/g)]).toHaveLength(2);
+		expect(html).toContain(`<span class="dot" data-colour="${LABEL_COLOURS[0]}">`);
+	});
+});

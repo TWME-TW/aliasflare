@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "diproses",
 	"settings.title": "Tetapan",
 	"settings.section": "Pemajuan dan balasan",
+	"settings.display": "Tema dan bahasa",
 	"settings.destination": "Alamat pemajuan lalai",
 	"settings.destinationHelp":
 		"Peti masuk sebenar anda. Hanya mel daripada alamat ini, dengan DMARC lulus, boleh dihantar melalui alias terbalik (melainkan alias mempunyai alamat sendiri).",

@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "प्रक्रिया सुरू आहे",
 	"settings.title": "सेटिंग्ज",
 	"settings.section": "फॉरवर्डिंग आणि उत्तरे",
+	"settings.display": "थीम आणि भाषा",
 	"settings.destination": "डीफॉल्ट फॉरवर्डिंग पत्ता",
 	"settings.destinationHelp":
 		"तुमचा खरा इनबॉक्स. फक्त याच पत्त्यावरून आलेले, DMARC पास झालेले मेल रिव्हर्स उपनावांद्वारे पाठवता येतात (एखाद्या उपनावाचा स्वतःचा पत्ता नसेल तर).",

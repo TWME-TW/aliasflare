@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "diproses",
 	"settings.title": "Pengaturan",
 	"settings.section": "Penerusan dan balasan",
+	"settings.display": "Tema dan bahasa",
 	"settings.destination": "Alamat penerusan default",
 	"settings.destinationHelp":
 		"Kotak masuk asli Anda. Hanya email dari alamat ini, dengan DMARC lulus, yang boleh dikirim melalui alias balik (kecuali alias punya alamat sendiri).",

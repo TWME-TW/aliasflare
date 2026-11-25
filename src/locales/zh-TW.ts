@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "處理中",
 	"settings.title": "設定",
 	"settings.section": "轉寄與回信",
+	"settings.display": "顯示與語言",
 	"settings.destination": "預設轉寄地址",
 	"settings.destinationHelp": "你的真實信箱。只有從這個地址寄出、且通過 DMARC 的信，才能透過反向別名寄出（除非該別名另外指定了轉寄地址）。",
 	"settings.senderFormat": "寄件者顯示格式（Sender Address Format）",
