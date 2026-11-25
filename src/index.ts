@@ -6,6 +6,8 @@ import {
 	endSession,
 	isSignedIn,
 	LIVE_SESSION,
+	recentlyVerified,
+	sessionId,
 	claimedSessionId,
 	requireAdmin,
 	sameOrigin,
@@ -55,6 +57,7 @@ import {
 	registrationOptions,
 	relyingParty,
 } from "./passkeys";
+import { deviceLabel, listSessions, sessionHandle } from "./sessions";
 import { handleReverseAliasMail } from "./reply";
 import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabels, updateLabel } from "./labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, type Rule } from "./rules";
@@ -150,7 +153,8 @@ app.use("*", async (c, next) => {
 		const [config, settings, session] = await db.batch<{ key: string; value: string }>(reads);
 		c.set("config", await loadConfig(c.env, config!.results));
 		c.set("settings", settingsFromRows(settings!.results));
-		if (claimed) c.set("session", { id: claimed, live: session!.results.length > 0 });
+		const row = session?.results[0] as { seen?: number | null; verified?: number | null } | undefined;
+		if (claimed) c.set("session", { id: claimed, live: !!row, seen: row?.seen ?? null, verified: row?.verified ?? null });
 	} catch (error) {
 		if (!(error instanceof ConfigError)) throw error;
 		console.error("Configuration error:", error.message);
@@ -1173,6 +1177,8 @@ async function renderApiKeys(c: C, extra: { newKey?: string; notice?: Notice } =
 app.get("/api-keys", (c) => renderApiKeys(c));
 
 app.post("/api-keys", async (c) => {
+	// A key outlives the session, so it takes a fresh passkey confirmation, not just the cookie.
+	if (!(await recentlyVerified(c))) return redirectWithNotice(c, "/api-keys", "notice.reauth");
 	const form = await c.req.parseBody();
 	const { key } = await createApiKey(c.env.DB, typeof form.name === "string" ? form.name : "", form.scope === "mcp" ? "mcp" : "apps");
 	// Shown once, straight in the response; it is never stored or put in a URL.
@@ -1185,15 +1191,68 @@ app.post("/api-keys/:id/delete", async (c) => {
 	return redirectWithNotice(c, "/api-keys", "notice.keyRevoked");
 });
 
-app.get("/passkeys", async (c) => c.html(passkeysPage(c.get("t"), { passkeys: await listPasskeys(c.env.DB), notice: noticeFrom(c) })));
+app.get("/passkeys", async (c) => {
+	const [passkeys, sessions] = await Promise.all([listPasskeys(c.env.DB), listSessions(c.env.DB)]);
+	const current = await sessionId(c);
+	const devices = await Promise.all(
+		sessions.map(async (row) => ({ ...row, handle: await sessionHandle(row.id), current: row.id === current, label: deviceLabel(row.user_agent) })),
+	);
+	return c.html(passkeysPage(c.get("t"), { passkeys, devices, notice: noticeFrom(c) }));
+});
+
+// Confirming the passkey again, inside a session. With a confirmation from the last few minutes
+// there is nothing to ask, and the browser goes straight on.
+app.post("/reauth/options", async (c) => {
+	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
+	if (await recentlyVerified(c)) return c.json({ fresh: true });
+	const { options, challengeId } = await authenticationOptions(c.env.DB, relyingParty(c.req.url), "reauth");
+	setChallengeCookie(c, challengeId);
+	return c.json({ options });
+});
+
+app.post("/reauth/verify", async (c) => {
+	if (await rateLimited(c)) return jsonError(c, "err.rateLimited", 429);
+	const body = await readJson<{ response?: AuthenticationResponseJSON }>(c);
+	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
+	const passkey = await completeAuthentication(c.env.DB, relyingParty(c.req.url), takeChallengeCookie(c), body.response, "reauth").catch((error) => {
+		console.warn("Passkey confirmation failed:", error instanceof Error ? error.message : error);
+		return null;
+	});
+	const id = await sessionId(c);
+	if (!passkey || !id) return jsonError(c, "err.loginFailed", 401);
+	await c.env.DB.prepare("UPDATE sessions SET verified_at = ? WHERE id = ?").bind(now(), id).run();
+	return c.json({ ok: true });
+});
+
+app.post("/sessions/others/delete", async (c) => {
+	const id = await sessionId(c);
+	const result = await c.env.DB.prepare("DELETE FROM sessions WHERE id != ?").bind(id ?? "").run();
+	return redirectWithNotice(c, "/passkeys", "notice.othersSignedOut", { count: String(result.meta.changes ?? 0) });
+});
+
+app.post("/sessions/:handle/delete", async (c) => {
+	const handle = c.req.param("handle");
+	const sessions = await listSessions(c.env.DB);
+	let target: string | undefined;
+	for (const row of sessions) if ((await sessionHandle(row.id)) === handle) target = row.id;
+	if (!target) return redirectWithNotice(c, "/passkeys", "notice.sessionGone");
+	if (target === (await sessionId(c))) {
+		await endSession(c);
+		return c.redirect("/login");
+	}
+	await c.env.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(target).run();
+	return redirectWithNotice(c, "/passkeys", "notice.sessionEnded");
+});
 
 app.post("/passkeys/options", async (c) => {
+	if (!(await recentlyVerified(c))) return jsonError(c, "err.reauth", 403);
 	const { options, challengeId } = await registrationOptions(c.env.DB, relyingParty(c.req.url));
 	setChallengeCookie(c, challengeId);
 	return c.json({ options });
 });
 
 app.post("/passkeys/verify", async (c) => {
+	if (!(await recentlyVerified(c))) return jsonError(c, "err.reauth", 403);
 	const body = await readJson<{ response?: RegistrationResponseJSON; name?: unknown }>(c);
 	if (!body?.response) return jsonError(c, "err.missingResponse", 400);
 	const passkey = await completeRegistration(

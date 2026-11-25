@@ -11,6 +11,7 @@ import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
+import type { SessionRow } from "./sessions";
 import { FORWARD_METHODS, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, UNSUBSCRIBE_FALLBACKS, type Settings } from "./settings";
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from "./outbound";
@@ -111,7 +112,7 @@ form.inline { display:inline; margin:0; }
 form.row textarea { flex:1 1 240px; width:auto; }
 
 /* Chips and messages */
-.pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--muted); }
+.pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; white-space:nowrap; background:var(--soft); color:var(--muted); }
 /* Label chips: a soft tint of the label's colour, its text a deeper (or, when dark, lighter) shade of it. */
 :root { --lab-ink:#111827; --lab-ink-amount:45%; --lab-tint:14%; --lab-edge:30%; }
 :root[data-theme="dark"] { --lab-ink:#ffffff; --lab-ink-amount:55%; --lab-tint:24%; --lab-edge:40%; }
@@ -171,7 +172,7 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 	.rule-row.act { grid-template-columns:auto minmax(0,1fr); }
 	.rule-row.act > input { grid-column:2; }
 }
-.pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
+.pill.ok { background:var(--ok-soft); color:var(--ok); } .device { display:inline-flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:4px 8px; white-space:nowrap; } .pill.bad { background:var(--danger-soft); color:var(--danger); }
 .alias-cell { display:inline-flex; align-items:center; gap:2px; flex-wrap:wrap; }
 button.copy { min-height:28px; min-width:28px; padding:0 6px; }
 button.copy .check-i { display:none; }
@@ -1087,8 +1088,19 @@ ${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, html`$
 	);
 }
 
-export function passkeysPage(t: Translate, input: { passkeys: PasskeyRow[]; notice?: Notice }): Html {
-	const { passkeys, notice } = input;
+export type DeviceView = SessionRow & { handle: string; current: boolean; label: string | null };
+
+/** A country code as the reader's language names it ("TW" → "Taiwan"), or the code itself. */
+function regionName(code: string, locale: string): string {
+	try {
+		return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code;
+	} catch {
+		return code;
+	}
+}
+
+export function passkeysPage(t: Translate, input: { passkeys: PasskeyRow[]; devices: DeviceView[]; notice?: Notice }): Html {
+	const { passkeys, devices, notice } = input;
 	return page(
 		t("pk.title"),
 		html`<main>
@@ -1105,12 +1117,29 @@ ${passkeys.map(
 )}
 </tbody></table></div>
 </section>
+<section id="devices">
+<h2>${t("pk.devices")}</h2>
+<p class="help">${t("pk.devicesHelp")}</p>
+<div class="table-wrap"><table class="rt"><thead><tr><th>${t("pk.colDevice")}</th><th>${t("pk.colWhere")}</th><th>${t("pk.colSignedIn")}</th><th>${t("pk.colActive")}</th><th>${t("pk.colPasskey")}</th><th></th></tr></thead><tbody>
+${devices.map(
+	(device) => html`<tr><td data-label="${t("pk.colDevice")}"><span class="device">${device.label ?? t("pk.unknownDevice")}${device.current ? html` <span class="pill ok">${t("pk.thisDevice")}</span>` : ""}</span></td>
+<td data-label="${t("pk.colWhere")}">${device.country ? regionName(device.country, t.locale) : html`<span class="muted">—</span>`}</td>
+<td data-label="${t("pk.colSignedIn")}">${timeTag(device.created_at, t.locale)}</td>
+<td data-label="${t("pk.colActive")}">${timeTag(device.last_seen_at, t.locale)}</td>
+<td data-label="${t("pk.colPasskey")}">${device.passkey_name}</td>
+<td data-label=""><form class="inline" method="post" action="/sessions/${device.handle}/delete"><button class="danger" aria-label="${t("pk.signOut")}: ${device.label ?? t("pk.unknownDevice")}">${t("pk.signOut")}</button></form></td></tr>`,
+)}
+</tbody></table></div>
+${devices.length > 1
+	? html`<form method="post" action="/sessions/others/delete" class="mt12"><button class="danger">${t("pk.signOutOthers")}</button></form>`
+	: ""}
+</section>
 <section>
 <h2>${t("pk.add")}</h2>
 <form data-passkey="add" data-next="/passkeys?notice=notice.passkeyAdded">
 <label for="name">${t("pk.name")}</label>
 <div class="row"><input id="name" name="name" type="text" value="${t("pk.defaultName")}" maxlength="60" /><button class="primary">${t("setup.button")}</button></div>
-<p class="help">${t("pk.addHelp")}</p>
+<p class="help">${t("pk.addHelp")} ${t("pk.reauthHelp")}</p>
 ${errorBox(t)}
 </form>
 </section>
@@ -1279,14 +1308,18 @@ ${keys.map(
 </section>
 <section>
 <h2>${t("keys.add")}</h2>
-<form method="post" action="/api-keys" class="row">
+<p class="help">${t("keys.reauthHelp")}</p>
+<form method="post" action="/api-keys" data-reauth>
+<div class="row">
 <input name="name" type="text" maxlength="60" placeholder="${t("keys.namePlaceholder")}" aria-label="${t("keys.name")}" required />
 <select name="scope" aria-label="${t("keys.colScope")}"><option value="apps">${t("keys.scopeApps")}</option><option value="mcp">${t("keys.scopeMcp")}</option></select>
 <button class="primary">${t("keys.create")}</button>
+</div>
+${errorBox(t)}
 </form>
 </section>
 </main>`,
-		{ t, nav: true, current: "/api-keys", path: "/api-keys" },
+		{ t, nav: true, script: true, current: "/api-keys", path: "/api-keys" },
 	);
 }
 

@@ -209,9 +209,12 @@ export async function completeRegistration(
 	return inserted.meta.changes > 0 ? row : null;
 }
 
-export async function authenticationOptions(db: D1Database, rp: RelyingParty) {
+/** "login" signs in; "reauth" confirms the passkey again inside a session, before adding a passkey or an API key. */
+export type AuthenticationPurpose = "login" | "reauth";
+
+export async function authenticationOptions(db: D1Database, rp: RelyingParty, purpose: AuthenticationPurpose = "login") {
 	const options = await generateAuthenticationOptions({ rpID: rp.rpID, userVerification: "required" });
-	const challengeId = await storeChallenge(db, "login", options.challenge);
+	const challengeId = await storeChallenge(db, purpose, options.challenge);
 	return { options, challengeId };
 }
 
@@ -220,8 +223,9 @@ export async function completeAuthentication(
 	rp: RelyingParty,
 	challengeId: string | undefined,
 	response: AuthenticationResponseJSON,
+	purpose: AuthenticationPurpose = "login",
 ): Promise<PasskeyRow | null> {
-	const expectedChallenge = await takeChallenge(db, challengeId, "login");
+	const expectedChallenge = await takeChallenge(db, challengeId, purpose);
 	if (!expectedChallenge || typeof response?.id !== "string" || !response.id) return null;
 	const row = await db.prepare("SELECT * FROM passkeys WHERE id = ?").bind(response.id).first<PasskeyRow>();
 	if (!row) return null;

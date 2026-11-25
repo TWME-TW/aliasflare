@@ -57,8 +57,8 @@ export const PASSKEY_SCRIPT = `
     await post(base + "/verify", { response, name: fields.name || "" });
   }
 
-  async function login() {
-    const { options } = await post("/login/options");
+  async function login(base, preset) {
+    const { options } = preset || await post(base + "/options");
     const publicKey = {
       ...options,
       challenge: b64ToBuf(options.challenge),
@@ -67,7 +67,7 @@ export const PASSKEY_SCRIPT = `
     const credential = await navigator.credentials.get({ publicKey });
     if (!credential) throw Object.assign(new Error("cancelled"), { name: "NotAllowedError" });
     const r = credential.response;
-    await post("/login/verify", {
+    await post(base + "/verify", {
       response: {
         id: credential.id,
         rawId: bufToB64(credential.rawId),
@@ -84,6 +84,35 @@ export const PASSKEY_SCRIPT = `
     });
   }
 
+  // Adding a passkey or an API key asks for the passkey again, unless it was confirmed a few minutes ago.
+  async function reauth() {
+    const first = await post("/reauth/options");
+    if (!first.fresh) await login("/reauth", first);
+  }
+
+  const failed = (form, error) => {
+    const messages = form.querySelector("[data-msg-unsupported]")?.dataset || {};
+    const cancelled = error && (error.name === "NotAllowedError" || error.name === "AbortError");
+    show(form, cancelled ? (messages.msgCancelled || "The passkey prompt was cancelled or timed out.") : ((error && error.message) || String(error)));
+  };
+
+  for (const form of document.querySelectorAll("form[data-reauth]")) {
+    form.addEventListener("submit", async (event) => {
+      if (!form.reportValidity()) return;
+      event.preventDefault();
+      show(form, "");
+      const button = form.querySelector("button");
+      if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
+      try {
+        if (window.PublicKeyCredential) await reauth();
+        form.submit();
+      } catch (error) {
+        failed(form, error);
+        if (button) { button.disabled = false; button.removeAttribute("aria-busy"); }
+      }
+    });
+  }
+
   for (const form of document.querySelectorAll("form[data-passkey]")) {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -94,12 +123,12 @@ export const PASSKEY_SCRIPT = `
       if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
       try {
         const flow = form.dataset.passkey;
-        if (flow === "login") await login();
-        else await register(form, flow === "setup" ? "/setup" : "/passkeys");
+        if (flow === "login") await login("/login");
+        else if (flow === "setup") await register(form, "/setup");
+        else { await reauth(); await register(form, "/passkeys"); }
         location.href = form.dataset.next || "/";
       } catch (error) {
-        const cancelled = error && (error.name === "NotAllowedError" || error.name === "AbortError");
-        show(form, cancelled ? (messages.msgCancelled || "The passkey prompt was cancelled or timed out.") : ((error && error.message) || String(error)));
+        failed(form, error);
       } finally {
         if (button) { button.disabled = false; button.removeAttribute("aria-busy"); }
       }
