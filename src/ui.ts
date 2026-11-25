@@ -1,4 +1,4 @@
-import { LABEL_COLOURS, MAX_LABEL_NAME, type LabelRow, type LabelWithCount } from "./labels";
+import { LABEL_COLOURS, MAX_LABEL_NAME, nearestColour, type LabelRow, type LabelWithCount } from "./labels";
 import { ACTION_TYPES, CONDITION_TYPES, MATCHES, MAX_RULE_NAME, type Action, type Condition, type Rule } from "./rules";
 import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
@@ -17,6 +17,7 @@ import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from 
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
+export type Notice = string | { text: string; bad?: boolean };
 
 /*
  * Visual style follows Mailflare's (Gmail-like): a #f6f8fc canvas, white cards with large radii,
@@ -49,9 +50,9 @@ svg.i { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stro
 .brand { display:flex; align-items:center; gap:10px; font-size:20px; font-weight:600; color:var(--text); letter-spacing:-.01em; }
 .brand:hover { text-decoration:none; } .brand svg { width:32px; height:32px; flex:none; }
 .topbar .spacer { flex:1; }
-.shell { display:grid; grid-template-columns:248px minmax(0,1fr); gap:8px; padding:0 16px 16px 8px; align-items:start; }
+.shell { display:grid; grid-template-columns:248px minmax(0,1fr); gap:8px; padding-block:0 16px; padding-inline:8px 16px; align-items:start; }
 .sidebar { position:sticky; top:8px; display:flex; flex-direction:column; gap:2px; padding:4px 0; }
-.sidebar a { display:flex; align-items:center; gap:14px; height:44px; padding:0 18px; border-radius:999px; color:var(--text); font-weight:500; }
+.sidebar a { display:flex; align-items:center; gap:14px; height:44px; padding:0 18px; border-radius:999px; color:var(--text); font-weight:500; transition:background-color .15s, color .15s; }
 .sidebar a:hover { background:var(--hover); text-decoration:none; }
 .sidebar a[aria-current] { background:var(--nav-active); color:var(--nav-active-text); font-weight:600; }
 .content { display:grid; gap:12px; min-width:0; }
@@ -61,11 +62,14 @@ main.single, main.center { max-width:520px; margin:6vh auto 0; padding:0 16px; d
 section { background:var(--card); border-radius:var(--radius); padding:22px 26px; min-width:0; }
 h1 { font-size:22px; font-weight:500; margin:0 0 8px; }
 h2 { font-size:17px; font-weight:600; margin:0 0 12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+h2 code { font-size:.9em; }
 p { margin:8px 0; }
 p.help, .muted { color:var(--muted); font-size:13px; margin:4px 0 0; }
-code { font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--soft); padding:1px 6px; border-radius:6px; word-break:break-all; }
+span.help { display:block; color:var(--muted); font-size:13px; margin:4px 0 0; font-weight:400; }
+code { font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--soft); padding:1px 6px; border-radius:6px; word-break:break-all; direction:ltr; unicode-bidi:isolate; }
 
 /* Tables */
+.table-wrap { overflow-x:auto; max-width:100%; }
 table { width:100%; border-collapse:collapse; font-size:14px; }
 th, td { text-align:start; padding:12px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
 tbody tr:last-child td { border-bottom:none; }
@@ -74,27 +78,37 @@ th { color:var(--muted); font-weight:500; font-size:13px; }
 
 /* Forms */
 label { display:block; font-weight:500; margin:18px 0 6px; }
-input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], select {
+input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], textarea, select {
 	width:100%; max-width:480px; min-height:44px; padding:10px 14px; border:1px solid var(--line); border-radius:12px;
-	background:var(--card); color:inherit; font:inherit; }
-input:focus, select:focus, button:focus-visible, a:focus-visible { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--focus); }
+	background:var(--card); color:inherit; font:inherit; transition:border-color .15s, box-shadow .15s, opacity .15s; }
+textarea { resize:vertical; line-height:1.45; }
+input[type=email], input[type=url] { direction:ltr; unicode-bidi:isolate; text-align:start; }
+input[type=file] { width:100%; max-width:480px; padding:8px 12px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:inherit; font:inherit; cursor:pointer; }
+input[type=file]::file-selector-button { margin-inline-end:12px; min-height:32px; padding:0 14px; border-radius:999px; border:1px solid var(--line); background:var(--soft); color:var(--primary); font:inherit; font-weight:500; cursor:pointer; }
+input:focus, textarea:focus, select:focus, button:focus-visible, a:focus-visible, summary:focus-visible { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px var(--focus); }
 td input[type=text], td input[type=email], td select { max-width:240px; min-height:36px; padding:6px 12px; border-radius:10px; }
 .check { display:flex; gap:12px; align-items:flex-start; margin-top:18px; font-weight:500; }
 .check input { margin-top:3px; width:18px; height:18px; flex:none; accent-color:var(--primary); }
 fieldset { border:0; padding:0; margin:18px 0 0; min-width:0; }
 legend { font-weight:600; padding:0; }
 button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 20px; border-radius:999px;
-	border:1px solid var(--line); background:var(--card); color:var(--primary); font:inherit; font-weight:500; cursor:pointer; white-space:nowrap; }
-button:hover { background:var(--soft); }
+	border:1px solid var(--line); background:var(--card); color:var(--primary); font:inherit; font-weight:500; cursor:pointer; white-space:nowrap;
+	transition:background-color .15s, border-color .15s, color .15s, box-shadow .15s, opacity .15s; }
+button:hover:not(:disabled) { background:var(--soft); }
 button.primary { background:var(--primary); border-color:var(--primary); color:var(--primary-text); }
-button.primary:hover { background:var(--primary-hover); border-color:var(--primary-hover); }
-button.danger { color:var(--danger); } button.danger:hover { background:var(--danger-soft); }
-button.ghost { border-color:transparent; color:var(--muted); } button.ghost:hover { background:var(--hover); color:var(--text); }
-button:disabled { opacity:.6; cursor:wait; }
+button.primary:hover:not(:disabled) { background:var(--primary-hover); border-color:var(--primary-hover); }
+button.danger { color:var(--danger); } button.danger:hover:not(:disabled) { background:var(--danger-soft); }
+button.ghost { border-color:transparent; color:var(--muted); } button.ghost:hover:not(:disabled) { background:var(--hover); color:var(--text); }
+button:disabled { opacity:.55; cursor:not-allowed; }
+button[aria-busy="true"] { cursor:wait; }
+@media (prefers-reduced-motion: no-preference) {
+	button:active:not(:disabled), .pager a.pg:active { transform:scale(.98); }
+}
 td button { min-height:34px; padding:0 14px; font-size:14px; }
 form.inline { display:inline; margin:0; }
 .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.row input, .row select { flex:1 1 180px; }
+.row input, .row select, .row textarea { flex:1 1 180px; }
+form.row textarea { flex:1 1 240px; width:auto; }
 
 /* Chips and messages */
 .pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--muted); }
@@ -109,10 +123,10 @@ form.inline { display:inline; margin:0; }
 .label-chip::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--lc); flex:none; }
 a.label-chip:hover { background:color-mix(in oklab, var(--lc) calc(var(--lab-tint) + 8%), var(--card)); }
 ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`).join("\n")}
-.swatches { display:flex; flex-wrap:wrap; gap:6px; border:none; margin:0; padding:0; }
-.swatch { position:relative; display:inline-flex; cursor:pointer; }
+.swatches { display:flex; flex-wrap:wrap; gap:2px; border:none; margin:0; padding:0; }
+.swatch { position:relative; display:inline-flex; padding:3px; cursor:pointer; }
 .swatch input { position:absolute; opacity:0; width:1px; height:1px; }
-.swatch span { width:22px; height:22px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); transition:transform .1s; }
+.swatch span { width:24px; height:24px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); transition:transform .1s; }
 .swatch:hover span { transform:scale(1.12); }
 .swatch input:checked + span { box-shadow:0 0 0 2px var(--card), 0 0 0 4px var(--lc, #64748b); }
 .swatch input:focus-visible + span { outline:2px solid var(--primary); outline-offset:4px; }
@@ -134,14 +148,28 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 .label-menu-list label:hover { background:var(--hover); }
 @media (max-width: 720px) { .label-menu { flex:1 1 100%; } .label-menu-list { position:static; width:auto; max-width:none; margin-top:6px; box-shadow:none; } }
 .label-picks label { display:inline-flex; align-items:center; gap:6px; font-weight:400; }
-.rule-rows { display:grid; gap:8px; margin:8px 0; }
-.rule-rows .row > * { flex:1; min-width:0; }
-.rule-rows .row > select { flex:0 1 auto; }
-.rule-rows .row { align-items:flex-start; }
-.rule-rows textarea { min-height:38px; resize:vertical; }
+.rule-rows { display:grid; gap:10px; margin:10px 0; counter-reset:rule-row; }
+/* Each condition or action is one card: what to look at and how, side by side, then the values. */
+.rule-row { display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr); gap:8px; align-items:start; padding:10px 12px; border:1px solid var(--line); border-radius:16px; background:var(--bg); transition:opacity .15s; }
+.rule-row.act { grid-template-columns:auto minmax(0,1fr) minmax(0,1.6fr); }
+.rule-row::before { counter-increment:rule-row; content:counter(rule-row); display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; margin-top:9px; border-radius:50%; background:var(--soft); color:var(--muted); font-size:12px; font-weight:600; }
+.rule-row select, .rule-row input, .rule-row textarea { max-width:none; width:100%; }
+.rule-row textarea { min-height:44px; resize:vertical; }
+.rule-row:has(textarea:placeholder-shown), .rule-row.act:has(select[data-act-type] option[value=""]:checked) { opacity:.6; }
+.rule-row:focus-within { opacity:1; border-color:var(--primary); }
+@media (max-width: 720px) {
+	.rule-row { grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); }
+	.rule-row > textarea { grid-column:2 / -1; }
+	.rule-row.act { grid-template-columns:auto minmax(0,1fr); }
+	.rule-row.act > input { grid-column:2; }
+}
 .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
 .alias-cell { display:inline-flex; align-items:center; gap:2px; flex-wrap:wrap; }
-button.copy { min-height:28px; padding:0 8px; }
+button.copy { min-height:28px; min-width:28px; padding:0 6px; }
+button.copy .check-i { display:none; }
+button.copy[data-copied] { color:var(--ok); }
+button.copy[data-copied] .copy-i { display:none; }
+button.copy[data-copied] .check-i { display:block; }
 .perms { list-style:none; padding:0; margin:10px 0 0; display:grid; gap:6px; }
 .perms li { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:14px; }
 .pill.scope { background:var(--nav-active); color:var(--nav-active-text); }
@@ -173,14 +201,14 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	.topbar { padding:8px 14px; min-height:56px; }
 	.brand { font-size:18px; }
 	.shell { display:block; padding:0 10px 16px; }
-	.sidebar { position:static; flex-direction:row; overflow-x:auto; gap:6px; padding:0 4px 10px; scrollbar-width:none; }
+	.sidebar { position:static; flex-direction:row; overflow-x:auto; overscroll-behavior-x:contain; gap:6px; padding:0 4px 10px; scrollbar-width:none; }
 	.sidebar::-webkit-scrollbar { display:none; }
 	.sidebar a { flex:none; height:38px; padding:0 14px; gap:8px; background:var(--card); font-size:14px; }
 	.sidebar .lang, .sidebar .powered { display:none; }
 	.mobile-only { display:flex !important; }
 	section { padding:18px; border-radius:20px; }
 	main.single, main.center { margin-top:3vh; }
-	input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], select { max-width:none; font-size:16px; }
+	input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], input[type=number], textarea, select { max-width:none; font-size:16px; }
 	table.rt thead { display:none; }
 	table.rt, table.rt tbody, table.rt tr, table.rt td { display:block; width:100%; }
 	table.rt tr { border:1px solid var(--line); border-radius:16px; margin:10px 0; padding:4px 14px; }
@@ -189,7 +217,7 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	table.rt td + td { border-top:1px solid var(--line); }
 	table.rt td::before { content:attr(data-label); color:var(--muted); font-size:12px; text-align:start; flex:0 0 32%; }
 	table.rt td:empty { display:none; }
-	table.rt td > form.row, table.rt td > .stack { flex:1; justify-content:flex-end; }
+	table.rt td > form.row, table.rt td > form.label-edit, table.rt td > .stack { flex:1; justify-content:flex-end; }
 	td input[type=text], td input[type=email], td select { max-width:none; font-size:16px; }
 	table.rt.compact tr { display:grid; gap:6px 10px; margin:6px 0; padding:10px 12px; border-radius:14px; }
 	table.rt.compact td, table.rt.compact td:first-child, table.rt.compact td:last-child { display:block; padding:0; border:none; text-align:start; min-width:0; }
@@ -210,7 +238,7 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	table.rt.activity td.a-alias { grid-row:1; grid-column:2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 	table.rt.activity td.a-when { grid-row:1; grid-column:3; color:var(--muted); font-size:12px; white-space:nowrap; }
 	table.rt.activity td.a-status { grid-row:2; grid-column:1; }
-	table.rt.activity td.a-detail { grid-row:2; grid-column:2 / -1; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+	table.rt.activity td.a-detail { grid-row:2; grid-column:2 / -1; font-size:13px; white-space:normal; overflow-wrap:anywhere; }
 	table.rt.activity td.a-detail:empty { display:block; }
 }
 .mobile-only { display:none; }
@@ -219,8 +247,13 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 .toolbar select { width:auto; min-height:44px; }
 .toolbar button { min-height:44px; }
 .bulk { padding:10px 12px; border-radius:16px; background:var(--bg); }
+.bulk[data-empty] button.primary { opacity:.6; }
 .create { margin:12px 0; padding:14px 16px; border-radius:16px; background:var(--bg); }
 .create h2 { margin:0; }
+/* An address breaks before its @ when it must, not in the middle of a word. */
+code.addr { word-break:normal; overflow-wrap:anywhere; }
+.alias-cell.keep { flex-wrap:nowrap; align-items:flex-start; } .alias-cell.keep code { min-width:0; }
+.stack time { white-space:nowrap; font-size:12px; }
 .create-random { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .create-extra { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); align-items:end; }
 .create-extra label { display:flex; flex-direction:column; gap:6px; margin:0; }
@@ -235,7 +268,7 @@ th.pick, td.pick { width:36px; }
 td.pick input, th.pick input { width:18px; height:18px; accent-color:var(--primary); }
 /* Pagers above and below a list: big buttons that keep their place, so they can be clicked again and again. */
 .pager { display:flex; gap:12px; justify-content:center; align-items:center; margin:12px 0; }
-.pager .pg { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:8.5rem; min-height:44px; padding:0 20px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--primary); font-weight:600; text-decoration:none; user-select:none; touch-action:manipulation; }
+.pager .pg { display:inline-flex; align-items:center; justify-content:center; gap:6px; min-width:8.5rem; min-height:44px; padding:0 20px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--primary); font-weight:600; text-decoration:none; user-select:none; touch-action:manipulation; transition:background-color .15s, border-color .15s; }
 .pager a.pg:hover { background:var(--hover); text-decoration:none; }
 .pager .pg[aria-disabled] { color:var(--muted); opacity:.45; }
 .pager .at { min-width:5.5rem; text-align:center; font-variant-numeric:tabular-nums; color:var(--muted); }
@@ -243,6 +276,10 @@ td.pick input, th.pick input { width:18px; height:18px; accent-color:var(--prima
 form.note input { width:100%; min-width:12ch; }
 form.inline-save { display:flex; gap:6px; align-items:center; }
 form.inline-save input, form.inline-save select { width:100%; min-width:12ch; }
+form[data-saving] input, form[data-saving] select { border-color:var(--primary); opacity:.75; }
+table.aliases tbody tr:has(input[data-pick]:checked) { background:var(--soft); }
+table.aliases tbody tr[data-mode="none"] td.c-alias code { opacity:.65; }
+table.aliases tbody tr[data-deleted] { opacity:.78; }
 table.aliases td.c-alias code { white-space:nowrap; }
 table.aliases .alias-cell { flex-wrap:nowrap; }
 table.aliases td.c-used, table.aliases td.c-created { white-space:nowrap; }
@@ -250,18 +287,23 @@ table.aliases td.c-used, table.aliases td.c-created { white-space:nowrap; }
 table.aliases td.c-mode select { width:auto; min-width:0; }
 .toast { position:fixed; inset-inline:0; bottom:24px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); z-index:10;
 	padding:12px 20px; border-radius:12px; background:#323232; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
+@media (prefers-reduced-motion: no-preference) {
+	@keyframes toast-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+	.toast:not([hidden]) { animation:toast-in .18s ease-out; }
+}
 .toast.bad { background:var(--danger); color:#fff; }
 :root[data-theme="dark"] .toast { background:#e8eaed; color:#202124; }
 :root[data-theme="dark"] .toast.bad { background:#f2b8b5; color:#601410; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .toast { background:#e8eaed; color:#202124; } :root:not([data-theme="light"]) .toast.bad { background:#f2b8b5; color:#601410; } }
 .theme-btn { padding:0 12px; }
 @media (max-width: 600px) { .theme-btn .theme-text { display:none; } }
+[dir="rtl"] .arrow { display:inline-block; transform:scaleX(-1); }
 
 .lang-label { margin:0; display:flex; }
 .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .mt12 { margin-top:12px; }
 .m0 { margin:0; }
-.mono { font-family:ui-monospace,monospace; }
+.mono { font-family:ui-monospace,monospace; direction:ltr; unicode-bidi:isolate; }
 `);
 /** A short hash of a file's content: its URL changes whenever the file does. */
 function contentVersion(text: string): string {
@@ -305,9 +347,15 @@ function icon(name: keyof typeof ICONS): Html {
 /** The app mark: an envelope with a return arrow, in Mailflare's blue. */
 const LOGO = raw(`<svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6aa5ff"/><stop offset="1" stop-color="#1a63e0"/></linearGradient></defs><rect x="3" y="7" width="26" height="19" rx="4" fill="url(#lg)"/><path d="M4.5 9.5 16 18l11.5-8.5" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/><circle cx="25" cy="23" r="6" fill="#fff"/><path d="M27.5 23h-5m2-2.2L22.3 23l2.2 2.2" fill="none" stroke="#1a63e0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`);
 
-const COPY_ICON = raw('<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>');
+const COPY_ICON = raw('<svg class="copy-i" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg><svg class="check-i" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>');
 
-/** Copies the address to the clipboard. Hidden until the page script shows it, since it needs script. */
+/** An address in code type that may break before its @ but not inside a word. */
+function addressCode(address: string): Html {
+	const at = address.lastIndexOf("@");
+	return at > 0 ? html`<code class="addr">${address.slice(0, at)}<wbr />${address.slice(at)}</code>` : html`<code class="addr">${address}</code>`;
+}
+
+/** Copies the value to the clipboard. Hidden until the page script shows it, since it needs script. */
 function copyButton(t: Translate, value: string): Html {
 	return html`<button type="button" class="ghost copy" data-copy="${value}" data-msg-copied="${t("common.copied", { value })}" title="${t("common.copy")}" aria-label="${t("common.copy")}: ${value}" hidden>${COPY_ICON}</button>`;
 }
@@ -387,7 +435,7 @@ export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0
 
 
 function errorBox(t: Translate): Html {
-	return html`<p class="error" data-error hidden></p><span hidden data-msg-unsupported="${t("passkey.unsupported")}" data-msg-cancelled="${t("passkey.cancelled")}"></span>`;
+	return html`<p class="error" role="alert" data-error hidden></p><span hidden data-msg-unsupported="${t("passkey.unsupported")}" data-msg-cancelled="${t("passkey.cancelled")}"></span>`;
 }
 
 export function loginPage(t: Translate): Html {
@@ -411,7 +459,7 @@ function withCode(text: string): Html {
 	return html`${parts.map((part, index) => (index % 2 ? html`<code>${part}</code>` : part))}`;
 }
 
-export function setupPage(t: Translate, input: { codeInLogs: boolean; notice?: string }): Html {
+export function setupPage(t: Translate, input: { codeInLogs: boolean; notice?: Notice }): Html {
 	return page(
 		t("setup.title"),
 		html`<main class="center"><section>
@@ -434,11 +482,14 @@ ${input.codeInLogs ? html`<form method="post" action="/setup/code"><button>${t("
 }
 
 function checkbox(name: string, checked: boolean, label: string, help: string): Html {
-	return html`<label class="check"><input type="checkbox" name="${name}" value="1" ${checked ? "checked" : ""} /><span>${label}<p class="help">${help}</p></span></label>`;
+	return html`<label class="check"><input type="checkbox" name="${name}" value="1" ${checked ? "checked" : ""} /><span>${label}${help ? html`<span class="help">${help}</span>` : ""}</span></label>`;
 }
 
-function noticeBox(notice?: string): Html | string {
-	return notice ? html`<p class="notice" role="status">${notice}</p>` : "";
+function noticeBox(notice?: Notice): Html | string {
+	if (!notice) return "";
+	const text = typeof notice === "string" ? notice : notice.text;
+	const bad = typeof notice === "object" && !!notice.bad;
+	return text ? html`<p class="${bad ? "notice bad" : "notice"}" role="${bad ? "alert" : "status"}">${text}</p>` : "";
 }
 
 export type ActivityItem = { kind: string; status: string; alias: string | null; detail: string | null; at: number };
@@ -471,6 +522,11 @@ function ago(timestamp: number, locale: string, now = Date.now() / 1000): string
 function when(timestamp: number | null, locale: string): string {
 	if (!showable(timestamp)) return "—";
 	return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(timestamp * 1000)) + " UTC";
+}
+
+function timeTag(timestamp: number | null, locale: string): Html | string {
+	if (!showable(timestamp)) return "—";
+	return html`<time datetime="${isoTime(timestamp)}">${when(timestamp, locale)}</time>`;
 }
 
 function translated(t: Translate, key: string, fallback: string): string {
@@ -529,7 +585,7 @@ export function dashboardPage(
 		list: AliasListState;
 		activity: ActivityItem[];
 		missing: MessageKey[];
-		notice?: string;
+		notice?: Notice;
 	},
 ): Html {
 	const { settings, aliases, list, activity, missing, notice } = input;
@@ -615,38 +671,45 @@ ${labels.length && !deletedView
 <summary data-template="${t("bulk.labelsChosen", { count: "{count}" })}" data-empty="${t("bulk.chooseLabels")}">${t("bulk.chooseLabels")}</summary>
 <div class="label-menu-list">
 ${labels.length > 8 ? html`<input type="search" placeholder="${t("bulk.findLabel")}" aria-label="${t("bulk.findLabel")}" data-label-filter />` : ""}
-${labels.map((label) => html`<label data-name="${label.name.toLowerCase()}"><input type="checkbox" name="labels" value="${label.id}" /><span class="label-chip" data-colour="${label.colour}">${label.name}</span></label>`)}
+${labels.map((label) => html`<label data-name="${label.name.toLowerCase()}"><input type="checkbox" name="labels" value="${label.id}" /><span class="label-chip" data-colour="${nearestColour(label.colour)}">${label.name}</span></label>`)}
 </div>
 </details>`
 	: ""}
 <button class="primary">${t("bulk.apply")}</button>
 </form>
-<table class="rt compact aliases">
+<div class="table-wrap"><table class="rt compact aliases">
 <thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th><th>${t("dash.colLastUsed")}</th><th class="c-created">${t("keys.colCreated")}</th></tr></thead>
 <tbody>
 ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
-	return html`<tr>
+	const isDeleted = !!alias.deleted_at;
+	return html`<tr data-mode="${alias.forward_mode}"${isDeleted ? html` data-deleted="1"` : ""}>
 <td class="pick"><input type="checkbox" form="bulk" name="ids" value="${alias.address}" aria-label="${t("dash.select", { alias: alias.address })}" data-pick /></td>
-<td class="c-alias" data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.labels?.length ? labelChips(alias.labels) : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
-<td class="c-note" data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
+<td class="c-alias" data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.labels?.length ? labelChips(alias.labels) : ""}${isDeleted ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
+<td class="c-note" data-label="${t("dash.colNote")}">${isDeleted
+		? html`<span class="muted">${alias.note || "—"}</span>`
+		: html`<form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
 <input type="text" name="note" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
-<noscript><button>${t("common.save")}</button></noscript></form></td>
-<td class="c-dest" data-label="${t("dash.colForwardTo")}"><form class="inline-save" method="post" action="${base}/destination" data-autosave data-msg-failed="${t("link.error")}">
+<noscript><button>${t("common.save")}</button></noscript></form>`}</td>
+<td class="c-dest" data-label="${t("dash.colForwardTo")}">${isDeleted
+		? html`<span class="muted">${alias.destination || settings.defaultDestination || t("dash.default")}</span>`
+		: html`<form class="inline-save" method="post" action="${base}/destination" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
-<input type="email" name="destination" value="${alias.destination ?? ""}" maxlength="254" placeholder="${settings.defaultDestination || t("dash.default")}" aria-label="${t("dash.colForwardTo")}: ${alias.address}" />
-<noscript><button>${t("common.save")}</button></noscript></form></td>
-<td class="c-mode" data-label="${t("dash.colMode")}"><form class="inline-save" method="post" action="${base}/mode" data-autosave data-msg-failed="${t("link.error")}">
+<input type="email" name="destination" value="${alias.destination ?? ""}" maxlength="254" placeholder="${t("dash.default")}"${settings.defaultDestination ? html` title="${settings.defaultDestination}"` : ""} aria-label="${t("dash.colForwardTo")}: ${alias.address}" />
+<noscript><button>${t("common.save")}</button></noscript></form>`}</td>
+<td class="c-mode" data-label="${t("dash.colMode")}">${isDeleted
+		? html`<span class="muted">${t(`mode.${alias.forward_mode}`)}</span>`
+		: html`<form class="inline-save" method="post" action="${base}/mode" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
 <select name="mode" aria-label="${t("dash.colMode")}: ${alias.address}">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select>
-<noscript><button>${t("common.set")}</button></noscript></form></td>
+<noscript><button>${t("common.set")}</button></noscript></form>`}</td>
 <td class="c-count" data-label="${t("dash.colContacts")}">${alias.contacts}</td>
 <td class="c-used" data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${isoTime(alias.used_at)}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
 <td class="c-created" data-label="${t("keys.colCreated")}"><time datetime="${isoTime(alias.created_at)}" title="${when(alias.created_at, t.locale)}">${ago(alias.created_at, t.locale)}</time></td>
 </tr>`;
 })}
-</tbody></table>
+</tbody></table></div>
 ${pager(t, list.page, lastPage, (page) => listUrl({ page }))}`}
 <p class="help">${t("dash.modesHelp")}</p>
 </section>
@@ -654,7 +717,7 @@ ${pager(t, list.page, lastPage, (page) => listUrl({ page }))}`}
 <section>
 <h2>${t("dash.activity")}</h2>
 ${activityTable(t, activity)}
-${activity.length ? html`<p><a href="/activity">${t("dash.allActivity")} →</a></p>` : ""}
+${activity.length ? html`<p><a href="/activity">${t("dash.allActivity")} <span class="arrow" aria-hidden="true">→</span></a></p>` : ""}
 </section>
 </main>`,
 		{ t, nav: true, current: "/", path: "/" },
@@ -663,13 +726,13 @@ ${activity.length ? html`<p><a href="/activity">${t("dash.allActivity")} →</a>
 
 function activityTable(t: Translate, items: ActivityItem[]): Html {
 	if (items.length === 0) return html`<p class="muted">${t("dash.nothingYet")}</p>`;
-	return html`<table class="rt compact activity"><thead><tr><th>${t("dash.colWhen")}</th><th>${t("dash.colWhat")}</th><th>${t("dash.colAlias")}</th><th>${t("dash.colStatus")}</th><th>${t("dash.colDetail")}</th></tr></thead><tbody>
+	return html`<div class="table-wrap"><table class="rt compact activity"><thead><tr><th>${t("dash.colWhen")}</th><th>${t("dash.colWhat")}</th><th>${t("dash.colAlias")}</th><th>${t("dash.colStatus")}</th><th>${t("dash.colDetail")}</th></tr></thead><tbody>
 ${items.map(
 	(item) => html`<tr><td class="a-when" data-label="${t("dash.colWhen")}"><time datetime="${isoTime(item.at)}" title="${when(item.at, t.locale)}">${ago(item.at, t.locale)}</time></td><td class="a-what" data-label="${t("dash.colWhat")}">${translated(t, `kind.${item.kind}`, item.kind)}</td>
 <td class="a-alias" data-label="${t("dash.colAlias")}">${item.alias ? html`<a href="/aliases/${encodeURIComponent(item.alias)}"><code>${item.alias}</code></a>` : ""}</td><td class="a-status" data-label="${t("dash.colStatus")}">${statusPill(t, item.status)}</td>
 <td class="a-detail muted" data-label="${t("dash.colDetail")}">${item.detail ?? ""}</td></tr>`,
 )}
-</tbody></table>`;
+</tbody></table></div>`;
 }
 
 /** Every forward and event, newest first, searchable and paged. */
@@ -715,7 +778,7 @@ ${pager(t, current, lastPage, (page) => at({ page }))}`}
 	);
 }
 
-export function settingsPage(t: Translate, input: { settings: Settings; origin: string; notice?: string }): Html {
+export function settingsPage(t: Translate, input: { settings: Settings; origin: string; notice?: Notice }): Html {
 	const { settings, notice, origin } = input;
 	return page(
 		t("settings.title"),
@@ -752,7 +815,7 @@ ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${
 ${FORWARD_METHODS.map((method) => html`<option value="${method}" ${settings.forwardMethod === method ? "selected" : ""}>${t(`forwardMethod.${method}`)}</option>`)}
 </select>
 <p class="help">${t("settings.forwardMethodHelp")}</p>
-${settings.forwardMethod === "direct" ? html`<p class="notice">${t("settings.forwardMethodDirectNote")}</p>` : ""}
+<p class="notice" data-direct-note${settings.forwardMethod === "direct" ? "" : html` hidden`}>${t("settings.forwardMethodDirectNote")}</p>
 
 <label for="senderFormat">${t("settings.senderFormat")}</label>
 <select id="senderFormat" name="senderFormat">
@@ -790,7 +853,7 @@ ${UNSUBSCRIBE_FALLBACKS.map((fallback) => html`<option value="${fallback}" ${set
 ${settings.aliasDomains.length
 	? html`<h3>${t("settings.unsubDomains")}</h3>
 <p class="help">${t("settings.unsubDomainsHelp")}</p>
-<table class="rt"><thead><tr><th>${t("settings.unsubColDomain")}</th><th>${t("settings.unsubscribe")}</th><th>${t("settings.unsubFallback")}</th><th>${t("settings.unsubRedirect")}</th></tr></thead><tbody>
+<div class="table-wrap"><table class="rt"><thead><tr><th>${t("settings.unsubColDomain")}</th><th>${t("settings.unsubscribe")}</th><th>${t("settings.unsubFallback")}</th><th>${t("settings.unsubRedirect")}</th></tr></thead><tbody>
 ${settings.aliasDomains.map((domain) => {
 	const rule = Object.hasOwn(settings.unsubscribeDomains, domain) ? settings.unsubscribeDomains[domain] : undefined;
 	return html`<tr>
@@ -802,13 +865,13 @@ ${UNSUBSCRIBE_FALLBACKS.map((fallback) => html`<option value="${fallback}" ${rul
 <td data-label="${t("settings.unsubRedirect")}"><input name="unsubscribeRedirect:${domain}" type="email" value="${rule?.redirect ?? ""}" placeholder="${settings.unsubscribeRedirect || t("settings.unsubUseGeneral")}" aria-label="${t("settings.unsubRedirect")} (${domain})" autocapitalize="none" spellcheck="false" /></td>
 </tr>`;
 })}
-</tbody></table>`
+</tbody></table></div>`
 	: ""}
 </section>
 
 <section id="clients">
 <h2>${t("set.clients")}</h2>
-<p class="help">${t("set.clientsHelp")} <a href="/api-keys">${t("nav.apiKeys")} →</a></p>
+<p class="help">${t("set.clientsHelp")} <a href="/api-keys">${t("nav.apiKeys")} <span class="arrow" aria-hidden="true">→</span></a></p>
 ${checkbox("simpleloginApi", settings.simpleloginApi, t("set.simpleloginApi"), t("set.simpleloginApiHelp", { url: origin }))}
 ${checkbox("addyApi", settings.addyApi, t("set.addyApi"), t("set.addyApiHelp", { url: origin }))}
 ${checkbox("mcpServer", settings.mcpServer, t("set.mcpServer"), t("set.mcpServerHelp", { url: `${origin}/mcp` }))}
@@ -843,41 +906,43 @@ const TOKEN_PERMISSIONS: ["zone" | "account", string, string][] = [
 
 /** The fields of each provider that needs more than a key; the chosen one's are shown. */
 function providerFields(t: Translate, options: OutboundOptions, provider: OutboundProvider, fixed: boolean): Html {
-	const off = fixed ? "disabled" : "";
-	const group = (name: OutboundProvider, body: Html) =>
-		html`<div class="provider-fields" data-provider="${name}" ${provider === name ? "" : "hidden"}>${body}</div>`;
-	const input = (name: keyof OutboundOptions, label: string, help: string, attrs = "") => html`
+	const group = (name: OutboundProvider, body: (off: string) => Html) => {
+		const active = provider === name;
+		const off = fixed || !active ? "disabled" : "";
+		return html`<div class="provider-fields" data-provider="${name}"${fixed ? html` data-fixed="1"` : ""}${active ? "" : html` hidden`}>${body(off)}</div>`;
+	};
+	const input = (name: keyof OutboundOptions, label: string, help: string, off: string, attrs = "") => html`
 <label for="${name}">${label}</label>
 <input id="${name}" name="${name}" type="text" value="${String(options[name])}" autocapitalize="none" spellcheck="false" ${raw(attrs)} ${off} />
 ${help ? html`<p class="help">${help}</p>` : ""}`;
 	return html`${group(
 	"smtp",
-	html`${input("smtpHost", t("conn.smtpHost"), "", 'placeholder="smtp.example.com"')}
+	(off) => html`${input("smtpHost", t("conn.smtpHost"), "", off, 'placeholder="smtp.example.com"')}
 <label for="smtpPortField">${t("conn.smtpPort")}</label>
 <div class="row"><input id="smtpPortField" name="smtpPort" type="number" min="1" max="65535" value="${String(options.smtpPort)}" ${off} />
 <select name="smtpSecurity" aria-label="${t("conn.smtpSecurity")}" ${off}>
 <option value="starttls" ${options.smtpSecurity === "starttls" ? "selected" : ""}>STARTTLS (587)</option>
 <option value="tls" ${options.smtpSecurity === "tls" ? "selected" : ""}>TLS (465)</option></select></div>
 <p class="help">${t("conn.smtpPortHelp")}</p>
-${input("smtpUsername", t("conn.smtpUsername"), t("conn.smtpUsernameHelp"), 'autocomplete="off"')}`,
+${input("smtpUsername", t("conn.smtpUsername"), t("conn.smtpUsernameHelp"), off, 'autocomplete="off"')}`,
 )}
 ${group(
 	"mailgun",
-	html`<label for="mailgunRegion">${t("conn.mailgunRegion")}</label>
+	(off) => html`<label for="mailgunRegion">${t("conn.mailgunRegion")}</label>
 <select id="mailgunRegion" name="mailgunRegion" ${off}><option value="us" ${options.mailgunRegion === "us" ? "selected" : ""}>US</option><option value="eu" ${options.mailgunRegion === "eu" ? "selected" : ""}>EU</option></select>
 <p class="help">${t("conn.mailgunHelp")}</p>`,
 )}
-${group("mailbaby", input("mailbabyOrderId", t("conn.mailbabyOrder"), t("conn.mailbabyOrderHelp"), 'inputmode="numeric" pattern="[1-9][0-9]{0,14}" maxlength="15" placeholder="12345"'))}
-${group("ses", html`${input("sesRegion", t("conn.sesRegion"), "", 'placeholder="us-east-1"')}${input("sesAccessKeyId", t("conn.sesAccessKey"), t("conn.sesHelp"), 'autocomplete="off"')}`)}
+${group("mailbaby", (off) => input("mailbabyOrderId", t("conn.mailbabyOrder"), t("conn.mailbabyOrderHelp"), off, 'inputmode="numeric" pattern="[1-9][0-9]{0,14}" maxlength="15" placeholder="12345"'))}
+${group("ses", (off) => html`${input("sesRegion", t("conn.sesRegion"), "", off, 'placeholder="us-east-1"')}${input("sesAccessKeyId", t("conn.sesAccessKey"), t("conn.sesHelp"), off, 'autocomplete="off"')}`)}
 ${group(
 	"custom",
-	html`${input("customUrl", t("conn.customUrl"), "", 'placeholder="https://api.example.com/send"')}
+	(off) => html`${input("customUrl", t("conn.customUrl"), "", off, 'placeholder="https://api.example.com/send"')}
 <label for="customHeaders">${t("conn.customHeaders")}</label>
 <textarea id="customHeaders" name="customHeaders" rows="3" spellcheck="false" class="mono" ${off}>${options.customHeaders}</textarea>
 <label for="customBody">${t("conn.customBody")}</label>
 <textarea id="customBody" name="customBody" rows="6" spellcheck="false" class="mono" ${off}>${options.customBody}</textarea>
 <p class="help">${t("conn.customHelp")}<br /><code>{{from}} {{from_name}} {{from_header}} {{to}} {{reply_to}} {{subject}} {{text}} {{html}} {{headers}} {{attachments}} {{raw}} {{message_id}} {{api_key}}</code></p>
-${input("customIdPath", t("conn.customIdPath"), t("conn.customIdPathHelp"), 'placeholder="id"')}`,
+${input("customIdPath", t("conn.customIdPath"), t("conn.customIdPathHelp"), off, 'placeholder="id"')}`,
 )}`;
 }
 
@@ -893,13 +958,13 @@ export function connectionPage(
 		webhookUrl: string;
 		missing: MessageKey[];
 		cloudflare: { hasToken: boolean; workerName: string; domains: string[]; setup?: DomainSetup[] };
-		notice?: string;
+		notice?: Notice;
 	},
 ): Html {
 	const { values, hasOutboundKey, hasApiKey, hasWebhookSecret, mailflare, fixed, webhookUrl, missing, cloudflare, notice } = input;
 	const fixedNote = (key: string) => (fixed.has(key) ? html`<p class="help">${t("conn.fixed")}</p>` : "");
 	const disabled = (key: string) => (fixed.has(key) ? "disabled" : "");
-	const secretField = (key: string, label: string, isSet: boolean, help: string) => html`
+	const secretField = (key: string, label: string, isSet: boolean, help: string | Html) => html`
 <label for="${key}">${label} ${isSet ? html`<span class="pill ok">${t("conn.isSet")}</span>` : html`<span class="pill bad">${t("conn.notSet")}</span>`}</label>
 <input id="${key}" name="${key}" type="password" autocomplete="off" placeholder="${isSet ? t("conn.keepCurrent") : ""}" ${disabled(key)} />
 <p class="help">${help}</p>${fixedNote(key)}`;
@@ -919,13 +984,13 @@ ${cloudflare.setup
 			)}</ul>`,
 		)
 	: ""}
-<form method="post" action="/connection/cloudflare">
+<form method="post" action="/connection/cloudflare" data-busy>
 <fieldset><legend>${t("cf.domains")}</legend>
 ${cloudflare.domains.length
 	? cloudflare.domains.map(
-			(domain) => html`<label class="check"><input type="checkbox" name="domains" value="${domain}" checked /> <code>${domain}</code> <span class="muted">→ ${t("cf.reverseIs", { reverse: reverseDomainFor(domain) })}</span></label>`,
+			(domain) => html`<label class="check"><input type="checkbox" name="domains" value="${domain}" checked /> <code>${domain}</code> <span class="muted"><span class="arrow" aria-hidden="true">→</span> ${t("cf.reverseIs", { reverse: reverseDomainFor(domain) })}</span></label>`,
 		)
-	: html`<p class="help">${t("notice.needAliasDomains")} <a href="/settings#clients">${t("nav.settings")} →</a></p>`}
+	: html`<p class="help">${t("notice.needAliasDomains")} <a href="/settings#clients">${t("nav.settings")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
 </fieldset>
 ${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.tokenHelp"))}
 <ul class="perms">${TOKEN_PERMISSIONS.map(
@@ -936,7 +1001,7 @@ ${checkbox("replaceCatchAll", false, t("cf.replaceCatchAll"), t("cf.replaceCatch
 <label for="workerName">${t("cf.workerName")}</label>
 <input id="workerName" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
 <p class="help">${t("cf.workerNameHelp")}</p>${fixedNote("workerName")}
-<p><button class="primary" ${cloudflare.domains.length ? "" : "disabled"}>${t("cf.run")}</button></p>
+<p><button class="primary"${cloudflare.domains.length ? "" : html` disabled data-stay-disabled`}>${t("cf.run")}</button></p>
 </form>
 <details><summary>${t("conn.checklist")}</summary>
 <ol class="steps">
@@ -962,15 +1027,15 @@ ${checkbox("replaceCatchAll", false, t("cf.replaceCatchAll"), t("cf.replaceCatch
 ${WORKERS_PLANS.map((plan) => html`<option value="${plan}" ${values.workersPlan === plan ? "selected" : ""}>${t(`conn.plan.${plan}`)}</option>`)}
 </select>
 <p class="help">${t("conn.planHelp")}</p>${fixedNote("workersPlan")}
-${values.workersPlan === "free" && values.outboundProvider === "cloudflare" ? html`<p class="notice">${t("conn.freeNeedsProvider")}</p>` : ""}
+<p class="notice" data-free-notice${values.workersPlan === "free" && values.outboundProvider === "cloudflare" ? "" : html` hidden`}>${t("conn.freeNeedsProvider")}</p>
 <label for="outboundProvider">${t("conn.provider")}</label>
 <select id="outboundProvider" name="outboundProvider" ${disabled("outboundProvider")}>
 ${OUTBOUND_PROVIDERS.map((provider) => html`<option value="${provider}" ${values.outboundProvider === provider ? "selected" : ""}>${t(`conn.provider.${provider}`)}</option>`)}
 </select>
 <p class="help">${t("conn.providerHelp")}</p>${fixedNote("outboundProvider")}
-${values.outboundProvider === "brevo" ? html`<p class="notice">${t("conn.brevoLimits")}</p>` : ""}
+<p class="notice" data-brevo-notice${values.outboundProvider === "brevo" ? "" : html` hidden`}>${t("conn.brevoLimits")}</p>
 ${providerFields(t, values.outboundOptions, values.outboundProvider, fixed.has("outboundOptions"))}
-${secretField("outboundApiKey", t("conn.providerKey"), hasOutboundKey, t("conn.providerKeyHelp"))}
+<div data-provider-key${values.outboundProvider === "cloudflare" ? html` hidden` : ""}>${secretField("outboundApiKey", t("conn.providerKey"), hasOutboundKey, t("conn.providerKeyHelp"))}</div>
 <p><button class="primary">${t("conn.saveButton")}</button></p>
 </section>
 <section id="mailflare">
@@ -980,7 +1045,7 @@ ${secretField("outboundApiKey", t("conn.providerKey"), hasOutboundKey, t("conn.p
 <input id="mailflareUrl" name="mailflareUrl" type="url" value="${values.mailflareUrl}" placeholder="https://mail.example.com" ${disabled("mailflareUrl")} />
 <p class="help">${t("conn.mailflareUrlHelp")}</p>${fixedNote("mailflareUrl")}
 ${secretField("mailflareApiKey", t("conn.apiKey"), hasApiKey, t("conn.apiKeyHelp"))}
-${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, t("conn.webhookSecretHelp", { url: webhookUrl }))}
+${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, html`${t("conn.webhookSecretHelp", { url: webhookUrl })} ${copyButton(t, webhookUrl)}`)}
 <p><button class="primary">${t("conn.saveButton")}</button></p>
 </section>
 </form>
@@ -989,7 +1054,7 @@ ${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, t("con
 	);
 }
 
-export function passkeysPage(t: Translate, input: { passkeys: PasskeyRow[]; notice?: string }): Html {
+export function passkeysPage(t: Translate, input: { passkeys: PasskeyRow[]; notice?: Notice }): Html {
 	const { passkeys, notice } = input;
 	return page(
 		t("pk.title"),
@@ -997,15 +1062,15 @@ export function passkeysPage(t: Translate, input: { passkeys: PasskeyRow[]; noti
 ${noticeBox(notice)}
 <section>
 <h2>${t("pk.title")}</h2>
-<table class="rt"><thead><tr><th>${t("pk.colName")}</th><th>${t("pk.colAdded")}</th><th>${t("pk.colLastUsed")}</th><th></th></tr></thead><tbody>
+<div class="table-wrap"><table class="rt"><thead><tr><th>${t("pk.colName")}</th><th>${t("pk.colAdded")}</th><th>${t("pk.colLastUsed")}</th><th></th></tr></thead><tbody>
 ${passkeys.map(
-	(passkey) => html`<tr><td data-label="${t("pk.colName")}">${passkey.name}</td><td data-label="${t("pk.colAdded")}">${when(passkey.created_at, t.locale)}</td>
-<td data-label="${t("pk.colLastUsed")}">${when(passkey.last_used_at, t.locale)}</td>
+	(passkey) => html`<tr><td data-label="${t("pk.colName")}">${passkey.name}</td><td data-label="${t("pk.colAdded")}">${timeTag(passkey.created_at, t.locale)}</td>
+<td data-label="${t("pk.colLastUsed")}">${timeTag(passkey.last_used_at, t.locale)}</td>
 <td data-label="">${passkeys.length > 1
-		? html`<form class="inline" method="post" action="/passkeys/${encodeURIComponent(passkey.id)}/delete"><button class="danger">${t("pk.remove")}</button></form>`
+		? html`<form class="inline" method="post" action="/passkeys/${encodeURIComponent(passkey.id)}/delete"><button class="danger" aria-label="${t("pk.remove")}: ${passkey.name}">${t("pk.remove")}</button></form>`
 		: html`<span class="muted">${t("pk.last")}</span>`}</td></tr>`,
 )}
-</tbody></table>
+</tbody></table></div>
 </section>
 <section>
 <h2>${t("pk.add")}</h2>
@@ -1021,7 +1086,7 @@ ${errorBox(t)}
 	);
 }
 
-export function blocklistPage(t: Translate, input: { entries: BlocklistRow[]; notice?: string }): Html {
+export function blocklistPage(t: Translate, input: { entries: BlocklistRow[]; notice?: Notice }): Html {
 	const { entries, notice } = input;
 	return page(
 		t("bl.title"),
@@ -1031,18 +1096,18 @@ ${noticeBox(notice)}
 <h2>${t("bl.title")}</h2>
 <p class="help">${t("bl.help")} ${t("bl.helpMany")}</p>
 <form class="row mt12" method="post" action="/blocklist">
-<input name="value" type="text" placeholder="${t("bl.placeholder")}" autocapitalize="none" spellcheck="false" required aria-label="${t("bl.colSender")}" />
+<textarea name="value" rows="2" placeholder="${t("bl.placeholder")}" autocapitalize="none" spellcheck="false" required aria-label="${t("bl.colSender")}"></textarea>
 <button class="primary">${t("bl.block")}</button>
 </form>
 ${entries.length === 0
 	? html`<p class="muted">${t("bl.empty")}</p>`
-	: html`<table class="rt mt12"><thead><tr><th>${t("bl.colSender")}</th><th>${t("bl.colType")}</th><th>${t("bl.colHits")}</th><th>${t("bl.colAdded")}</th><th></th></tr></thead><tbody>
+	: html`<div class="table-wrap"><table class="rt mt12"><thead><tr><th>${t("bl.colSender")}</th><th>${t("bl.colType")}</th><th>${t("bl.colHits")}</th><th>${t("bl.colAdded")}</th><th></th></tr></thead><tbody>
 ${entries.map(
 	(entry) => html`<tr><td data-label="${t("bl.colSender")}"><code>${entry.value}</code></td><td data-label="${t("bl.colType")}">${t(entry.kind === "domain" ? "bl.domain" : "bl.address")}</td>
-<td data-label="${t("bl.colHits")}">${entry.hits}</td><td data-label="${t("bl.colAdded")}">${when(entry.created_at, t.locale)}</td>
-<td data-label=""><form class="inline" method="post" action="/blocklist/${encodeURIComponent(entry.id)}/delete"><button>${t("bl.unblock")}</button></form></td></tr>`,
+<td data-label="${t("bl.colHits")}">${entry.hits}</td><td data-label="${t("bl.colAdded")}">${timeTag(entry.created_at, t.locale)}</td>
+<td data-label=""><form class="inline" method="post" action="/blocklist/${encodeURIComponent(entry.id)}/delete"><button aria-label="${t("bl.unblock")}: ${entry.value}">${t("bl.unblock")}</button></form></td></tr>`,
 )}
-</tbody></table>`}
+</tbody></table></div>`}
 </section>
 </main>`,
 		{ t, nav: true, current: "/blocklist", path: "/blocklist" },
@@ -1051,21 +1116,29 @@ ${entries.map(
 
 export function aliasPage(
 	t: Translate,
-	input: { alias: AliasRow; contacts: ContactRow[]; defaultDestination: string; labels?: LabelRow[]; aliasLabels?: string[]; notice?: string },
+	input: { alias: AliasRow; contacts: ContactRow[]; defaultDestination: string; labels?: LabelRow[]; aliasLabels?: string[]; notice?: Notice },
 ): Html {
 	const { alias, contacts, defaultDestination, notice } = input;
 	const labels = input.labels ?? [];
 	const chosen = new Set(input.aliasLabels ?? []);
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
+	const isDeleted = !!alias.deleted_at;
+	const chosenLabels = labels.filter((label) => chosen.has(label.id));
 	return page(
 		alias.address,
 		html`<main>
-<p class="m0"><a href="/">${t("alias.back")}</a></p>
+<p class="m0"><a href="${isDeleted ? "/?filter=deleted" : "/"}">${t("alias.back")}</a></p>
 ${noticeBox(notice)}
 <section>
-<h2 class="alias-cell"><code>${alias.address}</code>${copyButton(t, alias.address)}</h2>
-<p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)} · ${t("keys.colCreated")} <time datetime="${isoTime(alias.created_at)}">${when(alias.created_at, t.locale)}</time></p>
-<form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
+<h2 class="alias-cell"><code>${alias.address}</code>${copyButton(t, alias.address)}${isDeleted ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</h2>
+<p class="help">${alias.mailbox_id ? html`${t("alias.mailbox")} <code>${alias.mailbox_id}</code> · ` : ""}${t(`mode.${alias.forward_mode}`)} · ${t("keys.colCreated")} ${timeTag(alias.created_at, t.locale)}</p>
+${isDeleted
+	? html`${alias.note ? html`<p><b>${t("alias.note")}:</b> ${alias.note}</p>` : ""}
+<div class="row mt12">
+<form class="inline" method="post" action="/aliases/bulk"><input type="hidden" name="action" value="restore" /><input type="hidden" name="ids" value="${alias.address}" /><input type="hidden" name="back" value="/" /><button class="primary">${t("bulk.restore")}</button></form>
+<form class="inline" method="post" action="/aliases/bulk" data-confirm="${t("bulk.confirmForget")}"><input type="hidden" name="action" value="forget" /><input type="hidden" name="ids" value="${alias.address}" /><input type="hidden" name="back" value="/?filter=deleted" /><button class="danger">${t("bulk.forget")}</button></form>
+</div>`
+	: html`<form method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <label for="note">${t("alias.note")}</label>
 <div class="row"><input id="note" name="note" type="text" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" /><noscript><button>${t("common.save")}</button></noscript></div>
 </form>
@@ -1073,65 +1146,76 @@ ${noticeBox(notice)}
 <label for="email">${t("alias.writeNew")}</label>
 <div class="row"><input id="email" name="email" type="email" placeholder="someone@example.com" required /><button class="primary">${t("alias.create")}</button></div>
 <p class="help">${t("alias.writeNewHelp", { alias: alias.address })}</p>
-</form>
+</form>`}
 </section>
-<section>
+${isDeleted
+	? ""
+	: html`<section>
 <h2>${t("alias.forwarding")}</h2>
-<form method="post" action="${base}/destination">
+<form method="post" action="${base}/destination" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="alias" />
 <label for="destination">${t("dash.colForwardTo")}</label>
-<div class="row"><input id="destination" name="destination" type="email" value="${alias.destination ?? ""}" placeholder="${defaultDestination || t("dash.default")}" /><button>${t("common.save")}</button></div>
+<div class="row"><input id="destination" name="destination" type="email" value="${alias.destination ?? ""}" placeholder="${defaultDestination || t("dash.default")}" /><noscript><button>${t("common.save")}</button></noscript></div>
 </form>
-<form method="post" action="${base}/mode">
+<form method="post" action="${base}/mode" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="alias" />
 <label for="mode">${t("dash.colMode")}</label>
-<div class="row"><select id="mode" name="mode">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select><button>${t("common.set")}</button></div>
+<div class="row"><select id="mode" name="mode">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select><noscript><button>${t("common.set")}</button></noscript></div>
 </form>
-</section>
+</section>`}
 <section>
 <h2>${t("nav.labels")}</h2>
-${labels.length
-	? html`<form method="post" action="${base}/labels">
+${isDeleted
+	? chosenLabels.length
+		? html`<p>${labelChips(chosenLabels)}</p>`
+		: html`<p class="muted">${t("labels.empty")}</p>`
+	: labels.length
+		? html`<form method="post" action="${base}/labels">
 <div class="label-picks">${labels.map(
-	(label) => html`<label><input type="checkbox" name="labels" value="${label.id}" ${chosen.has(label.id) ? "checked" : ""} /><span class="label-chip" data-colour="${label.colour}">${label.name}</span></label>`,
-)}</div>
-<button>${t("common.save")}</button> <a href="/labels">${t("labels.manage")} →</a>
+			(label) => html`<label><input type="checkbox" name="labels" value="${label.id}" ${chosen.has(label.id) ? "checked" : ""} /><span class="label-chip" data-colour="${nearestColour(label.colour)}">${label.name}</span></label>`,
+		)}</div>
+<button>${t("common.save")}</button> <a href="/labels">${t("labels.manage")} <span class="arrow" aria-hidden="true">→</span></a>
 </form>`
-	: html`<p class="muted">${t("labels.empty")} <a href="/labels">${t("labels.manage")} →</a></p>`}
+		: html`<p class="muted">${t("labels.empty")} <a href="/labels">${t("labels.manage")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
 </section>
 ${importedHistory(t, alias)}
 <section>
 <h2>${t("alias.contacts")}</h2>
 ${contacts.length === 0
 	? html`<p class="muted">${t("alias.noContacts")}</p>`
-	: html`<table class="rt"><thead><tr><th>${t("alias.colContact")}</th><th>${t("alias.colReverse")}</th><th>${t("alias.colForwarded")}</th><th>${t("alias.colReplied")}</th><th></th></tr></thead><tbody>
-${contacts.map(
-	(contact) => html`<tr>
-<td data-label="${t("alias.colContact")}"><span class="stack">${contact.name ? html`${contact.name}<br />` : ""}<code>${contact.email}</code>
-<form class="inline row" method="post" action="${base}/contacts/${contact.id}/destination"><input name="destination" type="email" value="${contact.destination ?? ""}" placeholder="${t("alias.contactDestinationDefault")}" aria-label="${t("alias.contactDestination", { email: contact.email })}" autocapitalize="none" spellcheck="false" /><button>${t("common.set")}</button></form></span></td>
-<td data-label="${t("alias.colReverse")}"><code>${contactReverseAddress(contact)}</code></td>
-<td data-label="${t("alias.colForwarded")}"><span class="stack">${contact.forward_count}<br /><span class="muted">${when(contact.last_forward_at, t.locale)}</span></span></td>
-<td data-label="${t("alias.colReplied")}"><span class="stack">${contact.reply_count}<br /><span class="muted">${when(contact.last_reply_at, t.locale)}</span></span></td>
-<td data-label=""><span class="row"><form class="inline" method="post" action="${base}/contacts/${contact.id}/block">
+	: html`<div class="table-wrap"><table class="rt"><thead><tr><th>${t("alias.colContact")}</th><th>${t("alias.colReverse")}</th><th>${t("alias.colForwarded")}</th><th>${t("alias.colReplied")}</th>${isDeleted ? "" : html`<th></th>`}</tr></thead><tbody>
+${contacts.map((contact) => {
+	const reverse = contactReverseAddress(contact);
+	return html`<tr>
+<td data-label="${t("alias.colContact")}"><div class="stack">${contact.name ? html`${contact.name}<br />` : ""}${addressCode(contact.email)}
+${isDeleted
+		? ""
+		: html`<form class="inline row" method="post" action="${base}/contacts/${contact.id}/destination"><input name="destination" type="email" value="${contact.destination ?? ""}" placeholder="${alias.destination || defaultDestination || t("alias.contactDestinationDefault")}" aria-label="${t("alias.contactDestination", { email: contact.email })}" autocapitalize="none" spellcheck="false" /><button>${t("common.set")}</button></form>`}</div></td>
+<td data-label="${t("alias.colReverse")}"><span class="alias-cell keep">${addressCode(reverse)}${copyButton(t, reverse)}</span></td>
+<td data-label="${t("alias.colForwarded")}"><div class="stack">${contact.forward_count}<br /><span class="muted">${timeTag(contact.last_forward_at, t.locale)}</span></div></td>
+<td data-label="${t("alias.colReplied")}"><div class="stack">${contact.reply_count}<br /><span class="muted">${timeTag(contact.last_reply_at, t.locale)}</span></div></td>
+${isDeleted
+		? ""
+		: html`<td data-label=""><div class="row"><form class="inline" method="post" action="${base}/contacts/${contact.id}/block">
 <button class="${contact.blocked ? "" : "danger"}">${contact.blocked ? t("alias.unblock") : t("alias.block")}</button></form>
 <form class="inline" method="post" action="${base}/contacts/${contact.id}/delete" data-confirm="${t("alias.confirmDeleteContact", { email: contact.email })}">
-<button class="danger">${t("bulk.delete")}</button></form></span></td>
-</tr>`,
-)}
-</tbody></table>`}
+<button class="danger">${t("bulk.delete")}</button></form></div></td>`}
+</tr>`;
+})}
+</tbody></table></div>`}
 </section>
 </main>`,
 		{ t, nav: true, current: "/", path: base },
 	);
 }
 
-export function messagePage(t: Translate, title: string, body: Html): Html {
-	return page(title, html`<main class="center"><section><h1>${title}</h1>${body}</section></main>`, { t });
+export function messagePage(t: Translate, title: string, body: Html, path = "/"): Html {
+	return page(title, html`<main class="center"><section><h1>${title}</h1>${body}</section></main>`, { t, path });
 }
 
 export function apiKeysPage(
 	t: Translate,
-	input: { keys: ApiKeyRow[]; enabled: { simplelogin: boolean; addy: boolean; mcp: boolean }; origin: string; newKey?: string; notice?: string },
+	input: { keys: ApiKeyRow[]; enabled: { simplelogin: boolean; addy: boolean; mcp: boolean }; origin: string; newKey?: string; notice?: Notice },
 ): Html {
 	const { keys, enabled, origin, newKey, notice } = input;
 	return page(
@@ -1140,24 +1224,24 @@ export function apiKeysPage(
 ${noticeBox(notice)}
 ${newKey
 	? html`<section><h2>${t("keys.createdTitle")}</h2><p class="notice" role="status">${t("keys.created")}</p>
-<p><input type="text" readonly value="${newKey}" aria-label="${t("keys.colKey")}" data-select spellcheck="false" class="mono" /></p></section>`
+<div class="row mt12"><input type="text" readonly value="${newKey}" aria-label="${t("keys.colKey")}" data-select spellcheck="false" class="mono" />${copyButton(t, newKey)}</div></section>`
 	: ""}
 <section>
 <h2>${t("keys.title")}</h2>
 <p class="help">${t("keys.help")}</p>
 ${enabled.simplelogin || enabled.addy || enabled.mcp
-	? html`${enabled.simplelogin || enabled.addy ? html`<p>${t("keys.serverUrl")}: <code>${origin}</code></p>` : ""}
-${enabled.mcp ? html`<p>${t("keys.mcpUrl")}: <code>${origin}/mcp</code></p>` : ""}
+	? html`${enabled.simplelogin || enabled.addy ? html`<p>${t("keys.serverUrl")}: <span class="alias-cell"><code>${origin}</code>${copyButton(t, origin)}</span></p>` : ""}
+${enabled.mcp ? html`<p>${t("keys.mcpUrl")}: <span class="alias-cell"><code>${origin}/mcp</code>${copyButton(t, `${origin}/mcp`)}</span></p>` : ""}
 <p class="muted">${enabled.simplelogin ? html`<span class="pill ok">SimpleLogin</span> ` : ""}${enabled.addy ? html`<span class="pill ok">addy.io</span> ` : ""}${enabled.mcp ? html`<span class="pill ok">MCP</span>` : ""}</p>`
-	: html`<p class="notice">${t("keys.off")} <a href="/settings#clients">${t("nav.settings")} →</a></p>`}
+	: html`<p class="notice">${t("keys.off")} <a href="/settings#clients">${t("nav.settings")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
 ${keys.length
-	? html`<table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("keys.colScope")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colCreated")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
+	? html`<div class="table-wrap"><table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("keys.colScope")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colCreated")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
 ${keys.map(
 	(key) => html`<tr><td data-label="${t("keys.colName")}">${key.name}</td><td data-label="${t("keys.colScope")}">${t(key.scope === "mcp" ? "keys.scopeMcp" : "keys.scopeApps")}</td><td data-label="${t("keys.colKey")}"><code>${key.prefix}…</code></td>
-<td data-label="${t("keys.colCreated")}">${when(key.created_at, t.locale)}</td><td data-label="${t("keys.colUsed")}">${when(key.last_used_at, t.locale)}</td>
-<td><form class="inline" method="post" action="/api-keys/${key.id}/delete"><button class="danger">${t("keys.revoke")}</button></form></td></tr>`,
+<td data-label="${t("keys.colCreated")}">${timeTag(key.created_at, t.locale)}</td><td data-label="${t("keys.colUsed")}">${timeTag(key.last_used_at, t.locale)}</td>
+<td><form class="inline" method="post" action="/api-keys/${key.id}/delete"><button class="danger" aria-label="${t("keys.revoke")}: ${key.name}">${t("keys.revoke")}</button></form></td></tr>`,
 )}
-</tbody></table>`
+</tbody></table></div>`
 	: html`<p class="muted">${t("keys.none")}</p>`}
 </section>
 <section>
@@ -1205,7 +1289,7 @@ ${result.skippedDomains.length
 ${result.newDestinations.length
 	? html`<p>${t("imp.newDestinations")}</p><ul class="results">${result.newDestinations.map((email) => html`<li><code>${email}</code></li>`)}</ul>`
 	: ""}
-<p><a href="/">${t("imp.viewAliases")} →</a></p></section>`
+<p><a href="/">${t("imp.viewAliases")} <span class="arrow" aria-hidden="true">→</span></a></p></section>`
 	: ""}
 <section>
 <h2>${t("imp.title")}</h2>
@@ -1274,12 +1358,12 @@ function importedHistory(t: Translate, alias: AliasRow): Html | string {
 	return html`<section>
 <h2>${t("hist.title")}</h2>
 <p class="help">${t("hist.from", { source, date: when(alias.imported_at, t.locale) })}${alias.imported_from === "csv" ? "" : html` ${t("hist.help", { source })}`}</p>
-<p>${t("hist.created")}: ${when(alias.created_at, t.locale)}</p>
-<table class="rt"><thead><tr><th></th><th>${t("hist.colCount")}</th><th>${t("hist.colLast")}</th></tr></thead><tbody>
-${rows.map(([key, total, last]) => html`<tr><th scope="row">${t(key)}</th><td data-label="${t("hist.colCount")}">${total}</td><td data-label="${t("hist.colLast")}">${when(last, t.locale)}</td></tr>`)}
-</tbody></table>
+<p>${t("hist.created")}: ${timeTag(alias.created_at, t.locale)}</p>
+<div class="table-wrap"><table class="rt"><thead><tr><th></th><th>${t("hist.colCount")}</th><th>${t("hist.colLast")}</th></tr></thead><tbody>
+${rows.map(([key, total, last]) => html`<tr><th scope="row">${t(key)}</th><td data-label="${t("hist.colCount")}">${total}</td><td data-label="${t("hist.colLast")}">${timeTag(last, t.locale)}</td></tr>`)}
+</tbody></table></div>
 ${latest?.action
-	? html`<p>${t("hist.latest")}: ${latest.action}${latest.contact ? html` · ${latest.contact_name ? `${latest.contact_name} ` : ""}<code>${latest.contact}</code>` : ""} · ${when(latest.at ?? null, t.locale)}</p>`
+	? html`<p>${t("hist.latest")}: ${latest.action}${latest.contact ? html` · ${latest.contact_name ? `${latest.contact_name} ` : ""}<code>${latest.contact}</code>` : ""} · ${timeTag(latest.at ?? null, t.locale)}</p>`
 	: ""}
 ${extra.filter(([, value]) => value).map(([key, value]) => html`<p>${t(key)}: <code>${value}</code></p>`)}
 </section>`;
@@ -1292,7 +1376,7 @@ function swatches(t: Translate, current: string, id: string): Html {
 	const colours: string[] = [...LABEL_COLOURS];
 	if (!colours.includes(current)) colours.push(current);
 	return html`<fieldset class="swatches"><legend class="sr">${t("labels.colour")}</legend>${colours.map(
-		(colour) => html`<label class="swatch" title="${colour}"><input type="radio" name="colour" value="${colour}" id="c-${id}-${colour.slice(1)}" ${colour === current ? "checked" : ""} /><span data-colour="${colour}"></span></label>`,
+		(colour) => html`<label class="swatch" title="${colour}"><input type="radio" name="colour" value="${colour}" id="c-${id}-${colour.slice(1)}" ${colour === current ? "checked" : ""} /><span data-colour="${nearestColour(colour)}"></span></label>`,
 	)}</fieldset>`;
 }
 
@@ -1306,17 +1390,17 @@ function pager(t: Translate, page: number, lastPage: number, href: (page: number
 	const button = (to: number, enabled: boolean, label: Html) =>
 		enabled ? html`<a class="pg" href="${href(to)}">${label}</a>` : html`<span class="pg" aria-disabled="true">${label}</span>`;
 	return html`<nav class="pager" aria-label="${t("dash.pages")}">
-${button(page - 1, page > 1, html`<span aria-hidden="true">←</span> ${t("dash.prev")}`)}
+${button(page - 1, page > 1, html`<span class="arrow" aria-hidden="true">←</span> ${t("dash.prev")}`)}
 <span class="at">${page} / ${lastPage}</span>
-${button(page + 1, page < lastPage, html`${t("dash.next")} <span aria-hidden="true">→</span>`)}
+${button(page + 1, page < lastPage, html`${t("dash.next")} <span class="arrow" aria-hidden="true">→</span>`)}
 </nav>`;
 }
 
 function labelChips(labels: LabelRow[]): Html {
-	return html`<span class="labels-row">${labels.map((label) => html`<a class="label-chip" href="/?label=${encodeURIComponent(label.id)}" data-colour="${label.colour}">${label.name}</a>`)}</span>`;
+	return html`<span class="labels-row">${labels.map((label) => html`<a class="label-chip" href="/?label=${encodeURIComponent(label.id)}" data-colour="${nearestColour(label.colour)}">${label.name}</a>`)}</span>`;
 }
 
-export function labelsPage(t: Translate, input: { labels: LabelWithCount[]; notice?: string }): Html {
+export function labelsPage(t: Translate, input: { labels: LabelWithCount[]; notice?: Notice }): Html {
 	const { labels, notice } = input;
 	const next = LABEL_COLOURS[labels.length % LABEL_COLOURS.length]!;
 	return page(
@@ -1333,7 +1417,7 @@ ${swatches(t, next, "new")}
 </form>
 ${labels.length === 0
 	? html`<p class="muted">${t("labels.empty")}</p>`
-	: html`<table class="rt mt12"><thead><tr><th>${t("labels.name")}</th><th>${t("labels.colAliases")}</th><th></th></tr></thead><tbody>
+	: html`<div class="table-wrap"><table class="rt mt12"><thead><tr><th>${t("labels.name")}</th><th>${t("labels.colAliases")}</th><th></th></tr></thead><tbody>
 ${labels.map(
 	(label) => html`<tr>
 <td data-label="${t("labels.name")}"><form class="label-edit" method="post" action="/labels/${encodeURIComponent(label.id)}">
@@ -1342,10 +1426,10 @@ ${swatches(t, label.colour, label.id)}
 <button>${t("common.save")}</button>
 </form></td>
 <td data-label="${t("labels.colAliases")}"><a href="/?label=${encodeURIComponent(label.id)}">${label.aliases}</a></td>
-<td data-label=""><form class="inline" method="post" action="/labels/${encodeURIComponent(label.id)}/delete" data-confirm="${t("labels.confirmDelete", { name: label.name })}"><button class="danger">${t("bulk.delete")}</button></form></td>
+<td data-label=""><form class="inline" method="post" action="/labels/${encodeURIComponent(label.id)}/delete" data-confirm="${t("labels.confirmDelete", { name: label.name })}"><button class="danger" aria-label="${t("bulk.delete")}: ${label.name}">${t("bulk.delete")}</button></form></td>
 </tr>`,
 )}
-</tbody></table>`}
+</tbody></table></div>`}
 </section>
 </main>`,
 		{ t, nav: true, current: "/labels", path: "/labels" },
@@ -1362,7 +1446,7 @@ function actionText(t: Translate, action: Action): string {
 	return action.type === "block" || action.type === "removeAttachments" || action.type === "banner" ? t(`rules.action.${action.type}`) : `${t(`rules.action.${action.type}`)} “${action.value}”`;
 }
 
-export function rulesPage(t: Translate, input: { rules: Rule[]; notice?: string }): Html {
+export function rulesPage(t: Translate, input: { rules: Rule[]; notice?: Notice }): Html {
 	const { rules, notice } = input;
 	return page(
 		t("rules.title"),
@@ -1374,7 +1458,7 @@ ${noticeBox(notice)}
 <form method="get" action="/rules/new"><button class="primary">${t("rules.new")}</button></form>
 ${rules.length === 0
 	? html`<p class="muted">${t("rules.empty")}</p>`
-	: html`<table class="rt mt12"><thead><tr><th>${t("rules.name")}</th><th>${t("rules.conditions")}</th><th>${t("rules.actions")}</th><th>${t("rules.colApplied")}</th><th></th></tr></thead><tbody>
+	: html`<div class="table-wrap"><table class="rt mt12"><thead><tr><th>${t("rules.name")}</th><th>${t("rules.conditions")}</th><th>${t("rules.actions")}</th><th>${t("rules.colApplied")}</th><th></th></tr></thead><tbody>
 ${rules.map((rule, index) => {
 	const base = `/rules/${encodeURIComponent(rule.id)}`;
 	return html`<tr>
@@ -1382,22 +1466,22 @@ ${rules.map((rule, index) => {
 <td data-label="${t("rules.conditions")}">${rule.conditions.map((condition) => conditionText(t, condition)).join(` ${t(`rules.join.${rule.operator}`)} `)}</td>
 <td data-label="${t("rules.actions")}">${rule.actions.map((action) => actionText(t, action)).join(" · ")}</td>
 <td data-label="${t("rules.colApplied")}">${rule.applied}</td>
-<td data-label=""><span class="row">
+<td data-label=""><div class="row">
 <form class="inline" method="post" action="${base}/active"><input type="hidden" name="active" value="${rule.active ? "0" : "1"}" /><button>${rule.active ? t("rules.turnOff") : t("rules.turnOn")}</button></form>
 ${index > 0 ? html`<form class="inline" method="post" action="${base}/move"><input type="hidden" name="step" value="-1" /><button title="${t("rules.moveUp")}" aria-label="${t("rules.moveUp")}: ${rule.name}">↑</button></form>` : ""}
 ${index < rules.length - 1 ? html`<form class="inline" method="post" action="${base}/move"><input type="hidden" name="step" value="1" /><button title="${t("rules.moveDown")}" aria-label="${t("rules.moveDown")}: ${rule.name}">↓</button></form>` : ""}
-<form class="inline" method="post" action="${base}/delete" data-confirm="${t("rules.confirmDelete", { name: rule.name })}"><button class="danger">${t("bulk.delete")}</button></form>
-</span></td>
+<form class="inline" method="post" action="${base}/delete" data-confirm="${t("rules.confirmDelete", { name: rule.name })}"><button class="danger" aria-label="${t("bulk.delete")}: ${rule.name}">${t("bulk.delete")}</button></form>
+</div></td>
 </tr>`;
 })}
-</tbody></table>`}
+</tbody></table></div>`}
 </section>
 </main>`,
 		{ t, nav: true, current: "/rules", path: "/rules" },
 	);
 }
 
-export function ruleEditPage(t: Translate, input: { rule: Rule | null; destinations: string[]; notice?: string }): Html {
+export function ruleEditPage(t: Translate, input: { rule: Rule | null; destinations: string[]; notice?: Notice }): Html {
 	const { rule, destinations, notice } = input;
 	const conditions: (Condition | null)[] = [...(rule?.conditions ?? [])];
 	while (conditions.length < Math.max(3, (rule?.conditions.length ?? 0) + 1)) conditions.push(null);
@@ -1408,7 +1492,7 @@ export function ruleEditPage(t: Translate, input: { rule: Rule | null; destinati
 	return page(
 		title,
 		html`<main>
-<p class="m0"><a href="/rules">← ${t("rules.title")}</a></p>
+<p class="m0"><a href="/rules"><span class="arrow" aria-hidden="true">←</span> ${t("rules.title")}</a></p>
 ${noticeBox(notice)}
 <section>
 <h2>${title}</h2>
@@ -1420,7 +1504,7 @@ ${noticeBox(notice)}
 <label for="rule-operator">${t("rules.operator")}</label>
 <select id="rule-operator" name="operator">${(["AND", "OR"] as const).map((op) => html`<option value="${op}" ${(rule?.operator ?? "AND") === op ? "selected" : ""}>${t(`rules.operator.${op}`)}</option>`)}</select>
 <div class="rule-rows">${conditions.map(
-	(condition, i) => html`<div class="row">
+	(condition, i) => html`<div class="rule-row">
 <select name="cond_type_${i}" aria-label="${t("rules.conditions")} ${i + 1}">${CONDITION_TYPES.map((type) => html`<option value="${type}" ${condition?.type === type ? "selected" : ""}>${t(`rules.type.${type}`)}</option>`)}</select>
 <select name="cond_match_${i}" aria-label="${t("rules.matchLabel")} ${i + 1}">${MATCHES.map((match) => html`<option value="${match}" ${(condition?.match ?? "contains") === match ? "selected" : ""}>${t(`rules.match.${match}`)}</option>`)}</select>
 <textarea name="cond_values_${i}" rows="${Math.min(5, Math.max(1, condition?.values.length ?? 1))}" placeholder="${t("rules.valuesPlaceholder")}" aria-label="${t("rules.values")} ${i + 1}">${condition?.values.join("\n") ?? ""}</textarea>
@@ -1428,12 +1512,13 @@ ${noticeBox(notice)}
 )}</div>
 <h3>${t("rules.actions")}</h3>
 <p class="help">${t("rules.actionsHelp")}</p>
-<div class="rule-rows">${actions.map(
-	(act, i) => html`<div class="row">
-<select name="act_type_${i}" aria-label="${t("rules.actions")} ${i + 1}"><option value="">—</option>${ACTION_TYPES.map((type) => html`<option value="${type}" ${act?.type === type ? "selected" : ""}>${t(`rules.action.${type}`)}</option>`)}</select>
-<input type="text" name="act_value_${i}" value="${act && act.type !== "block" && act.type !== "removeAttachments" && act.type !== "banner" ? act.value : ""}" aria-label="${t("rules.value")} ${i + 1}" list="rule-destinations" />
-</div>`,
-)}</div>
+<div class="rule-rows">${actions.map((act, i) => {
+	const needsValue = !!act && act.type !== "block" && act.type !== "removeAttachments" && act.type !== "banner";
+	return html`<div class="rule-row act">
+<select name="act_type_${i}" data-act-type aria-label="${t("rules.actions")} ${i + 1}"><option value="">—</option>${ACTION_TYPES.map((type) => html`<option value="${type}" ${act?.type === type ? "selected" : ""}>${t(`rules.action.${type}`)}</option>`)}</select>
+<input type="text" name="act_value_${i}" data-act-value value="${needsValue ? act.value : ""}" aria-label="${t("rules.value")} ${i + 1}"${act?.type === "forwardTo" ? html` list="rule-destinations"` : ""}${needsValue ? "" : html` hidden disabled`} />
+</div>`;
+})}</div>
 <datalist id="rule-destinations">${destinations.map((email) => html`<option value="${email}"></option>`)}</datalist>
 <h3>${t("rules.applyTo")}</h3>
 ${checkbox("forwards", rule ? !!rule.forwards : true, t("rules.forwards"), t("rules.forwardsHelp"))}

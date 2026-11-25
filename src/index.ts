@@ -41,7 +41,7 @@ import {
 	type ImportedAlias,
 	type Selection,
 } from "./importer";
-import { isLocale, isNoticeKey, isTheme, LANG_COOKIE, negotiateLocale, THEME_COOKIE, translator, type MessageKey } from "./i18n";
+import { isErrorNoticeKey, isLocale, isNoticeKey, isTheme, LANG_COOKIE, negotiateLocale, THEME_COOKIE, translator, type MessageKey } from "./i18n";
 import {
 	authenticationOptions,
 	checkSetupCode,
@@ -79,6 +79,7 @@ import {
 	DEFAULT_ACTIVITY_PAGE_SIZE,
 	DEFAULT_ALIAS_PAGE_SIZE,
 	type ActivityItem,
+	type Notice,
 } from "./ui";
 import { readLimited, readTextLimited } from "./streams";
 import { clientKey } from "./ratelimit";
@@ -197,7 +198,7 @@ function savedNotice(c: C, path: string, key: MessageKey, ok: boolean, params?: 
 }
 
 /** The notice named in the URL, translated, or nothing for an unknown key. */
-function noticeFrom(c: C): string | undefined {
+function noticeFrom(c: C): Notice | undefined {
 	const key = c.req.query("notice");
 	if (!isNoticeKey(key)) return undefined;
 	const params: Record<string, string> = {};
@@ -205,7 +206,7 @@ function noticeFrom(c: C): string | undefined {
 	// Values come from this site's redirects. A link from elsewhere (Sec-Fetch-Site is
 	// cross-site or none) could put its own words into them, so such a notice is not shown.
 	if (Object.keys(params).length && c.req.header("Sec-Fetch-Site") !== "same-origin") return undefined;
-	return c.get("t")(key, params);
+	return { text: c.get("t")(key, params), bad: isErrorNoticeKey(key) };
 }
 
 function publicOrigin(c: C): string {
@@ -340,7 +341,7 @@ app.post("/webhook", async (c) => {
 for (const kind of ["unsubscribe", "action"] as const) {
 	const invalid = (c: C) => {
 		const t = c.get("t");
-		return c.html(messagePage(t, t("link.invalidTitle"), html`<p>${t("link.invalid")}</p>`), 404);
+		return c.html(messagePage(t, t("link.invalidTitle"), html`<p>${t("link.invalid")}</p>`, c.req.path), 404);
 	};
 	const resolve = (c: C) => resolveLink(c.env, c.get("config"), kind, c.req.param("token") ?? "", [new URL(c.req.url).hostname]);
 	app.get(`/${kind}/:token`, async (c) => {
@@ -348,11 +349,19 @@ for (const kind of ["unsubscribe", "action"] as const) {
 		const target = await resolve(c);
 		if (!target) return invalid(c);
 		if (await isLinkUsed(c.env.DB, target.token)) {
-			return c.html(messagePage(t, t("link.done"), html`<p>${t("link.used")}</p>`));
+			return c.html(messagePage(t, t("link.done"), html`<p>${t("link.used")}</p>`, c.req.path));
 		}
 		const title = kind === "unsubscribe" ? t("link.unsubscribe") : target.action === "disable_alias" ? t("link.disable") : t("link.block");
+		const nothingToRun = target.action === "preserve_original" && !target.plan && target.fallback === "none";
 		return c.html(
-			messagePage(t, title, html`<p>${describeAction(target, t)}</p><form method="post"><button class="primary">${title}</button></form>`),
+			messagePage(
+				t,
+				title,
+				nothingToRun
+					? html`<p>${describeAction(target, t)}</p>`
+					: html`<p>${describeAction(target, t)}</p><form method="post"><button class="primary">${title}</button></form>`,
+				c.req.path,
+			),
 		);
 	});
 	app.post(`/${kind}/:token`, async (c) => {
@@ -364,7 +373,7 @@ for (const kind of ["unsubscribe", "action"] as const) {
 		const target = await resolve(c);
 		if (!target) return invalid(c);
 		if (!(await claimLink(c.env.DB, target.token))) {
-			return c.html(messagePage(t, t("link.done"), html`<p>${t("link.used")}</p>`));
+			return c.html(messagePage(t, t("link.done"), html`<p>${t("link.used")}</p>`, c.req.path));
 		}
 		let done;
 		try {
@@ -372,10 +381,10 @@ for (const kind of ["unsubscribe", "action"] as const) {
 		} catch (error) {
 			await releaseLink(c.env.DB, target.token);
 			console.error("Link action failed", kind, error instanceof Error ? error.message : error);
-			return c.html(messagePage(t, t("link.error"), html`<p>${t("link.tryAgain")}</p>`), 500);
+			return c.html(messagePage(t, t("link.error"), html`<p>${t("link.tryAgain")}</p>`, c.req.path), 500);
 		}
 		// What actually happened: a block, when the sender's own unsubscribe could not be run.
-		return c.html(messagePage(t, t("link.done"), html`<p>${describeAction(done, t)}</p>`));
+		return c.html(messagePage(t, t("link.done"), html`<p>${describeAction(done, t)}</p>`, c.req.path));
 	});
 }
 
@@ -798,27 +807,17 @@ app.post("/connection", async (c) => {
 	const hasOutboundOptions = optionKeys.some((key) => typeof form[key] === "string");
 	if (!fixed.has("outboundOptions") && hasOutboundOptions) {
 		const raw = (name: string) => (typeof form[name] === "string" ? (form[name] as string) : "");
-		const options: OutboundOptions = normalizeOutboundOptions({
-			smtpHost: raw("smtpHost"),
-			smtpPort: raw("smtpPort"),
-			smtpSecurity: raw("smtpSecurity"),
-			smtpUsername: raw("smtpUsername"),
-			mailgunRegion: raw("mailgunRegion"),
-			sesRegion: raw("sesRegion"),
-			sesAccessKeyId: raw("sesAccessKeyId"),
-			mailbabyOrderId: raw("mailbabyOrderId"),
-			customUrl: raw("customUrl"),
-			customHeaders: raw("customHeaders"),
-			customBody: raw("customBody"),
-			customIdPath: raw("customIdPath"),
-		});
+		// Only the chosen provider's fields are sent (the others are disabled): the saved values of the
+		// other providers stay, so switching back later finds them as they were.
+		const submitted = Object.fromEntries(optionKeys.filter((key) => typeof form[key] === "string").map((key) => [key, raw(key)]));
+		const options: OutboundOptions = normalizeOutboundOptions({ ...config.outboundOptions, ...submitted });
 		if (raw("smtpHost").trim() && !options.smtpHost) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		const rawPort = raw("smtpPort").trim();
 		const parsedPort = Number(rawPort);
 		if (rawPort && (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535 || parsedPort === 25)) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		if (raw("sesRegion").trim() && !SES_REGION.test(raw("sesRegion").trim().toLowerCase())) return redirectWithNotice(c, "/connection", "notice.badSes");
 		if (raw("mailbabyOrderId").trim() && !options.mailbabyOrderId) return redirectWithNotice(c, "/connection", "notice.badProvider");
-		if (options.customUrl) {
+		if (typeof form.customUrl === "string" && options.customUrl) {
 			// The key and messages go to this URL: a public https host, not this Worker or Mailflare.
 			const blocked = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin, config.mailflareUrl, values.mailflareUrl].map(hostnameOf)].filter((h): h is string => !!h);
 			if (!safeHttpsUrl(options.customUrl, blocked)) {
@@ -1134,7 +1133,7 @@ app.post("/import/:source", async (c) => {
 	return render({ result });
 });
 
-async function renderApiKeys(c: C, extra: { newKey?: string; notice?: string } = {}) {
+async function renderApiKeys(c: C, extra: { newKey?: string; notice?: Notice } = {}) {
 	const settings = await loadSettings(c.env.DB);
 	return c.html(
 		apiKeysPage(c.get("t"), {
