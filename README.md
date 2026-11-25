@@ -268,7 +268,7 @@ Found a vulnerability? Please report it privately as described in [SECURITY.md](
 - **Links in forwarded mail** (unsubscribe, block, disable) are signed, work once and expire after 90 days. `GET` only shows a confirmation. Replies never carry the banner or these links to the correspondent.
 - **App API keys** are random 238-bit values; only their SHA-256 hash is stored. Both client APIs are off by default and rate limited.
 - **Secrets.** The Cloudflare token is never stored. The optional Mailflare API key and webhook secret are stored in D1 unless set as secrets.
-- **Lost all your passkeys?** Run `npx wrangler d1 execute aliasflare --remote --command "DELETE FROM passkeys"` and register again with a new setup code.
+- **Lost all your passkeys?** Run `npx wrangler d1 execute aliasflare --remote --command "DELETE FROM passkeys"` and register again with a new setup code. A session needs its passkey to exist, so this also ends every session those passkeys had.
 
 ## Limitations
 

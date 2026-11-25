@@ -64,13 +64,20 @@ export function takeChallengeCookie(c: Context): string | undefined {
 	return id;
 }
 
+/**
+ * A session counts only while its passkey does. The schema deletes a passkey's sessions with it, but
+ * that is the database's job: removing passkeys by hand (the "lost all your passkeys" recovery) or
+ * restoring a database where foreign keys were off would otherwise leave old cookies working.
+ */
+export const LIVE_SESSION = "SELECT 1 AS ok FROM sessions s JOIN passkeys p ON p.id = s.passkey_id WHERE s.id = ? AND s.expires_at >= ?";
+
 export async function isSignedIn(c: Context<AppEnv>): Promise<boolean> {
 	const id = await sessionId(c);
 	if (!id) return false;
 	// Already read with the configuration; the signature, checked just now, says the id is ours.
 	const known = c.get("session");
 	if (known && known.id === id) return known.live;
-	const row = await c.env.DB.prepare("SELECT 1 AS ok FROM sessions WHERE id = ? AND expires_at >= ?").bind(id, now()).first<{ ok: number }>();
+	const row = await c.env.DB.prepare(LIVE_SESSION).bind(id, now()).first<{ ok: number }>();
 	return !!row;
 }
 

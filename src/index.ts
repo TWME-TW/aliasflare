@@ -5,6 +5,7 @@ import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simp
 import {
 	endSession,
 	isSignedIn,
+	LIVE_SESSION,
 	claimedSessionId,
 	requireAdmin,
 	sameOrigin,
@@ -145,7 +146,7 @@ app.use("*", async (c, next) => {
 		const db = c.env.DB;
 		const claimed = claimedSessionId(c);
 		const reads = [db.prepare("SELECT key, value FROM config"), db.prepare("SELECT key, value FROM settings")];
-		if (claimed) reads.push(db.prepare("SELECT 1 AS ok FROM sessions WHERE id = ? AND expires_at >= ?").bind(claimed, now()));
+		if (claimed) reads.push(db.prepare(LIVE_SESSION).bind(claimed, now()));
 		const [config, settings, session] = await db.batch<{ key: string; value: string }>(reads);
 		c.set("config", await loadConfig(c.env, config!.results));
 		c.set("settings", settingsFromRows(settings!.results));
@@ -272,13 +273,16 @@ app.get("/assets/app.js", (c) => {
 /**
  * A path on this site to redirect to, or "/". Control characters and backslashes are
  * refused outright, since browsers drop or rewrite them and "/\t/evil.example" would
- * otherwise become "//evil.example".
+ * otherwise become "//evil.example". A path that only becomes "//evil.example" once the URL
+ * parser has resolved its dot segments ("/..//evil.example") is refused too: a browser reads
+ * a Location starting with "//" as another site.
  */
 export function safeLocalPath(value: string | undefined | null): string {
 	if (!value || !value.startsWith("/") || /[\x00-\x1f\x7f\\]/.test(value)) return "/";
 	try {
 		const parsed = new URL(value, "https://local.invalid");
-		return parsed.origin === "https://local.invalid" ? `${parsed.pathname}${parsed.search}${parsed.hash}` : "/";
+		if (parsed.origin !== "https://local.invalid" || parsed.pathname.startsWith("//")) return "/";
+		return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 	} catch {
 		return "/";
 	}
