@@ -51,11 +51,16 @@ import {
 	relyingParty,
 } from "./passkeys";
 import { handleReverseAliasMail } from "./reply";
+import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabel, updateLabel } from "./labels";
+import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_RULES, moveRule, RuleError, setRuleActive, updateRule } from "./rules";
 import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings } from "./settings";
 import {
 	aliasPage,
 	apiKeysPage,
 	blocklistPage,
+	labelsPage,
+	ruleEditPage,
+	rulesPage,
 	connectionPage,
 	dashboardPage,
 	FAVICON_SVG,
@@ -536,6 +541,12 @@ app.get("/", async (c) => {
 	if (filter === "active") where.push("forward_mode != 'none'");
 	if (filter === "disabled") where.push("forward_mode = 'none'");
 	if (filter === "pinned") where.push("pinned = 1");
+	const labels = await listLabels(db);
+	const label = labels.some((row) => row.id === c.req.query("label")) ? c.req.query("label")! : "";
+	if (label) {
+		where.push("address IN (SELECT alias_address FROM alias_labels WHERE label_id = ?)");
+		params.push(label);
+	}
 	if (query) {
 		const fields = ["address", "COALESCE(note, '')", "COALESCE(name, '')", "COALESCE(destination, '')"];
 		where.push(`(${fields.map((field) => `${field} LIKE ? ESCAPE '!'`).join(" OR ")})`);
@@ -553,10 +564,12 @@ app.get("/", async (c) => {
 			.all<AliasRow & { contacts: number }>(),
 		db.prepare(`SELECT COUNT(*) AS total FROM aliases ${clause}`).bind(...params).first<{ total: number }>(),
 	]);
-	const list = { query, filter, page: pageNumber, perPage, total: counted?.total ?? 0 };
+	const list = { query, filter, label, page: pageNumber, perPage, total: counted?.total ?? 0 };
 	const activity = await activityPage(db, DASHBOARD_ACTIVITY, 0);
+	const byAlias = labels.length ? await labelsOf(db, aliases.map((alias) => alias.address)) : new Map();
+	const withLabels = aliases.map((alias) => ({ ...alias, labels: byAlias.get(alias.address) ?? [] }));
 	return c.html(
-		dashboardPage(c.get("t"), { settings, aliases, list, activity, missing: missingConnection(settings), notice: noticeFrom(c) }),
+		dashboardPage(c.get("t"), { settings, aliases: withLabels, labels, list, activity, missing: missingConnection(settings), notice: noticeFrom(c) }),
 	);
 });
 
@@ -815,6 +828,102 @@ app.post("/blocklist/:id/delete", async (c) => {
 	return redirectWithNotice(c, "/blocklist", "notice.unblocked");
 });
 
+// ---------- labels ----------
+
+const LABEL_NOTICES: Record<LabelError["reason"], MessageKey> = {
+	name: "notice.labelName",
+	colour: "notice.labelName",
+	taken: "notice.labelTaken",
+	limit: "notice.labelLimit",
+	missing: "notice.labelMissing",
+};
+
+async function labelRoute(c: C, run: () => Promise<unknown>, done: MessageKey): Promise<Response> {
+	try {
+		await run();
+	} catch (error) {
+		if (error instanceof LabelError) return redirectWithNotice(c, "/labels", LABEL_NOTICES[error.reason], { max: String(MAX_LABELS) });
+		throw error;
+	}
+	return redirectWithNotice(c, "/labels", done);
+}
+
+app.get("/labels", async (c) => c.html(labelsPage(c.get("t"), { labels: await listLabels(c.env.DB), notice: noticeFrom(c) })));
+app.post("/labels", async (c) => {
+	const form = await c.req.parseBody();
+	return labelRoute(c, () => createLabel(c.env.DB, { name: form.name, colour: form.colour }), "notice.labelSaved");
+});
+app.post("/labels/:id", async (c) => {
+	const form = await c.req.parseBody();
+	return labelRoute(c, () => updateLabel(c.env.DB, c.req.param("id"), { name: form.name, colour: form.colour }), "notice.labelSaved");
+});
+app.post("/labels/:id/delete", async (c) => {
+	await deleteLabel(c.env.DB, c.req.param("id"));
+	return redirectWithNotice(c, "/labels", "notice.labelDeleted");
+});
+
+// ---------- rules ----------
+
+/** A rule from the editor's rows: a row without values (or an action without a type) is left out. */
+function ruleFromForm(form: Record<string, unknown>) {
+	const conditions = [];
+	const actions = [];
+	for (let i = 0; i < 20; i += 1) {
+		const values = typeof form[`cond_values_${i}`] === "string" ? (form[`cond_values_${i}`] as string) : "";
+		if (values.trim()) conditions.push({ type: form[`cond_type_${i}`], match: form[`cond_match_${i}`], values });
+		const type = form[`act_type_${i}`];
+		if (typeof type === "string" && type) actions.push({ type, value: type === "banner" ? "off" : form[`act_value_${i}`] });
+	}
+	return { name: form.name, operator: form.operator, conditions, actions, forwards: form.forwards === "1", replies: form.replies === "1", sends: form.replies === "1", active: form.active === "1" };
+}
+
+const RULE_NOTICES: Record<RuleError["reason"], MessageKey> = {
+	invalid: "notice.ruleInvalid",
+	limit: "notice.ruleLimit",
+	missing: "notice.ruleMissing",
+	forwardTo: "notice.ruleForwardTo",
+};
+
+async function saveRule(c: C, id: string | null): Promise<Response> {
+	const back = id ? `/rules/${encodeURIComponent(id)}` : "/rules/new";
+	try {
+		const input = cleanRule(ruleFromForm(await c.req.parseBody()));
+		const settings = await loadSettings(c.env.DB);
+		const forwardTo = input.actions.find((action) => action.type === "forwardTo");
+		if (forwardTo && isOwnAddress(forwardTo.value, settings.aliasDomains)) return redirectWithNotice(c, back, "notice.ruleForwardTo");
+		if (id) await updateRule(c.env.DB, id, input);
+		else await createRule(c.env.DB, input);
+	} catch (error) {
+		if (error instanceof RuleError) return redirectWithNotice(c, back, RULE_NOTICES[error.reason], { max: String(MAX_RULES) });
+		throw error;
+	}
+	return redirectWithNotice(c, "/rules", "notice.ruleSaved");
+}
+
+app.get("/rules", async (c) => c.html(rulesPage(c.get("t"), { rules: await listRules(c.env.DB), notice: noticeFrom(c) })));
+app.get("/rules/new", (c) => c.html(ruleEditPage(c.get("t"), { rule: null, notice: noticeFrom(c) })));
+app.post("/rules", (c) => saveRule(c, null));
+app.get("/rules/:id", async (c) => {
+	const rule = await getRule(c.env.DB, c.req.param("id"));
+	if (!rule) return redirectWithNotice(c, "/rules", "notice.ruleMissing");
+	return c.html(ruleEditPage(c.get("t"), { rule, notice: noticeFrom(c) }));
+});
+app.post("/rules/:id", (c) => saveRule(c, c.req.param("id")));
+app.post("/rules/:id/active", async (c) => {
+	const form = await c.req.parseBody();
+	await setRuleActive(c.env.DB, c.req.param("id"), form.active === "1");
+	return redirectWithNotice(c, "/rules", "notice.ruleSaved");
+});
+app.post("/rules/:id/move", async (c) => {
+	const form = await c.req.parseBody();
+	await moveRule(c.env.DB, c.req.param("id"), form.step === "-1" ? -1 : 1);
+	return c.redirect("/rules");
+});
+app.post("/rules/:id/delete", async (c) => {
+	await deleteRule(c.env.DB, c.req.param("id"));
+	return redirectWithNotice(c, "/rules", "notice.ruleDeleted");
+});
+
 // ---------- import from SimpleLogin / addy.io ----------
 
 const IMPORT_SOURCES = {
@@ -980,6 +1089,12 @@ app.post("/aliases/bulk", async (c) => {
 		c.redirect(noticeUrl(back, key, params));
 	const action = form.action as (typeof BULK_ACTIONS)[number];
 	const ids = [...new Set((Array.isArray(form.ids) ? form.ids : [form.ids]).filter((id): id is string => typeof id === "string").map(normalizeEmail))].slice(0, 500);
+	const labelAction = typeof form.action === "string" ? /^(label|unlabel):(lb_[0-9a-f]{32})$/.exec(form.action) : null;
+	if (labelAction && ids.length) {
+		const { results } = await c.env.DB.prepare(`SELECT address FROM aliases WHERE deleted_at IS NULL AND address IN (${ids.map(() => "?").join(", ")})`).bind(...ids).all<{ address: string }>();
+		const changed = await toggleAliasLabel(c.env.DB, results.map((row) => row.address), labelAction[2]!, labelAction[1] === "label");
+		return done("notice.bulkDone", { count: String(changed) });
+	}
 	if (!BULK_ACTIONS.includes(action) || ids.length === 0) return done("notice.bulkBad");
 	const value = typeof form.value === "string" ? form.value.trim() : "";
 	const db = c.env.DB;
@@ -1106,7 +1221,19 @@ app.get("/aliases/:address", async (c) => {
 		.bind(alias.address)
 		.all<ContactRow>();
 	const { defaultDestination } = await loadSettings(c.env.DB);
-	return c.html(aliasPage(c.get("t"), { alias, contacts, defaultDestination, notice: noticeFrom(c) }));
+	const labels = await listLabels(c.env.DB);
+	const aliasLabels = ((await labelsOf(c.env.DB, [alias.address])).get(alias.address) ?? []).map((label) => label.id);
+	return c.html(aliasPage(c.get("t"), { alias, contacts, defaultDestination, labels, aliasLabels, notice: noticeFrom(c) }));
+});
+
+app.post("/aliases/:address/labels", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	const alias = await getAlias(c.env.DB, address);
+	if (!alias) return c.notFound();
+	const form = await c.req.parseBody({ all: true });
+	const chosen = (Array.isArray(form.labels) ? form.labels : [form.labels]).filter((id): id is string => typeof id === "string");
+	await setAliasLabels(c.env.DB, [address], chosen);
+	return redirectWithNotice(c, `/aliases/${encodeURIComponent(address)}`, "notice.aliasLabelsSaved", { alias: address });
 });
 
 app.post("/aliases/:address/contacts", async (c) => {

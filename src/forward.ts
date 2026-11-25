@@ -13,6 +13,7 @@ import { loadSettings } from "./settings";
 import { readLimited } from "./streams";
 import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
 import type { Replacement } from "./format";
+import { runRules } from "./rules";
 import { transformForward, type BannerInfo } from "./transform";
 
 export const LOOP_HEADER = "X-Aliasflare";
@@ -284,10 +285,14 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			// The From header's contact first: that is the sender the user sees.
 			const primarySender = parsedFrom[0] ?? envelopeSender!;
 			const redirect = (known.find((contact) => contact.email === primarySender) ?? known[0])?.destination;
-			const target = redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination;
 			if (alias.forward_mode === "no_promotions" && isPromotional([...headers].map(([key, value]) => ({ key, value })))) {
 				return await skip("promotional mail is blocked for this alias");
 			}
+			// The message is passed on unchanged, so of a rule's actions only Block and Forward to act on it.
+			const rules = await runRules(db, "forwards", { sender: primarySender, subject: headers.get("Subject") ?? "", alias: aliasAddress });
+			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
+			const ruleTarget = rules.forwardTo && !isOwnAddress(rules.forwardTo, [...settings.aliasDomains, aliasDomain]) ? rules.forwardTo : null;
+			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
 			const contact = await ensureContact(db, aliasAddress, primarySender, null, settings.includeSenderInReverseAlias);
 			await passThrough(target);
@@ -359,7 +364,11 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		await finish(db, forwardId, { contact_id: contact.id });
 		if (contact.blocked) return await skip("sender is blocked");
 		// A sender can have an address of its own (set by an unsubscribe, say).
-		const recipient = contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain]) ? contact.destination : destination;
+		const rules = await runRules(db, "forwards", { sender: senderEmail, subject: email.subject ?? "", alias: aliasAddress });
+		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
+		// A rule's Forward to comes first, then the sender's own address, then the alias's.
+		const ruleRecipient = rules.forwardTo && !isOwnAddress(rules.forwardTo, [...settings.aliasDomains, aliasDomain]) ? rules.forwardTo : null;
+		const recipient = ruleRecipient ?? (contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain]) ? contact.destination : destination);
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
 		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
@@ -371,7 +380,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 
 		const sign = (purpose: string, payload: string) => signToken(config.signingSecret, purpose, payload, LINK_TTL_SECONDS);
 		// Without a known origin there is nowhere for the banner's links to point.
-		const banner: BannerInfo | null = settings.showBanner && origin
+		const banner: BannerInfo | null = settings.showBanner && origin && !rules.hideBanner
 			? {
 					alias: aliasAddress,
 					sender: contact.name ? `${sanitizeDisplayName(contact.name)} <${contact.email}>` : contact.email,
@@ -400,7 +409,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				calendarReplacements.push({ from: organizer, to: reverseAddressOf(organizerContact.reverse_local, reverseDomain) });
 			}
 		}
-		const displayName = formatSenderName(settings.senderFormat, contact.name, contact.email);
+		const displayName = rules.displayFrom ?? formatSenderName(settings.senderFormat, contact.name, contact.email);
 		const headers: Record<string, string> = {
 			[LOOP_HEADER]: aliasAddress,
 			"X-Original-To": aliasAddress,
@@ -414,7 +423,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (references.length) headers.References = references.join(" ");
 
 		// The banner can be hidden by the message's own CSS; a subject prefix cannot.
-		const subject = cleanSubjectLine(email.subject) || "(no subject)";
+		const subject = cleanSubjectLine(rules.subject ?? email.subject) || "(no subject)";
 		const result = await env.EMAIL.send({
 			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
 			// Cloudflare will not take a To header of our own, so the alias goes in the display name:
@@ -425,7 +434,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			headers,
 			...(body.html ? { html: body.html } : {}),
 			text: body.text ?? (body.html ? undefined : ""),
-			attachments: email.attachments.map((attachment, index) => {
+			attachments: (rules.removeAttachments ? [] : email.attachments).map((attachment, index) => {
 				const { filename, type, contentId } = cleanAttachment(attachment, index);
 				const content =
 					carriesAddresses(type, filename) === "calendar"

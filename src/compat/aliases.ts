@@ -48,6 +48,8 @@ export type AliasQuery = {
 	search?: string;
 	/** Only aliases on this domain. */
 	domain?: string;
+	/** Only aliases with this label. */
+	label?: string;
 	/** Only aliases forwarding to this address; the default one also matches aliases with no address of their own. */
 	destination?: { email: string; isDefault: boolean };
 	/** A key of ALIAS_SORT; without one, pinned first, then most recently created or used. */
@@ -86,6 +88,10 @@ function whereClause(query: Omit<AliasQuery, "limit" | "offset" | "sort">): { sq
 	if (query.domain !== undefined) {
 		conditions.push("a.address LIKE ? ESCAPE '\\'");
 		params.push(`%@${query.domain.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}`);
+	}
+	if (query.label !== undefined) {
+		conditions.push("a.address IN (SELECT alias_address FROM alias_labels WHERE label_id = ?)");
+		params.push(query.label);
 	}
 	if (query.destination) {
 		conditions.push(query.destination.isDefault ? "(a.destination = ? OR a.destination IS NULL OR a.destination = '')" : "a.destination = ?");

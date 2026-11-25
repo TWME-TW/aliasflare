@@ -1,3 +1,5 @@
+import { LABEL_COLOURS, MAX_LABEL_NAME, type LabelRow, type LabelWithCount } from "./labels";
+import { ACTION_TYPES, CONDITION_TYPES, MATCHES, MAX_RULE_NAME, type Action, type Condition, type Rule } from "./rules";
 import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
 import type { AliasRow, BlocklistRow, ContactRow } from "./db";
@@ -96,6 +98,34 @@ form.inline { display:inline; margin:0; }
 
 /* Chips and messages */
 .pill { display:inline-flex; align-items:center; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; background:var(--soft); color:var(--muted); }
+/* Label chips: a soft tint of the label's colour, its text a deeper (or, when dark, lighter) shade of it. */
+:root { --lab-ink:#111827; --lab-ink-amount:45%; --lab-tint:14%; --lab-edge:30%; }
+:root[data-theme="dark"] { --lab-ink:#ffffff; --lab-ink-amount:55%; --lab-tint:24%; --lab-edge:40%; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --lab-ink:#ffffff; --lab-ink-amount:55%; --lab-tint:24%; --lab-edge:40%; } }
+.label-chip { --lc:#64748b; display:inline-flex; align-items:center; gap:6px; padding:1px 10px 1px 8px; border-radius:999px; font-size:12px; font-weight:600; line-height:20px; letter-spacing:.01em; text-decoration:none; white-space:nowrap;
+	color:color-mix(in oklab, var(--lc), var(--lab-ink) var(--lab-ink-amount));
+	background:color-mix(in oklab, var(--lc) var(--lab-tint), var(--card));
+	border:1px solid color-mix(in oklab, var(--lc) var(--lab-edge), transparent); }
+.label-chip::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--lc); flex:none; }
+a.label-chip:hover { background:color-mix(in oklab, var(--lc) calc(var(--lab-tint) + 8%), var(--card)); }
+${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`).join("\n")}
+.swatches { display:flex; flex-wrap:wrap; gap:6px; border:none; margin:0; padding:0; }
+.swatch { position:relative; display:inline-flex; cursor:pointer; }
+.swatch input { position:absolute; opacity:0; width:1px; height:1px; }
+.swatch span { width:22px; height:22px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); transition:transform .1s; }
+.swatch:hover span { transform:scale(1.12); }
+.swatch input:checked + span { box-shadow:0 0 0 2px var(--card), 0 0 0 4px var(--lc, #64748b); }
+.swatch input:focus-visible + span { outline:2px solid var(--primary); outline-offset:4px; }
+.label-new { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; }
+.label-new input[type=text] { flex:1 1 14rem; }
+.label-edit { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
+.label-edit input[type=text] { flex:0 1 13rem; min-width:9rem; }
+.labels-row { display:inline-flex; flex-wrap:wrap; gap:4px; margin-inline-start:6px; vertical-align:middle; }
+.label-picks { display:flex; flex-wrap:wrap; gap:8px 18px; margin:8px 0; }
+.label-picks label { display:inline-flex; align-items:center; gap:6px; font-weight:400; }
+.rule-rows { display:grid; gap:8px; margin:8px 0; }
+.rule-rows .row > * { flex:1; min-width:0; }
+.rule-rows .row > select { flex:0 1 auto; }
 .pill.ok { background:var(--ok-soft); color:var(--ok); } .pill.bad { background:var(--danger-soft); color:var(--danger); }
 .alias-cell { display:inline-flex; align-items:center; gap:2px; flex-wrap:wrap; }
 button.copy { min-height:28px; padding:0 8px; }
@@ -234,6 +264,8 @@ export const PASSKEY_SCRIPT_VERSION = contentVersion(PASSKEY_SCRIPT);
 const ICONS = {
 	aliases: `<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>`,
 	blocklist: `<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>`,
+	labels: `<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>`,
+	rules: `<path d="M3 4h18l-7 8v6l-4 2v-8z"/>`,
 	settings: `<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>`,
 	connection: `<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>`,
 	passkeys: `<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>`,
@@ -318,7 +350,7 @@ ${themeToggle(t, options.path)}
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="aliasflare">
-${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
+${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/labels", "nav.labels", "labels")}${link("/rules", "nav.rules", "rules")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
 <p class="powered">aliasflare · <a href="https://github.com/TWME-TW/aliasflare">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
@@ -437,7 +469,7 @@ export const ALIAS_PAGE_SIZES = [25, 50, 100, 200] as const;
 export const DEFAULT_ALIAS_PAGE_SIZE = 100;
 export const DEFAULT_ACTIVITY_PAGE_SIZE = 50;
 
-export type AliasListState = { query: string; filter: "all" | "active" | "disabled" | "pinned" | "deleted"; page: number; perPage: number; total: number };
+export type AliasListState = { query: string; filter: "all" | "active" | "disabled" | "pinned" | "deleted"; label: string; page: number; perPage: number; total: number };
 
 /** The "New alias" form above the alias list. */
 function newAliasForm(t: Translate, settings: Settings): Html | string {
@@ -473,7 +505,8 @@ export function dashboardPage(
 	t: Translate,
 	input: {
 		settings: Settings;
-		aliases: (AliasRow & { contacts: number; used_at?: number | null })[];
+		aliases: (AliasRow & { contacts: number; used_at?: number | null; labels?: LabelRow[] })[];
+		labels?: LabelRow[];
 		list: AliasListState;
 		activity: ActivityItem[];
 		missing: MessageKey[];
@@ -481,11 +514,13 @@ export function dashboardPage(
 	},
 ): Html {
 	const { settings, aliases, list, activity, missing, notice } = input;
+	const labels = input.labels ?? [];
 	const listUrl = (changes: Partial<AliasListState>) => {
 		const next = { ...list, ...changes };
 		const params = new URLSearchParams();
 		if (next.query) params.set("q", next.query);
 		if (next.filter !== "all") params.set("filter", next.filter);
+		if (next.label) params.set("label", next.label);
 		if (next.perPage !== DEFAULT_ALIAS_PAGE_SIZE) params.set("per", String(next.perPage));
 		if (next.page > 1) params.set("page", String(next.page));
 		const search = params.toString();
@@ -525,14 +560,20 @@ ${newAliasForm(t, settings)}
 <select name="filter" aria-label="${t("dash.filter")}" data-autosubmit>
 ${(["all", "active", "disabled", "pinned", "deleted"] as const).map((filter) => html`<option value="${filter}" ${list.filter === filter ? "selected" : ""}>${t(`dash.filter.${filter}`)}</option>`)}
 </select>
+${labels.length
+	? html`<select name="label" aria-label="${t("nav.labels")}" data-autosubmit>
+<option value="">${t("dash.allLabels")}</option>
+${labels.map((label) => html`<option value="${label.id}" ${list.label === label.id ? "selected" : ""}>${label.name}</option>`)}
+</select>`
+	: ""}
 <select name="per" aria-label="${t("dash.perPageLabel")}" data-autosubmit>
 ${ALIAS_PAGE_SIZES.map((size) => html`<option value="${size}" ${list.perPage === size ? "selected" : ""}>${t("dash.perPage", { count: String(size) })}</option>`)}
 </select>
 <button>${t("dash.searchButton")}</button>
 </form>
-<p class="muted">${t("dash.results", { count: String(list.total) })}${list.query || list.filter !== "all" ? html` · <a href="/">${t("dash.clear")}</a>` : ""}</p>
+<p class="muted">${t("dash.results", { count: String(list.total) })}${list.query || list.filter !== "all" || list.label ? html` · <a href="/">${t("dash.clear")}</a>` : ""}</p>
 ${aliases.length === 0
-	? html`<p class="muted">${list.query || list.filter !== "all" ? t("dash.noResults") : t("dash.noAliases")}</p>
+	? html`<p class="muted">${list.query || list.filter !== "all" || list.label ? t("dash.noResults") : t("dash.noAliases")}</p>
 ${list.page > 1 ? html`<nav class="pager" aria-label="${t("dash.pages")}"><a href="${listUrl({ page: Math.max(1, lastPage) })}">← ${t("dash.prev")}</a></nav>` : ""}`
 	: html`<form id="bulk" class="toolbar bulk" method="post" action="/aliases/bulk" data-bulk
  data-confirm-delete="${t("bulk.confirmDelete")}" data-confirm-forget="${t("bulk.confirmForget")}" data-none-selected="${t("bulk.noneSelected")}">
@@ -541,6 +582,11 @@ ${list.page > 1 ? html`<nav class="pager" aria-label="${t("dash.pages")}"><a hre
 <select name="action" aria-label="${t("bulk.action")}" required>
 <option value="">${t("bulk.choose")}</option>
 ${actions.map(([value, label]) => html`<option value="${value}" ${value === "note" || value === "destination" ? html`data-needs-value` : ""}>${label}</option>`)}
+${labels.length && !deletedView
+	? html`<optgroup label="${t("nav.labels")}">
+${labels.map((label) => html`<option value="label:${label.id}">${t("bulk.addLabel", { name: label.name })}</option><option value="unlabel:${label.id}">${t("bulk.removeLabel", { name: label.name })}</option>`)}
+</optgroup>`
+	: ""}
 </select>
 <input type="text" name="value" placeholder="${t("bulk.value")}" aria-label="${t("bulk.value")}" data-bulk-value />
 <button class="primary">${t("bulk.apply")}</button>
@@ -552,7 +598,7 @@ ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return html`<tr>
 <td class="pick"><input type="checkbox" form="bulk" name="ids" value="${alias.address}" aria-label="${t("dash.select", { alias: alias.address })}" data-pick /></td>
-<td class="c-alias" data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
+<td class="c-alias" data-label="${t("dash.colAlias")}"><span class="alias-cell"><a href="${base}"><code>${alias.address}</code></a>${copyButton(t, alias.address)}</span>${alias.pinned ? html` <span class="pill">${t("dash.filter.pinned")}</span>` : ""}${alias.labels?.length ? labelChips(alias.labels) : ""}${alias.deleted_at ? html` <span class="pill bad">${t("dash.filter.deleted")}</span>` : ""}</td>
 <td class="c-note" data-label="${t("dash.colNote")}"><form class="note" method="post" action="${base}/note" data-autosave data-msg-failed="${t("link.error")}">
 <input type="hidden" name="back" value="list" />
 <input type="text" name="note" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
@@ -982,8 +1028,13 @@ ${entries.map(
 	);
 }
 
-export function aliasPage(t: Translate, input: { alias: AliasRow; contacts: ContactRow[]; defaultDestination: string; notice?: string }): Html {
+export function aliasPage(
+	t: Translate,
+	input: { alias: AliasRow; contacts: ContactRow[]; defaultDestination: string; labels?: LabelRow[]; aliasLabels?: string[]; notice?: string },
+): Html {
 	const { alias, contacts, defaultDestination, notice } = input;
+	const labels = input.labels ?? [];
+	const chosen = new Set(input.aliasLabels ?? []);
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	return page(
 		alias.address,
@@ -1015,6 +1066,17 @@ ${noticeBox(notice)}
 <label for="mode">${t("dash.colMode")}</label>
 <div class="row"><select id="mode" name="mode">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select><button>${t("common.set")}</button></div>
 </form>
+</section>
+<section>
+<h2>${t("nav.labels")}</h2>
+${labels.length
+	? html`<form method="post" action="${base}/labels">
+<div class="label-picks">${labels.map(
+	(label) => html`<label><input type="checkbox" name="labels" value="${label.id}" ${chosen.has(label.id) ? "checked" : ""} /><span class="label-chip" data-colour="${label.colour}">${label.name}</span></label>`,
+)}</div>
+<button>${t("common.save")}</button> <a href="/labels">${t("labels.manage")} →</a>
+</form>`
+	: html`<p class="muted">${t("labels.empty")} <a href="/labels">${t("labels.manage")} →</a></p>`}
 </section>
 ${importedHistory(t, alias)}
 <section>
@@ -1196,4 +1258,149 @@ ${latest?.action
 	: ""}
 ${extra.filter(([, value]) => value).map(([key, value]) => html`<p>${t(key)}: <code>${value}</code></p>`)}
 </section>`;
+}
+
+// ---------- labels ----------
+
+/** The colours to pick from; a label's own colour from an app is offered too. */
+function swatches(t: Translate, current: string, id: string): Html {
+	const colours: string[] = [...LABEL_COLOURS];
+	if (!colours.includes(current)) colours.push(current);
+	return html`<fieldset class="swatches"><legend class="sr">${t("labels.colour")}</legend>${colours.map(
+		(colour) => html`<label class="swatch" title="${colour}"><input type="radio" name="colour" value="${colour}" id="c-${id}-${colour.slice(1)}" ${colour === current ? "checked" : ""} /><span data-colour="${colour}"></span></label>`,
+	)}</fieldset>`;
+}
+
+function labelChips(labels: LabelRow[]): Html {
+	return html`<span class="labels-row">${labels.map((label) => html`<a class="label-chip" href="/?label=${encodeURIComponent(label.id)}" data-colour="${label.colour}">${label.name}</a>`)}</span>`;
+}
+
+export function labelsPage(t: Translate, input: { labels: LabelWithCount[]; notice?: string }): Html {
+	const { labels, notice } = input;
+	const next = LABEL_COLOURS[labels.length % LABEL_COLOURS.length]!;
+	return page(
+		t("labels.title"),
+		html`<main>
+${noticeBox(notice)}
+<section>
+<h2>${t("labels.title")}</h2>
+<p class="help">${t("labels.help")}</p>
+<form class="label-new mt12" method="post" action="/labels">
+<input name="name" type="text" maxlength="${MAX_LABEL_NAME}" required placeholder="${t("labels.name")}" aria-label="${t("labels.name")}" />
+${swatches(t, next, "new")}
+<button class="primary">${t("labels.add")}</button>
+</form>
+${labels.length === 0
+	? html`<p class="muted">${t("labels.empty")}</p>`
+	: html`<table class="rt mt12"><thead><tr><th>${t("labels.name")}</th><th>${t("labels.colAliases")}</th><th></th></tr></thead><tbody>
+${labels.map(
+	(label) => html`<tr>
+<td data-label="${t("labels.name")}"><form class="label-edit" method="post" action="/labels/${encodeURIComponent(label.id)}">
+<input name="name" type="text" value="${label.name}" maxlength="${MAX_LABEL_NAME}" required aria-label="${t("labels.name")}: ${label.name}" />
+${swatches(t, label.colour, label.id)}
+<button>${t("common.save")}</button>
+</form></td>
+<td data-label="${t("labels.colAliases")}"><a href="/?label=${encodeURIComponent(label.id)}">${label.aliases}</a></td>
+<td data-label=""><form class="inline" method="post" action="/labels/${encodeURIComponent(label.id)}/delete" data-confirm="${t("labels.confirmDelete", { name: label.name })}"><button class="danger">${t("bulk.delete")}</button></form></td>
+</tr>`,
+)}
+</tbody></table>`}
+</section>
+</main>`,
+		{ t, nav: true, current: "/labels", path: "/labels" },
+	);
+}
+
+// ---------- rules ----------
+
+function conditionText(t: Translate, condition: Condition): string {
+	return `${t(`rules.type.${condition.type}`)} ${t(`rules.match.${condition.match}`)} “${condition.values.join("”, “")}”`;
+}
+
+function actionText(t: Translate, action: Action): string {
+	return action.type === "block" || action.type === "removeAttachments" || action.type === "banner" ? t(`rules.action.${action.type}`) : `${t(`rules.action.${action.type}`)} “${action.value}”`;
+}
+
+export function rulesPage(t: Translate, input: { rules: Rule[]; notice?: string }): Html {
+	const { rules, notice } = input;
+	return page(
+		t("rules.title"),
+		html`<main>
+${noticeBox(notice)}
+<section>
+<h2>${t("rules.title")}</h2>
+<p class="help">${t("rules.help")}</p>
+<form method="get" action="/rules/new"><button class="primary">${t("rules.new")}</button></form>
+${rules.length === 0
+	? html`<p class="muted">${t("rules.empty")}</p>`
+	: html`<table class="rt mt12"><thead><tr><th>${t("rules.name")}</th><th>${t("rules.conditions")}</th><th>${t("rules.actions")}</th><th>${t("rules.colApplied")}</th><th></th></tr></thead><tbody>
+${rules.map((rule, index) => {
+	const base = `/rules/${encodeURIComponent(rule.id)}`;
+	return html`<tr>
+<td data-label="${t("rules.name")}"><a href="${base}">${rule.name}</a>${rule.active ? "" : html` <span class="pill">${t("rules.off")}</span>`}</td>
+<td data-label="${t("rules.conditions")}">${rule.conditions.map((condition) => conditionText(t, condition)).join(` ${t(`rules.join.${rule.operator}`)} `)}</td>
+<td data-label="${t("rules.actions")}">${rule.actions.map((action) => actionText(t, action)).join(" · ")}</td>
+<td data-label="${t("rules.colApplied")}">${rule.applied}</td>
+<td data-label=""><span class="row">
+<form class="inline" method="post" action="${base}/active"><input type="hidden" name="active" value="${rule.active ? "0" : "1"}" /><button>${rule.active ? t("rules.turnOff") : t("rules.turnOn")}</button></form>
+${index > 0 ? html`<form class="inline" method="post" action="${base}/move"><input type="hidden" name="step" value="-1" /><button title="${t("rules.moveUp")}" aria-label="${t("rules.moveUp")}: ${rule.name}">↑</button></form>` : ""}
+${index < rules.length - 1 ? html`<form class="inline" method="post" action="${base}/move"><input type="hidden" name="step" value="1" /><button title="${t("rules.moveDown")}" aria-label="${t("rules.moveDown")}: ${rule.name}">↓</button></form>` : ""}
+<form class="inline" method="post" action="${base}/delete" data-confirm="${t("rules.confirmDelete", { name: rule.name })}"><button class="danger">${t("bulk.delete")}</button></form>
+</span></td>
+</tr>`;
+})}
+</tbody></table>`}
+</section>
+</main>`,
+		{ t, nav: true, current: "/rules", path: "/rules" },
+	);
+}
+
+export function ruleEditPage(t: Translate, input: { rule: Rule | null; notice?: string }): Html {
+	const { rule, notice } = input;
+	const conditions: (Condition | null)[] = [...(rule?.conditions ?? [])];
+	while (conditions.length < Math.max(3, (rule?.conditions.length ?? 0) + 1)) conditions.push(null);
+	const actions: (Action | null)[] = [...(rule?.actions ?? [])];
+	while (actions.length < Math.max(3, (rule?.actions.length ?? 0) + 1)) actions.push(null);
+	const action = rule ? `/rules/${encodeURIComponent(rule.id)}` : "/rules";
+	const title = rule ? t("rules.edit") : t("rules.new");
+	return page(
+		title,
+		html`<main>
+<p class="m0"><a href="/rules">← ${t("rules.title")}</a></p>
+${noticeBox(notice)}
+<section>
+<h2>${title}</h2>
+<form method="post" action="${action}">
+<label for="rule-name">${t("rules.name")}</label>
+<input id="rule-name" name="name" type="text" value="${rule?.name ?? ""}" maxlength="${MAX_RULE_NAME}" required />
+<h3>${t("rules.conditions")}</h3>
+<p class="help">${t("rules.conditionsHelp")}</p>
+<label for="rule-operator">${t("rules.operator")}</label>
+<select id="rule-operator" name="operator">${(["AND", "OR"] as const).map((op) => html`<option value="${op}" ${(rule?.operator ?? "AND") === op ? "selected" : ""}>${t(`rules.operator.${op}`)}</option>`)}</select>
+<div class="rule-rows">${conditions.map(
+	(condition, i) => html`<div class="row">
+<select name="cond_type_${i}" aria-label="${t("rules.conditions")} ${i + 1}">${CONDITION_TYPES.map((type) => html`<option value="${type}" ${condition?.type === type ? "selected" : ""}>${t(`rules.type.${type}`)}</option>`)}</select>
+<select name="cond_match_${i}" aria-label="${t("rules.matchLabel")} ${i + 1}">${MATCHES.map((match) => html`<option value="${match}" ${(condition?.match ?? "contains") === match ? "selected" : ""}>${t(`rules.match.${match}`)}</option>`)}</select>
+<input type="text" name="cond_values_${i}" value="${condition?.values.join(", ") ?? ""}" placeholder="${t("rules.valuesPlaceholder")}" aria-label="${t("rules.values")} ${i + 1}" />
+</div>`,
+)}</div>
+<h3>${t("rules.actions")}</h3>
+<p class="help">${t("rules.actionsHelp")}</p>
+<div class="rule-rows">${actions.map(
+	(act, i) => html`<div class="row">
+<select name="act_type_${i}" aria-label="${t("rules.actions")} ${i + 1}"><option value="">—</option>${ACTION_TYPES.map((type) => html`<option value="${type}" ${act?.type === type ? "selected" : ""}>${t(`rules.action.${type}`)}</option>`)}</select>
+<input type="text" name="act_value_${i}" value="${act && act.type !== "block" && act.type !== "removeAttachments" && act.type !== "banner" ? act.value : ""}" aria-label="${t("rules.value")} ${i + 1}" />
+</div>`,
+)}</div>
+<h3>${t("rules.applyTo")}</h3>
+${checkbox("forwards", rule ? !!rule.forwards : true, t("rules.forwards"), t("rules.forwardsHelp"))}
+${checkbox("replies", rule ? !!(rule.replies || rule.sends) : false, t("rules.replies"), t("rules.repliesHelp"))}
+${checkbox("active", rule ? !!rule.active : true, t("rules.active"), "")}
+<p><button class="primary">${t("rules.save")}</button></p>
+</form>
+</section>
+</main>`,
+		{ t, nav: true, current: "/rules", path: action },
+	);
 }

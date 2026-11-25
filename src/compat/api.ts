@@ -16,6 +16,8 @@ import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from ".
 import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { loadSettings, normalizeSettings, saveSettings, type Settings } from "../settings";
+import { createLabel, deleteLabel, getLabel, LabelError, labelsOf, listLabels, setAliasLabels, updateLabel, type LabelRow } from "../labels";
+import { cleanRule, createRule, deleteRule, getRule, listRules, reorderRules, RuleError, setRuleActive, updateRule, type Rule } from "../rules";
 import {
 	ClientError,
 	cleanPrefix,
@@ -544,7 +546,7 @@ async function addyRecipient(email: string, aliasCount: number, settings: Settin
 	};
 }
 
-async function addyAlias(c: C, alias: AliasView) {
+async function addyAlias(c: C, alias: AliasView, labels?: LabelRow[]) {
 	const settings = c.get("settings");
 	const destination = destinationOf(alias, settings);
 	const at = alias.address.lastIndexOf("@");
@@ -567,7 +569,7 @@ async function addyAlias(c: C, alias: AliasView) {
 		emails_replied: Number(alias.nb_reply),
 		emails_sent: Number(alias.nb_sent),
 		recipients: destination && alias.destination ? [await addyRecipient(destination, 0, settings)] : [],
-		labels: [],
+		labels: (labels ?? (await labelsOf(c.env.DB, [alias.address])).get(alias.address) ?? []).map((label) => addyLabel(label)),
 		last_forwarded: addyDate(alias.last_forward_at),
 		last_blocked: addyDate(alias.last_block_at),
 		last_replied: addyDate(alias.last_reply_at),
@@ -795,6 +797,7 @@ api.get("/v1/aliases", async (c) => {
 		search: c.req.query("filter[search]")?.slice(0, 200),
 		domain,
 		destination: recipientId ? (recipient ?? { email: "\u0000", isDefault: false }) : undefined,
+		label: c.req.query("filter[label]") || undefined,
 		sort: sort ? { key: sort.replace(/^-/, ""), desc: sort.startsWith("-") } : undefined,
 		limit: size,
 		offset: (page - 1) * size,
@@ -808,7 +811,10 @@ api.get("/v1/aliases", async (c) => {
 	};
 	const from = aliases.length ? (page - 1) * size + 1 : null;
 	return c.json({
-		data: await Promise.all(aliases.map((alias) => addyAlias(c, alias))),
+		data: await (async () => {
+			const labels = await labelsOf(c.env.DB, aliases.map((alias) => alias.address));
+			return Promise.all(aliases.map((alias) => addyAlias(c, alias, labels.get(alias.address) ?? [])));
+		})(),
 		links: { first: pageUrl(1), last: pageUrl(lastPage), prev: page > 1 ? pageUrl(page - 1) : null, next: page < lastPage ? pageUrl(page + 1) : null },
 		meta: {
 			current_page: page,
@@ -835,6 +841,7 @@ api.post("/v1/aliases", async (c) => {
 		format === "custom"
 			? await createAlias(c.env.DB, settings, { localPart: cleanPrefix(str(input.local_part, 64) ?? ""), domain, note, destination })
 			: await createRandomAlias(c.env.DB, settings, { domain, format, note, destination });
+	if (Array.isArray(input.label_ids) && input.label_ids.length) await setAliasLabels(c.env.DB, [alias.address], input.label_ids);
 	return c.json({ data: await addyAlias(c, alias) }, 201);
 });
 
@@ -985,28 +992,231 @@ api.post("/v1/aliases/recipients/bulk", async (c) => {
 	return bulkDone(c, aliases, "updated");
 });
 
-// aliasflare has no labels, usernames, rules or failed-delivery store. The apps load these lists on
-// start and in the background, so answer with empty lists rather than errors; creating one is refused.
+// aliasflare has no usernames (addy.io's own subdomains; alias domains take their place). The apps
+// load the list on start, so it is answered with an empty one; adding one, a domain or a recipient
+// is refused: those are set up in aliasflare.
 const NOT_SUPPORTED = "Not supported by aliasflare";
-const emptyPage = (c: C) => {
-	const url = new URL(c.req.url);
-	return c.json({
-		data: [],
-		links: { first: null, last: null, prev: null, next: null },
-		meta: { current_page: 1, from: null, last_page: 1, links: [], path: `${url.origin}${url.pathname}`, per_page: pageSize(c.req.query("page[size]")), to: null, total: 0 },
-	});
-};
-api.get("/v1/labels", (c) => c.json({ data: [] }));
 api.get("/v1/usernames", (c) => c.json({ data: [] }));
-api.get("/v1/rules", (c) => c.json({ data: [] }));
-api.get("/v1/failed-deliveries", emptyPage);
+for (const path of ["/v1/usernames", "/v1/domains", "/v1/recipients"]) {
+	api.post(path, (c) => c.json({ message: NOT_SUPPORTED, errors: { id: [NOT_SUPPORTED] } }, 422));
+}
+
+// ---------- labels ----------
+
+function addyLabel(label: LabelRow, aliasesCount?: number) {
+	return {
+		id: label.id,
+		user_id: OWNER_ID,
+		name: label.name,
+		colour: label.colour,
+		...(aliasesCount === undefined ? {} : { aliases_count: aliasesCount }),
+		created_at: addyDate(label.created_at),
+		updated_at: addyDate(label.updated_at),
+	};
+}
+
+const LABEL_ERRORS: Record<LabelError["reason"], [number, string]> = {
+	name: [422, "The name field is required."],
+	colour: [422, "The colour must be a hex colour such as #1a73e8."],
+	taken: [422, "A label with that name already exists."],
+	limit: [422, "There are too many labels."],
+	missing: [404, "Not found"],
+};
+
+async function labelCall<T>(run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		if (error instanceof LabelError) throw new ClientError(...LABEL_ERRORS[error.reason]);
+		throw error;
+	}
+}
+
+api.get("/v1/labels", async (c) => c.json({ data: (await listLabels(c.env.DB)).map((label) => addyLabel(label, label.aliases)) }));
+api.get("/v1/labels/:id", async (c) => {
+	const label = (await listLabels(c.env.DB)).find((row) => row.id === c.req.param("id"));
+	if (!label) throw new ClientError(404, "Not found");
+	return c.json({ data: addyLabel(label, label.aliases) });
+});
+api.post("/v1/labels", async (c) => {
+	const input = await body(c);
+	return c.json({ data: addyLabel(await labelCall(() => createLabel(c.env.DB, { name: input.name, colour: input.colour })), 0) }, 201);
+});
+api.patch("/v1/labels/:id", async (c) => {
+	const input = await body(c);
+	return c.json({ data: addyLabel(await labelCall(() => updateLabel(c.env.DB, c.req.param("id"), { name: input.name, colour: input.colour }))) });
+});
+api.delete("/v1/labels/:id", async (c) => {
+	if (!(await deleteLabel(c.env.DB, c.req.param("id")))) throw new ClientError(404, "Not found");
+	return c.body(null, 204);
+});
+// Gives each alias exactly these labels; an empty list removes them all.
 api.post("/v1/aliases/labels/bulk", async (c) => {
 	const { input, aliases } = await bulkAliases(c, false);
-	if (Array.isArray(input.label_ids) && input.label_ids.length) throw new ClientError(422, NOT_SUPPORTED);
+	await setAliasLabels(c.env.DB, aliases.map((alias) => alias.address), Array.isArray(input.label_ids) ? input.label_ids : []);
 	return bulkDone(c, aliases, "updated");
 });
-for (const path of ["/v1/labels", "/v1/usernames", "/v1/rules", "/v1/domains", "/v1/recipients"]) {
-	api.post(path, (c) => c.json({ message: NOT_SUPPORTED, errors: { id: [NOT_SUPPORTED] } }, 422));
+
+// ---------- rules ----------
+
+// A rule's Forward to is an address here and a recipient id in the apps.
+async function addyRule(c: C, rule: Rule) {
+	const destinations = await listDestinations(c.env.DB, c.get("settings"));
+	return {
+		id: rule.id,
+		user_id: OWNER_ID,
+		name: rule.name,
+		order: rule.position,
+		conditions: rule.conditions,
+		actions: rule.actions.map((action) =>
+			action.type === "forwardTo" ? { ...action, value: destinations.find((d) => d.email === action.value)?.uid ?? action.value } : action,
+		),
+		operator: rule.operator,
+		forwards: !!rule.forwards,
+		replies: !!rule.replies,
+		sends: !!rule.sends,
+		active: !!rule.active,
+		applied: rule.applied,
+		last_applied: addyDate(rule.last_applied),
+		created_at: addyDate(rule.created_at),
+		updated_at: addyDate(rule.updated_at),
+	};
+}
+
+const RULE_ERRORS: Record<RuleError["reason"], [number, string]> = {
+	invalid: [422, "A rule needs a name, a condition and an action aliasflare supports."],
+	limit: [422, "There are too many rules."],
+	missing: [404, "Not found"],
+	forwardTo: [422, "The Forward to recipient is not known."],
+};
+
+async function ruleInput(c: C) {
+	const input = await body(c);
+	const destinations = await listDestinations(c.env.DB, c.get("settings"));
+	const actions = (Array.isArray(input.actions) ? input.actions : []).map((action) => {
+		if (!action || typeof action !== "object" || (action as { type?: unknown }).type !== "forwardTo") return action;
+		const value = (action as { value?: unknown }).value;
+		const match = destinations.find((d) => d.uid === value || String(d.numId) === String(value));
+		if (!match) throw new ClientError(...RULE_ERRORS.forwardTo);
+		return { type: "forwardTo", value: match.email };
+	});
+	try {
+		return cleanRule({ ...input, actions });
+	} catch (error) {
+		if (error instanceof RuleError) throw new ClientError(...RULE_ERRORS[error.reason]);
+		throw error;
+	}
+}
+
+async function ruleCall<T>(run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (error) {
+		if (error instanceof RuleError) throw new ClientError(...RULE_ERRORS[error.reason]);
+		throw error;
+	}
+}
+
+async function findRule(c: C, id: string): Promise<Rule> {
+	const rule = await getRule(c.env.DB, id);
+	if (!rule) throw new ClientError(404, "Not found");
+	return rule;
+}
+
+api.get("/v1/rules", async (c) => c.json({ data: await Promise.all((await listRules(c.env.DB)).map((rule) => addyRule(c, rule))) }));
+api.get("/v1/rules/:id", async (c) => c.json({ data: await addyRule(c, await findRule(c, c.req.param("id"))) }));
+api.post("/v1/rules", async (c) => {
+	const input = await ruleInput(c);
+	return c.json({ data: await addyRule(c, await ruleCall(() => createRule(c.env.DB, input))) }, 201);
+});
+api.patch("/v1/rules/:id", async (c) => {
+	const input = await ruleInput(c);
+	return c.json({ data: await addyRule(c, await ruleCall(() => updateRule(c.env.DB, c.req.param("id"), input))) });
+});
+api.delete("/v1/rules/:id", async (c) => {
+	if (!(await deleteRule(c.env.DB, c.req.param("id")))) throw new ClientError(404, "Not found");
+	return c.body(null, 204);
+});
+api.post("/v1/active-rules", async (c) => {
+	const id = str((await body(c)).id, 64) ?? "";
+	if (!(await setRuleActive(c.env.DB, id, true))) throw new ClientError(404, "Not found");
+	return c.json({ data: await addyRule(c, await findRule(c, id)) });
+});
+api.delete("/v1/active-rules/:id", async (c) => {
+	if (!(await setRuleActive(c.env.DB, c.req.param("id"), false))) throw new ClientError(404, "Not found");
+	return c.body(null, 204);
+});
+api.post("/v1/reorder-rules", async (c) => {
+	const ids = (await body(c)).ids;
+	await reorderRules(c.env.DB, Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string").slice(0, 100) : []);
+	return c.json({ success: true });
+});
+
+// ---------- failed deliveries ----------
+
+// Forwards that could not be sent. No copy is kept, so one cannot be downloaded or sent again.
+type FailedRow = { id: string; alias_address: string; error: string | null; created_at: number; updated_at: number; alias_uid: string | null; alias_note: string | null; sender: string | null };
+
+const FAILED_SELECT = `SELECT f.id, f.alias_address, f.error, f.created_at, f.updated_at, a.uid AS alias_uid, a.note AS alias_note, ct.email AS sender
+	FROM forwards f LEFT JOIN aliases a ON a.address = f.alias_address LEFT JOIN contacts ct ON ct.id = f.contact_id WHERE f.status = 'failed'`;
+
+function addyFailed(row: FailedRow) {
+	return {
+		id: row.id,
+		user_id: OWNER_ID,
+		recipient_id: null,
+		recipient_email: null,
+		alias_id: row.alias_uid,
+		alias_email: row.alias_address,
+		alias_description: row.alias_note,
+		bounce_type: "soft",
+		remote_mta: "",
+		sender: row.sender,
+		destination: null,
+		ir_dedupe_key: null,
+		type: "failed",
+		email_type: "F",
+		email_type_text: "Forward",
+		status: "failed",
+		code: (row.error ?? "").slice(0, 500),
+		is_stored: false,
+		quarantined: false,
+		resent: false,
+		attempted_at: addyDate(row.updated_at),
+		created_at: addyDate(row.created_at),
+		updated_at: addyDate(row.updated_at),
+	};
+}
+
+api.get("/v1/failed-deliveries", async (c) => {
+	const size = pageSize(c.req.query("page[size]"));
+	const pageNumber = pageParam(c.req.query("page[number]"), 1);
+	const [list, counted] = await c.env.DB.batch([
+		c.env.DB.prepare(`${FAILED_SELECT} ORDER BY f.created_at DESC LIMIT ? OFFSET ?`).bind(size, (pageNumber - 1) * size),
+		c.env.DB.prepare("SELECT COUNT(*) AS total FROM forwards WHERE status = 'failed'"),
+	]);
+	const rows = (list?.results ?? []) as FailedRow[];
+	const total = Number((counted?.results?.[0] as { total?: number } | undefined)?.total ?? 0);
+	const from = rows.length ? (pageNumber - 1) * size + 1 : null;
+	const url = new URL(c.req.url);
+	return c.json({
+		data: rows.map(addyFailed),
+		links: { first: null, last: null, prev: null, next: null },
+		meta: { current_page: pageNumber, from, last_page: Math.max(1, Math.ceil(total / size)), links: [], path: `${url.origin}${url.pathname}`, per_page: size, to: from ? from + rows.length - 1 : null, total },
+	});
+});
+api.get("/v1/failed-deliveries/:id", async (c) => {
+	const row = await c.env.DB.prepare(`${FAILED_SELECT} AND f.id = ?`).bind(c.req.param("id")).first<FailedRow>();
+	if (!row) throw new ClientError(404, "Not found");
+	return c.json({ data: addyFailed(row) });
+});
+api.delete("/v1/failed-deliveries/:id", async (c) => {
+	const result = await c.env.DB.prepare("DELETE FROM forwards WHERE id = ? AND status = 'failed'").bind(c.req.param("id")).run();
+	if (!result.meta.changes) throw new ClientError(404, "Not found");
+	return c.body(null, 204);
+});
+for (const path of ["/v1/failed-deliveries/:id/resend", "/v1/failed-deliveries/:id/download"]) {
+	api.all(path, (c) => c.json({ message: "aliasflare keeps no copy of a message that failed, so it cannot be sent again or downloaded." }, 422));
 }
 
 api.all("*", (c) => c.json({ error: "Not supported by aliasflare", message: "Not Found" }, 404));

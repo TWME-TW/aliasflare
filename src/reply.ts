@@ -24,6 +24,7 @@ import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES } from "./forward";
 import { readLimited } from "./streams";
 import { carriesAddresses, rewriteAttachment } from "./attachments";
+import { runRules } from "./rules";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
 
 /** Mailflare's limit per message. */
@@ -274,6 +275,13 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(`Not sent: ${why}`);
 		return;
 	}
+	// Rules for replies: the sender they test is the correspondent, the one the reply goes to.
+	const rules = await runRules(db, "replies", { sender: contact.email, subject: headerOnly?.subject ?? "", alias: contact.alias_address });
+	if (rules.block) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Not sent: the rule ${rules.block}` });
+		message.setReject(`Not sent: blocked by the rule ${rules.block}`);
+		return;
+	}
 
 	let email: Email;
 	try {
@@ -287,6 +295,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		// Drop the raw buffer before transforms and MIME serialization so GC can reclaim it.
 		raw = null;
 	}
+	if (rules.removeAttachments) email.attachments = [];
 	// A quoted forward carries the banner with its block / turn-off links; they are the
 	// owner's, so neither the banner nor any signed link may reach the correspondent.
 	let html = email.html ? await removeBanner(stripSignedLinks(email.html)) : undefined;
@@ -351,7 +360,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(refused);
 		return;
 	}
-	const subject = cleanSubjectLine(email.subject) || "(no subject)";
+	const subject = cleanSubjectLine(rules.subject ?? email.subject) || "(no subject)";
 	const name = alias.name?.replace(/[\u0000-\u001f\u007f"\\<>]/g, "").trim() || "";
 
 	try {

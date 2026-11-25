@@ -57,14 +57,14 @@ describe("addy.io apps", () => {
 		expect(options.json).toMatchObject({ data: ["a.test", "b.test"], sharedDomains: [], defaultAliasDomain: "a.test" });
 	});
 
-	it("load empty labels, usernames, rules and failed deliveries instead of failing", async () => {
+	it("load labels, usernames, rules and failed deliveries (empty at first) instead of failing", async () => {
 		for (const path of ["/v1/labels", "/v1/usernames", "/v1/rules", "/v1/failed-deliveries"]) {
 			const { status, json } = await call(path);
 			expect(status, path).toBe(200);
 			expect(json.data, path).toEqual([]);
 		}
 		expect((await call("/v1/failed-deliveries")).json.meta).toMatchObject({ total: 0, links: [], last_page: 1 });
-		expect((await call("/v1/labels", "POST", { name: "x" })).status).toBe(422);
+		expect((await call("/v1/usernames", "POST", { username: "x" })).status).toBe(422);
 	});
 
 	it("sort the alias list", async () => {
@@ -121,7 +121,8 @@ describe("addy.io apps", () => {
 
 		expect((await call("/v1/aliases/delete/bulk", "POST", { ids: [] })).status).toBe(422);
 		expect((await call("/v1/aliases/labels/bulk", "POST", { ids: ["u1"], label_ids: [] })).status).toBe(200);
-		expect((await call("/v1/aliases/labels/bulk", "POST", { ids: ["u1"], label_ids: ["l1"] })).status).toBe(422);
+		// An unknown label id is left out.
+		expect((await call("/v1/aliases/labels/bulk", "POST", { ids: ["u1"], label_ids: ["l1"] })).status).toBe(200);
 	});
 
 	it("give the blocklist page the meta the iOS app decodes", async () => {

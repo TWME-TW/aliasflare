@@ -1,0 +1,261 @@
+/**
+ * Rules (addy.io's): conditions on the sender, subject or alias, and actions on mail that
+ * matches. Rules run in order; every matching rule's actions apply, a later one overriding an
+ * earlier one's value. Matching is on plain text, case-insensitively; there are no regular
+ * expressions, so no rule can make a message slow to check.
+ */
+import { extractEmail, normalizeEmail } from "./format";
+import { newId, now } from "./db";
+
+export const CONDITION_TYPES = ["sender", "subject", "alias"] as const;
+export const MATCHES = ["is exactly", "is not", "contains", "does not contain", "starts with", "does not start with", "ends with", "does not end with"] as const;
+export const ACTION_TYPES = ["block", "subject", "displayFrom", "forwardTo", "removeAttachments", "banner"] as const;
+/** Actions that act on replies too; the others only make sense for forwarded mail. */
+export const REPLY_ACTIONS: readonly ActionType[] = ["block", "subject", "removeAttachments"];
+
+export type ConditionType = (typeof CONDITION_TYPES)[number];
+export type Match = (typeof MATCHES)[number];
+export type ActionType = (typeof ACTION_TYPES)[number];
+export type Condition = { type: ConditionType; match: Match; values: string[] };
+export type Action = { type: ActionType; value: string };
+
+export type RuleRow = {
+	id: string;
+	name: string;
+	position: number;
+	operator: "AND" | "OR";
+	conditions: string;
+	actions: string;
+	forwards: number;
+	replies: number;
+	sends: number;
+	active: number;
+	applied: number;
+	last_applied: number | null;
+	created_at: number;
+	updated_at: number;
+};
+
+export type Rule = Omit<RuleRow, "conditions" | "actions"> & { conditions: Condition[]; actions: Action[] };
+
+export type RuleInput = {
+	name: string;
+	operator: "AND" | "OR";
+	conditions: Condition[];
+	actions: Action[];
+	forwards: boolean;
+	replies: boolean;
+	sends: boolean;
+	active: boolean;
+};
+
+export const MAX_RULES = 50;
+const MAX_CONDITIONS = 10;
+const MAX_ACTIONS = 10;
+const MAX_VALUES = 20;
+const MAX_VALUE_LENGTH = 200;
+export const MAX_RULE_NAME = 60;
+
+export class RuleError extends Error {
+	constructor(readonly reason: "invalid" | "limit" | "missing" | "forwardTo") {
+		super(reason);
+	}
+}
+
+const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, max) : "");
+
+function cleanCondition(raw: unknown): Condition | null {
+	if (!raw || typeof raw !== "object") return null;
+	const { type, match, values } = raw as Record<string, unknown>;
+	if (!CONDITION_TYPES.includes(type as ConditionType)) return null;
+	// A match aliasflare does not know (addy.io's regular expressions) drops the condition rather than test something else.
+	if (!MATCHES.includes(match as Match)) return null;
+	const cleanMatch = match as Match;
+	const list = (Array.isArray(values) ? values : typeof values === "string" ? values.split(",") : [])
+		.map((value) => text(value, MAX_VALUE_LENGTH).toLowerCase())
+		.filter(Boolean)
+		.slice(0, MAX_VALUES);
+	return list.length ? { type: type as ConditionType, match: cleanMatch, values: [...new Set(list)] } : null;
+}
+
+function cleanAction(raw: unknown): Action | null {
+	if (!raw || typeof raw !== "object") return null;
+	const { type, value } = raw as Record<string, unknown>;
+	if (!ACTION_TYPES.includes(type as ActionType)) return null;
+	const kind = type as ActionType;
+	if (kind === "block" || kind === "removeAttachments") return { type: kind, value: "true" };
+	// Only hiding the banner: addy.io's top and bottom places are both "shown" here.
+	if (kind === "banner") return value === "off" ? { type: kind, value: "off" } : null;
+	const cleaned = text(typeof value === "number" ? String(value) : value, kind === "displayFrom" ? 100 : MAX_VALUE_LENGTH);
+	if (!cleaned) return null;
+	if (kind === "forwardTo") {
+		const email = extractEmail(cleaned);
+		if (!email) throw new RuleError("forwardTo");
+		return { type: kind, value: email };
+	}
+	return { type: kind, value: cleaned };
+}
+
+/** Checks a rule from a form or an app. A rule needs a name, a condition and an action. */
+export function cleanRule(raw: Record<string, unknown>): RuleInput {
+	const name = text(raw.name, MAX_RULE_NAME);
+	const conditions = (Array.isArray(raw.conditions) ? raw.conditions : []).slice(0, MAX_CONDITIONS).map(cleanCondition).filter((c): c is Condition => !!c);
+	const actions = (Array.isArray(raw.actions) ? raw.actions : []).slice(0, MAX_ACTIONS).map(cleanAction).filter((a): a is Action => !!a);
+	if (!name || !conditions.length || !actions.length) throw new RuleError("invalid");
+	const flag = (value: unknown, fallback: boolean) => (value === undefined ? fallback : value === true || value === 1 || value === "1" || value === "true" || value === "on");
+	return {
+		name,
+		operator: String(raw.operator).toUpperCase() === "OR" ? "OR" : "AND",
+		conditions,
+		actions,
+		forwards: flag(raw.forwards, true),
+		replies: flag(raw.replies, false),
+		sends: flag(raw.sends, false),
+		active: flag(raw.active, true),
+	};
+}
+
+function parse(row: RuleRow): Rule {
+	const json = <T>(value: string): T[] => {
+		try {
+			const parsed = JSON.parse(value);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch {
+			return [];
+		}
+	};
+	return { ...row, conditions: json<Condition>(row.conditions), actions: json<Action>(row.actions) };
+}
+
+export async function listRules(db: D1Database): Promise<Rule[]> {
+	const { results } = await db.prepare("SELECT * FROM rules ORDER BY position, created_at").all<RuleRow>();
+	return results.map(parse);
+}
+
+export async function getRule(db: D1Database, id: string): Promise<Rule | null> {
+	const row = await db.prepare("SELECT * FROM rules WHERE id = ?").bind(id).first<RuleRow>();
+	return row ? parse(row) : null;
+}
+
+export async function createRule(db: D1Database, input: RuleInput): Promise<Rule> {
+	const count = await db.prepare("SELECT COUNT(*) AS n, COALESCE(MAX(position), -1) AS top FROM rules").first<{ n: number; top: number }>();
+	if (Number(count?.n ?? 0) >= MAX_RULES) throw new RuleError("limit");
+	const id = newId("rl");
+	const timestamp = now();
+	await db
+		.prepare(
+			"INSERT INTO rules (id, name, position, operator, conditions, actions, forwards, replies, sends, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		)
+		.bind(id, input.name, Number(count?.top ?? -1) + 1, input.operator, JSON.stringify(input.conditions), JSON.stringify(input.actions), +input.forwards, +input.replies, +input.sends, +input.active, timestamp, timestamp)
+		.run();
+	return (await getRule(db, id))!;
+}
+
+export async function updateRule(db: D1Database, id: string, input: RuleInput): Promise<Rule> {
+	const result = await db
+		.prepare("UPDATE rules SET name = ?, operator = ?, conditions = ?, actions = ?, forwards = ?, replies = ?, sends = ?, active = ?, updated_at = ? WHERE id = ?")
+		.bind(input.name, input.operator, JSON.stringify(input.conditions), JSON.stringify(input.actions), +input.forwards, +input.replies, +input.sends, +input.active, now(), id)
+		.run();
+	if (!result.meta.changes) throw new RuleError("missing");
+	return (await getRule(db, id))!;
+}
+
+export async function setRuleActive(db: D1Database, id: string, active: boolean): Promise<boolean> {
+	const result = await db.prepare("UPDATE rules SET active = ?, updated_at = ? WHERE id = ?").bind(+active, now(), id).run();
+	return (result.meta.changes ?? 0) > 0;
+}
+
+export async function deleteRule(db: D1Database, id: string): Promise<boolean> {
+	const result = await db.prepare("DELETE FROM rules WHERE id = ?").bind(id).run();
+	return (result.meta.changes ?? 0) > 0;
+}
+
+/** Puts the rules in this order; rules left out keep their place after them. */
+export async function reorderRules(db: D1Database, ids: string[]): Promise<void> {
+	const rules = await listRules(db);
+	const known = new Set(rules.map((rule) => rule.id));
+	const first = [...new Set(ids)].filter((id) => known.has(id));
+	const order = [...first, ...rules.map((rule) => rule.id).filter((id) => !first.includes(id))];
+	if (order.length) await db.batch(order.map((id, position) => db.prepare("UPDATE rules SET position = ? WHERE id = ?").bind(position, id)));
+}
+
+/** Moves a rule one place up (-1) or down (+1). */
+export async function moveRule(db: D1Database, id: string, step: -1 | 1): Promise<void> {
+	const ids = (await listRules(db)).map((rule) => rule.id);
+	const at = ids.indexOf(id);
+	const to = at + step;
+	if (at < 0 || to < 0 || to >= ids.length) return;
+	[ids[at], ids[to]] = [ids[to]!, ids[at]!];
+	await reorderRules(db, ids);
+}
+
+function test(match: Match, subject: string, value: string): boolean {
+	switch (match) {
+		case "is exactly":
+			return subject === value;
+		case "is not":
+			return subject !== value;
+		case "contains":
+			return subject.includes(value);
+		case "does not contain":
+			return !subject.includes(value);
+		case "starts with":
+			return subject.startsWith(value);
+		case "does not start with":
+			return !subject.startsWith(value);
+		case "ends with":
+			return subject.endsWith(value);
+		case "does not end with":
+			return !subject.endsWith(value);
+	}
+}
+
+export type RuleMessage = { sender: string; subject: string; alias: string };
+
+/** Whether the message meets the condition: any of its values for a positive match, all of them for a negative one ("is not a or b"). */
+function meets(condition: Condition, message: RuleMessage): boolean {
+	const field = (condition.type === "sender" ? normalizeEmail(message.sender) : condition.type === "alias" ? normalizeEmail(message.alias) : message.subject.toLowerCase());
+	const negative = condition.match.startsWith("is not") || condition.match.startsWith("does not");
+	return negative ? condition.values.every((value) => test(condition.match, field, value)) : condition.values.some((value) => test(condition.match, field, value));
+}
+
+export function ruleMatches(rule: Rule, message: RuleMessage): boolean {
+	if (!rule.conditions.length) return false;
+	return rule.operator === "OR" ? rule.conditions.some((c) => meets(c, message)) : rule.conditions.every((c) => meets(c, message));
+}
+
+export type RuleOutcome = {
+	block?: string;
+	subject?: string;
+	displayFrom?: string;
+	forwardTo?: string;
+	removeAttachments?: boolean;
+	hideBanner?: boolean;
+	applied: string[];
+};
+
+/** The combined actions of every active rule that matches, for forwarded mail or for replies. */
+export async function runRules(db: D1Database, kind: "forwards" | "replies", message: RuleMessage): Promise<RuleOutcome> {
+	const { results } = await db
+		.prepare(`SELECT * FROM rules WHERE active = 1 AND ${kind === "forwards" ? "forwards = 1" : "(replies = 1 OR sends = 1)"} ORDER BY position, created_at`)
+		.all<RuleRow>();
+	const outcome: RuleOutcome = { applied: [] };
+	for (const rule of results.map(parse)) {
+		if (!ruleMatches(rule, message)) continue;
+		outcome.applied.push(rule.id);
+		for (const action of rule.actions) {
+			if (kind === "replies" && !REPLY_ACTIONS.includes(action.type)) continue;
+			if (action.type === "block") outcome.block ??= rule.name;
+			else if (action.type === "subject") outcome.subject = action.value;
+			else if (action.type === "displayFrom") outcome.displayFrom = action.value;
+			else if (action.type === "forwardTo") outcome.forwardTo = action.value;
+			else if (action.type === "removeAttachments") outcome.removeAttachments = true;
+			else if (action.type === "banner") outcome.hideBanner = true;
+		}
+	}
+	if (outcome.applied.length) {
+		const timestamp = now();
+		await db.batch(outcome.applied.map((id) => db.prepare("UPDATE rules SET applied = applied + 1, last_applied = ? WHERE id = ?").bind(timestamp, id)));
+	}
+	return outcome;
+}
