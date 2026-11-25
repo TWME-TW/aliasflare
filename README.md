@@ -6,6 +6,17 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 
 [繁體中文說明](README.zh-TW.md)
 
+## Screenshots
+
+![The alias list](docs/screenshots/dashboard.png)
+
+| An alias and its contacts | Activity |
+| --- | --- |
+| ![An alias and its contacts](docs/screenshots/alias.png) | ![Activity](docs/screenshots/activity.png) |
+| ![Settings](docs/screenshots/settings.png) | ![Dark mode](docs/screenshots/dashboard-dark.png) |
+
+<p align="center"><img src="docs/screenshots/mobile.png" width="300" alt="On a phone"></p>
+
 ## Features
 
 **Aliases and replies**

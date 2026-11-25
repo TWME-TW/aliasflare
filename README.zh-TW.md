@@ -6,6 +6,17 @@ SimpleLogin 風格的**電子郵件別名與反向別名**，只需要一個 Clo
 
 [English](README.md)
 
+## 畫面截圖
+
+![別名列表](docs/screenshots/dashboard.png)
+
+| 單一別名與聯絡人 | 活動紀錄 |
+| --- | --- |
+| ![單一別名與聯絡人](docs/screenshots/alias.png) | ![活動紀錄](docs/screenshots/activity.png) |
+| ![設定](docs/screenshots/settings.png) | ![深色模式](docs/screenshots/dashboard-dark.png) |
+
+<p align="center"><img src="docs/screenshots/mobile.png" width="300" alt="手機畫面"></p>
+
 ## 功能
 
 **別名與回信**

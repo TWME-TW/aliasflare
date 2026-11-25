@@ -123,6 +123,8 @@ details { margin-top:16px; } summary { cursor:pointer; color:var(--primary); fon
 .sidebar .lang select { flex:1; max-width:none; }
 footer.page { display:flex; justify-content:center; padding:24px 16px; }
 .powered { color:var(--muted); font-size:12px; margin:12px 18px 0; }
+.sidebar .powered a { display:inline; height:auto; padding:0; border-radius:0; color:inherit; font-weight:400; text-decoration:underline; }
+.sidebar .powered a:hover { background:none; }
 
 @media (max-width: 900px) {
 	.topbar { padding:8px 14px; min-height:56px; }
