@@ -81,7 +81,12 @@ const MAX_FETCHES = 900;
 
 /** Counts the requests of one import against MAX_FETCHES. */
 export type FetchBudget = { left: number };
-export const newFetchBudget = (): FetchBudget => ({ left: MAX_FETCHES });
+/**
+ * On the Workers Free plan a request may make 50 subrequests, fetches and D1 queries together;
+ * 25 fetches leave room for the queries of the import itself.
+ */
+const MAX_FETCHES_FREE = 25;
+export const newFetchBudget = (plan: "free" | "paid" = "paid"): FetchBudget => ({ left: plan === "free" ? MAX_FETCHES_FREE : MAX_FETCHES });
 
 const text = (value: unknown, max = 500): string | null => (typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null);
 const count = (value: unknown): number => {
@@ -129,7 +134,7 @@ function clean(object: Record<string, unknown>): Record<string, unknown> {
 
 async function getJson(url: string, headers: Record<string, string>, budget: FetchBudget): Promise<unknown> {
 	for (let attempt = 0; ; attempt += 1) {
-		if (budget.left <= 0) throw new ImportError("fetch", `more than ${MAX_FETCHES} requests needed; import in parts`);
+		if (budget.left <= 0) throw new ImportError("fetch", "this import needs more requests than one run may make; on the Workers Free plan, export a CSV file from the service and import that instead");
 		budget.left -= 1;
 		let response: Response;
 		try {
@@ -415,7 +420,7 @@ export async function importAliases(
 	source: ImportSource,
 	selection: Selection,
 	found: number,
-	options: { keepDestinations?: boolean } = {},
+	options: { keepDestinations?: boolean; batchSize?: number } = {},
 ): Promise<ImportResult> {
 	const list = selection.chosen;
 	// Forwarding addresses already in use here. Others from the import are only taken when asked:
@@ -437,14 +442,11 @@ export async function importAliases(
 		return destination;
 	};
 	const existing = new Set<string>();
-	for (let i = 0; i < list.length; i += 90) {
-		const chunk = list.slice(i, i + 90);
-		const { results } = await db
-			.prepare(`SELECT address FROM aliases WHERE address IN (${chunk.map(() => "?").join(", ")})`)
-			.bind(...chunk.map((alias) => alias.email))
-			.all<{ address: string }>();
-		for (const row of results) existing.add(row.address);
-	}
+	// One query for every address, not one per chunk: on the Workers Free plan a request may
+	// make only 50 D1 queries in all.
+	const { results: storedAliases } = await db.prepare("SELECT address FROM aliases").all<{ address: string }>();
+	const wanted = new Set(list.map((alias) => alias.email));
+	for (const row of storedAliases) if (wanted.has(row.address)) existing.add(row.address);
 
 	// Replies need a Mailflare mailbox; borrow the one of another alias on the same domain until
 	// the alias receives its first message (the webhook corrects it then).
@@ -536,11 +538,15 @@ export async function importAliases(
 			);
 		}
 	}
-	for (let i = 0; i < statements.length; i += 100) await db.batch(statements.slice(i, i + 100));
-	// Contacts brought in with their history count toward when each alias was last used.
+	// A batch is one query, so larger batches keep a big import inside the per-request query limit.
+	const batchSize = options.batchSize ?? 100;
+	for (let i = 0; i < statements.length; i += batchSize) await db.batch(statements.slice(i, i + batchSize));
+	// The imported history (the other service's last forward, reply or send, and the contacts'
+	// own) counts toward when each alias was last used.
 	await db
 		.prepare(
-			`UPDATE aliases SET last_used_at = NULLIF(MAX(COALESCE(last_used_at, 0), COALESCE((SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address), 0)), 0)
+			`UPDATE aliases SET last_used_at = NULLIF(MAX(COALESCE(last_used_at, 0), COALESCE(imported_last_forward_at, 0), COALESCE(imported_last_reply_at, 0), COALESCE(imported_last_sent_at, 0),
+			   COALESCE((SELECT MAX(MAX(COALESCE(c.last_forward_at, 0), COALESCE(c.last_reply_at, 0))) FROM contacts c WHERE c.alias_address = aliases.address), 0)), 0)
 			 WHERE imported_at = ?`,
 		)
 		.bind(timestamp)

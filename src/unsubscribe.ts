@@ -1,4 +1,5 @@
 import { mailflareReady, type AppConfig } from "./config";
+import { sendOutbound } from "./outbound";
 import { verifyToken } from "./crypto";
 import { getAlias, now, recordEvent, setForwardMode, type ForwardRow } from "./db";
 import { domainOf, extractEmail } from "./format";
@@ -160,7 +161,7 @@ async function runOriginalUnsubscribe(env: Env, config: AppConfig, forward: Forw
 		if (alias.mailbox_id && mailflareReady(config)) {
 			await sendViaMailflare(mailflareConfig(config), { mailboxId: alias.mailbox_id, from: alias.address, to: [plan.to], subject: plan.subject, text: "unsubscribe" });
 		} else {
-			await env.EMAIL.send({ from: alias.address, to: plan.to, subject: plan.subject, text: "unsubscribe" });
+			await sendOutbound(env, config, { from: alias.address, to: plan.to, subject: plan.subject, text: "unsubscribe" });
 		}
 		return `unsubscribe email to ${plan.to}`;
 	}

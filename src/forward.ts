@@ -159,8 +159,19 @@ export async function handleDirectInbound(message: ForwardableEmailMessage, env:
 		envelopeFrom: message.from,
 		origin: config.siteOrigin,
 		load: async () => ({ mailboxId: "", raw: await readRaw(message.raw, message.rawSize) }),
+		size: message.rawSize,
+		// Email Routing's own forward: no parsing, so no CPU, but the message goes as it is.
+		passThrough: message.headers.get(LOOP_HEADER) ? undefined : async (destination) => {
+					await message.forward(destination, new Headers({ [LOOP_HEADER]: aliasAddress }));
+				},
 	});
 }
+
+/**
+ * On the Workers Free plan a request has 10 ms of CPU. Reading a message and rewriting it
+ * takes about 1 ms per 70 KB, so a larger message is passed through unchanged instead.
+ */
+export const FREE_PLAN_REWRITE_BYTES = 512 * 1024;
 
 type ForwardInput = {
 	/** Identifies the delivery, so the same message is forwarded once. */
@@ -170,6 +181,10 @@ type ForwardInput = {
 	/** Origin of the links in the banner and the unsubscribe header. */
 	origin: string;
 	load: () => Promise<StoredMessage>;
+	/** Declared size of the message, when known before it is read. */
+	size?: number;
+	/** Delivers the message unchanged, when it is too large to rewrite on the Free plan. */
+	passThrough?: (destination: string) => Promise<void>;
 };
 
 async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput): Promise<ForwardOutcome> {
@@ -199,8 +214,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
 		if (known?.deleted_at) return await skip("the alias was deleted");
 		if (known?.forward_mode === "none") return await skip("forwarding is off for this alias");
-		const stored = await input.load();
-		const alias = await ensureAlias(db, aliasAddress, stored.mailboxId, {
+		const passThrough = config.workersPlan === "free" && input.passThrough && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES ? input.passThrough : null;
+		const stored = passThrough ? null : await input.load();
+		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", {
 			forwardEnabled: settings.autoForwardNewAliases,
 			destination: settings.defaultDestination || null,
 		});
@@ -210,7 +226,28 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (!destination) return await skip("no forwarding address");
 		if (isOwnAddress(destination, [...settings.aliasDomains, aliasDomain])) return await skip("destination would loop");
 
-		const email = await PostalMime.parse(stored.raw, { attachmentEncoding: "arraybuffer" });
+		if (passThrough) {
+			// Without reading the message only the envelope sender can be checked.
+			const sender = parseBareEmail(event.from);
+			if (sender && isReverseDomainOf(domainOf(sender), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
+			const blocked = sender ? await matchBlocklist(db, sender) : null;
+			if (blocked) return await skip(`blocklist: ${blocked.value}`);
+			await passThrough(destination);
+			const sentAt = now();
+			try {
+				await db.batch([
+					db
+						.prepare("UPDATE forwards SET status = 'sent', error = ?, updated_at = ? WHERE id = ?")
+						.bind(`passed through unchanged: larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB on the Workers Free plan, so replies to it do not go through the alias`, sentAt, forwardId),
+					db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(sentAt, aliasAddress),
+				]);
+			} catch (error) {
+				console.error("Passed through, but recording it failed", event.messageId, error instanceof Error ? error.message : error);
+			}
+			return { status: 200, result: "passed through" };
+		}
+
+		const email = await PostalMime.parse(stored!.raw, { attachmentEncoding: "arraybuffer" });
 		if (headerValue(email, LOOP_HEADER)) return await skip("already forwarded by this Worker");
 
 		// The parsed From address must itself be one plain address. One that is not (a quoted
@@ -236,7 +273,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias");
 		if (email.attachments.length > MAX_ATTACHMENTS) return await skip(`${email.attachments.length} attachments (at most ${MAX_ATTACHMENTS})`);
 
-		const headerBlock = rawHeaderSection(stored.raw);
+		const headerBlock = rawHeaderSection(stored!.raw);
 		const spoofed = malformedFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
 		// A display name from a message that failed DMARC is not trusted to rename a contact.
 		const senderName = spoofed ? null : email.from?.name?.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, MAX_NAME_LENGTH) || null;

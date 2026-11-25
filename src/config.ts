@@ -5,6 +5,7 @@
  */
 import { randomToken } from "./format";
 import type { MessageKey } from "./i18n";
+import { isOutboundProvider, type OutboundProvider } from "./outbound";
 
 export type AppConfig = {
 	mailflareUrl: string;
@@ -21,8 +22,20 @@ export type AppConfig = {
 	cloudflareApiToken: string;
 	/** This Worker's name, which the Email Routing rule sends mail to. */
 	workerName: string;
+	/** What sends mail to other people (replies, unsubscribe mail). */
+	outboundProvider: OutboundProvider;
+	outboundApiKey: string;
+	/**
+	 * The Workers plan. Free allows 50 subrequests (fetches and D1 queries) and 10 ms of CPU per
+	 * request, so imports are smaller and large messages are passed through unchanged.
+	 */
+	workersPlan: WorkersPlan;
 	mailflareService?: Fetcher;
 };
+
+export const WORKERS_PLANS = ["free", "paid"] as const;
+export type WorkersPlan = (typeof WORKERS_PLANS)[number];
+export const isWorkersPlan = (value: unknown): value is WorkersPlan => WORKERS_PLANS.includes(value as WorkersPlan);
 
 type StoredKey =
 	| "mailflareUrl"
@@ -31,7 +44,10 @@ type StoredKey =
 	| "signingSecret"
 	| "publicUrl"
 	| "cloudflareApiToken"
-	| "workerName";
+	| "workerName"
+	| "outboundProvider"
+	| "outboundApiKey"
+	| "workersPlan";
 
 const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	mailflareUrl: "MAILFLARE_URL",
@@ -41,6 +57,9 @@ const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	publicUrl: "PUBLIC_URL",
 	cloudflareApiToken: "CLOUDFLARE_API_TOKEN",
 	workerName: "WORKER_NAME",
+	outboundProvider: "OUTBOUND_PROVIDER",
+	outboundApiKey: "OUTBOUND_API_KEY",
+	workersPlan: "WORKERS_PLAN",
 };
 
 /** Which values come from the environment, so the dashboard can show them as fixed. */
@@ -94,6 +113,10 @@ function checkEnv(env: Env): void {
 	for (const name of ["MAILFLARE_URL", "PUBLIC_URL"] as const) {
 		if (value(name) && !validOrigin(value(name))) throw new ConfigError(`${name} must be an https:// URL without a user name or password`);
 	}
+	if (value("OUTBOUND_PROVIDER") && !isOutboundProvider(value("OUTBOUND_PROVIDER").toLowerCase())) {
+		throw new ConfigError("OUTBOUND_PROVIDER must be cloudflare, resend or smtp2go");
+	}
+	if (value("WORKERS_PLAN") && !isWorkersPlan(value("WORKERS_PLAN").toLowerCase())) throw new ConfigError("WORKERS_PLAN must be free or paid");
 	const worker = value("WORKER_NAME").toLowerCase();
 	if (worker && !WORKER_NAME_PATTERN.test(worker)) throw new ConfigError("WORKER_NAME is not a valid Worker name");
 }
@@ -127,6 +150,10 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 		// Only from the CLOUDFLARE_API_TOKEN secret: a token typed on the dashboard is never stored.
 		cloudflareApiToken: env.CLOUDFLARE_API_TOKEN?.trim() ?? "",
 		workerName: pick("workerName") || "aliasflare",
+		outboundProvider: ((provider) => (isOutboundProvider(provider) ? provider : "cloudflare"))(pick("outboundProvider").toLowerCase()),
+		outboundApiKey: pick("outboundApiKey"),
+		// Free unless told otherwise: the stricter limits work on both plans.
+		workersPlan: pick("workersPlan").toLowerCase() === "paid" ? "paid" : "free",
 		mailflareService: env.MAILFLARE_SERVICE,
 	};
 }

@@ -19,7 +19,9 @@ import { aliasDomainOfReverse } from "./domains";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { loadSettings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
+import { FREE_PLAN_REWRITE_BYTES } from "./forward";
 import { readLimited } from "./streams";
+import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound } from "./outbound";
 
 /** Mailflare's limit per message. */
 const MAX_ATTACHMENTS = 10;
@@ -184,11 +186,15 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	const settings = await loadSettings(db);
 	const destination = alias.destination || settings.defaultDestination;
 
-	const raw = message.rawSize > MAX_MESSAGE_BYTES ? null : await readLimited(message.raw, MAX_MESSAGE_BYTES);
+	// A reply always has to be rewritten (it goes out as the alias), so on the Free plan, with
+	// 10 ms of CPU, a large one is refused with a clear reason rather than cut off midway.
+	const sizeLimit = config.workersPlan === "free" ? FREE_PLAN_REWRITE_BYTES : MAX_MESSAGE_BYTES;
+	const raw = message.rawSize > sizeLimit ? null : await readLimited(message.raw, sizeLimit);
 	if (!raw) {
 		await message.raw.cancel().catch(() => undefined);
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Larger than ${MAX_MESSAGE_BYTES} bytes` });
-		message.setReject(`Message too large: at most ${MAX_MESSAGE_BYTES} bytes`);
+		const why = config.workersPlan === "free" ? `at most ${sizeLimit / 1024} KB on the Workers Free plan` : `at most ${sizeLimit} bytes`;
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Too large: ${why}` });
+		message.setReject(`Message too large: ${why}`);
 		return;
 	}
 	const headers = headerSection(raw);
@@ -248,9 +254,9 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		.slice(-MAX_REFERENCES);
 
 	// An alias Mailflare receives also sends through Mailflare, so the reply is kept in its
-	// mailbox there. Every other alias sends with Cloudflare Email Sending.
+	// mailbox there. Every other alias sends with the provider chosen on the Connection page.
 	const viaMailflare = !!alias.mailbox_id && mailflareReady(config);
-	const limit = viaMailflare ? MAX_ATTACHMENTS : MAX_SENDING_ATTACHMENTS;
+	const limit = viaMailflare ? MAX_ATTACHMENTS : Math.min(MAX_SENDING_ATTACHMENTS, OUTBOUND_ATTACHMENT_LIMITS[config.outboundProvider]);
 	if (email.attachments.length > limit) {
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `${email.attachments.length} attachments; at most ${limit}` });
 		message.setReject(`Too many attachments: at most ${limit} per message`);
@@ -284,7 +290,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			const headers: Record<string, string> = {};
 			if (inReplyTo) headers["In-Reply-To"] = inReplyTo;
 			if (references.length) headers.References = references.join(" ");
-			await env.EMAIL.send({
+			await sendOutbound(env, config, {
 				from: name ? { name, email: contact.alias_address } : contact.alias_address,
 				to: contact.email,
 				subject,
@@ -292,12 +298,14 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 				...(html ? { html } : {}),
 				text: text ?? (html ? undefined : ""),
 				attachments: email.attachments.map((attachment, index) => {
-					const filename = attachment.filename || `attachment-${index + 1}`;
-					const type = attachment.mimeType || "application/octet-stream";
 					const contentId = attachment.contentId?.replace(/^<|>$/g, "");
-					return attachment.disposition === "inline" && contentId
-						? { disposition: "inline" as const, contentId, filename, type, content: attachment.content as ArrayBuffer }
-						: { disposition: "attachment" as const, filename, type, content: attachment.content as ArrayBuffer };
+					return {
+						disposition: attachment.disposition === "inline" && contentId ? ("inline" as const) : ("attachment" as const),
+						...(contentId ? { contentId } : {}),
+						filename: attachment.filename || `attachment-${index + 1}`,
+						type: attachment.mimeType || "application/octet-stream",
+						content: attachment.content as ArrayBuffer,
+					};
 				}),
 			});
 		}

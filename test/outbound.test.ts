@@ -1,0 +1,126 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import worker from "../src/index";
+import { loadSettings, saveSettings } from "../src/settings";
+import { loadConfig } from "../src/config";
+import { FREE_PLAN_REWRITE_BYTES } from "../src/forward";
+import { testDb } from "./helpers/d1";
+import { TEST_SECRET } from "./helpers/session";
+
+/** Mail to other people through Resend or SMTP2GO, and the Workers Free plan's limits. */
+let db: D1Database;
+let env: Env;
+let sent: { from: unknown; to: unknown }[];
+let forwardedTo: string[];
+let calls: { url: string; headers: Record<string, string>; body: Record<string, unknown> }[];
+
+beforeEach(async () => {
+	db = testDb();
+	sent = [];
+	forwardedTo = [];
+	calls = [];
+	env = {
+		DB: db,
+		SIGNING_SECRET: TEST_SECRET,
+		EMAIL: { send: async (message: { from: unknown; to: unknown }) => (sent.push(message), { messageId: `<s${sent.length}@test>` }) },
+	} as unknown as Env;
+	await saveSettings(db, { ...(await loadSettings(db)), aliasDomains: ["a.test"], defaultDestination: "owner@gmail.test" });
+	await db.prepare("INSERT INTO config (key, value) VALUES ('siteOrigin', 'https://alias.test')").run();
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+function stubProvider(answer: (url: string) => Response) {
+	vi.stubGlobal("fetch", async (url: string, init: RequestInit = {}) => {
+		calls.push({ url, headers: init.headers as Record<string, string>, body: JSON.parse(String(init.body)) });
+		return answer(url);
+	});
+}
+
+function inbound(to: string, from: string, head: string, body = "Hello", size?: number) {
+	const raw = `${head}\r\nTo: ${to}\r\nSubject: Hi\r\nMessage-ID: <${crypto.randomUUID()}@x>\r\nContent-Type: text/plain\r\n\r\n${body}\r\n`;
+	let rejected: string | null = null;
+	const headers = new Headers();
+	for (const line of raw.split("\r\n\r\n")[0]!.split("\r\n")) {
+		const at = line.indexOf(":");
+		if (at > 0) headers.append(line.slice(0, at), line.slice(at + 1).trim());
+	}
+	const msg = {
+		to,
+		from,
+		headers,
+		raw: new Response(raw).body,
+		rawSize: size ?? raw.length,
+		forward: async (destination: string) => void forwardedTo.push(destination),
+		setReject: (reason: string) => void (rejected = reason),
+	} as unknown as ForwardableEmailMessage;
+	return { msg, rejected: () => rejected };
+}
+const deliver = (msg: ForwardableEmailMessage) => worker.email!(msg as never, env);
+const PASS = "Authentication-Results: mx.cloudflare.net; spf=pass; dmarc=pass header.from=gmail.test";
+
+async function reverseAliasOfBob(): Promise<string> {
+	await deliver(inbound("shop@a.test", "bob@store.test", "From: bob@store.test").msg);
+	const reverse = (sent[0]!.from as { email: string }).email;
+	sent = [];
+	return reverse;
+}
+
+describe("replies through another provider", () => {
+	it("go through Resend with the alias as sender and the thread headers", async () => {
+		await db.prepare("INSERT INTO config (key, value) VALUES ('outboundProvider', 'resend'), ('outboundApiKey', 're_test')").run();
+		stubProvider(() => Response.json({ id: "abc" }));
+		const reverse = await reverseAliasOfBob();
+		const { msg, rejected } = inbound(reverse, "owner@gmail.test", `${PASS}\r\nFrom: owner@gmail.test\r\nIn-Reply-To: <p@x>`, "Thanks");
+		await deliver(msg);
+		expect(rejected()).toBeNull();
+		expect(sent).toHaveLength(0);
+		expect(calls).toHaveLength(1);
+		expect(calls[0]!.url).toBe("https://api.resend.com/emails");
+		expect(calls[0]!.headers.Authorization).toBe("Bearer re_test");
+		expect(calls[0]!.body).toMatchObject({ from: "shop@a.test", to: ["bob@store.test"], subject: "Hi", headers: { "In-Reply-To": "<p@x>" } });
+	});
+
+	it("are bounced back when SMTP2GO reports a failure despite its 200", async () => {
+		await db.prepare("INSERT INTO config (key, value) VALUES ('outboundProvider', 'smtp2go'), ('outboundApiKey', 'api-test')").run();
+		stubProvider(() => Response.json({ data: { succeeded: 0, failed: 1, failures: ["sender not verified"] } }));
+		const reverse = await reverseAliasOfBob();
+		const { msg, rejected } = inbound(reverse, "owner@gmail.test", `${PASS}\r\nFrom: owner@gmail.test`, "Thanks");
+		await deliver(msg);
+		expect(calls[0]!.headers["X-Smtp2go-Api-Key"]).toBe("api-test");
+		expect(calls[0]!.body).toMatchObject({ sender: "shop@a.test", to: ["bob@store.test"] });
+		expect(rejected()).toMatch(/could not be sent/);
+	});
+});
+
+describe("the Workers Free plan", () => {
+	it("is assumed unless the Paid plan is chosen", async () => {
+		expect((await loadConfig(env)).workersPlan).toBe("free");
+		await db.prepare("INSERT INTO config (key, value) VALUES ('workersPlan', 'paid')").run();
+		expect((await loadConfig(env)).workersPlan).toBe("paid");
+	});
+
+	it("passes a large message through unchanged instead of rewriting it", async () => {
+		const { msg, rejected } = inbound("shop@a.test", "bob@store.test", "From: bob@store.test", "Hello", FREE_PLAN_REWRITE_BYTES + 1);
+		await deliver(msg);
+		expect(rejected()).toBeNull();
+		expect(forwardedTo).toEqual(["owner@gmail.test"]);
+		expect(sent).toHaveLength(0);
+		const row = await db.prepare("SELECT status, error FROM forwards").first<{ status: string; error: string }>();
+		expect(row).toMatchObject({ status: "sent" });
+		expect(row?.error).toMatch(/passed through unchanged/);
+	});
+
+	it("rewrites a large message on the Paid plan", async () => {
+		await db.prepare("INSERT INTO config (key, value) VALUES ('workersPlan', 'paid')").run();
+		await deliver(inbound("shop@a.test", "bob@store.test", "From: bob@store.test", "Hello", FREE_PLAN_REWRITE_BYTES + 1).msg);
+		expect(forwardedTo).toEqual([]);
+		expect(sent).toHaveLength(1);
+	});
+
+	it("refuses a large reply with the reason", async () => {
+		const reverse = await reverseAliasOfBob();
+		const { msg, rejected } = inbound(reverse, "owner@gmail.test", `${PASS}\r\nFrom: owner@gmail.test`, "Thanks", FREE_PLAN_REWRITE_BYTES + 1);
+		await deliver(msg);
+		expect(rejected()).toMatch(/Workers Free plan/);
+	});
+});

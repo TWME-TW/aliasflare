@@ -11,6 +11,8 @@ import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
 import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
+import { OUTBOUND_PROVIDERS, type OutboundProvider } from "./outbound";
+import { WORKERS_PLANS, type WorkersPlan } from "./config";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -191,6 +193,7 @@ const ICONS = {
 	connection: `<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>`,
 	passkeys: `<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>`,
 	apiKeys: `<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>`,
+	activity: `<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>`,
 	import: `<path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4"/>`,
 	signOut: `<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>`,
 	globe: `<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20M2 12h20"/>`,
@@ -246,7 +249,7 @@ ${options.nav
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="aliasflare">
-${link("/", "nav.aliases", "aliases")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
+${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
 <p class="powered">aliasflare · <a href="https://github.com/TWME-TW/aliasflare">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
@@ -493,18 +496,43 @@ ${list.page < lastPage ? html`<a href="${listUrl({ page: list.page + 1 })}">${t(
 
 <section>
 <h2>${t("dash.activity")}</h2>
-${activity.length === 0
-	? html`<p class="muted">${t("dash.nothingYet")}</p>`
-	: html`<table class="rt"><thead><tr><th>${t("dash.colWhen")}</th><th>${t("dash.colWhat")}</th><th>${t("dash.colAlias")}</th><th>${t("dash.colStatus")}</th><th>${t("dash.colDetail")}</th></tr></thead><tbody>
-${activity.map(
-	(item) => html`<tr><td data-label="${t("dash.colWhen")}">${when(item.at, t.locale)}</td><td data-label="${t("dash.colWhat")}">${translated(t, `kind.${item.kind}`, item.kind)}</td>
-<td data-label="${t("dash.colAlias")}"><code>${item.alias ?? ""}</code></td><td data-label="${t("dash.colStatus")}">${statusPill(t, item.status)}</td>
-<td data-label="${t("dash.colDetail")}" class="muted">${item.detail ?? ""}</td></tr>`,
-)}
-</tbody></table>`}
+${activityTable(t, activity)}
+${activity.length ? html`<p><a href="/activity">${t("dash.allActivity")} →</a></p>` : ""}
 </section>
 </main>`,
 		{ t, nav: true, current: "/", path: "/" },
+	);
+}
+
+function activityTable(t: Translate, items: ActivityItem[]): Html {
+	if (items.length === 0) return html`<p class="muted">${t("dash.nothingYet")}</p>`;
+	return html`<table class="rt"><thead><tr><th>${t("dash.colWhen")}</th><th>${t("dash.colWhat")}</th><th>${t("dash.colAlias")}</th><th>${t("dash.colStatus")}</th><th>${t("dash.colDetail")}</th></tr></thead><tbody>
+${items.map(
+	(item) => html`<tr><td data-label="${t("dash.colWhen")}"><time datetime="${new Date(item.at * 1000).toISOString()}" title="${when(item.at, t.locale)}">${ago(item.at, t.locale)}</time></td><td data-label="${t("dash.colWhat")}">${translated(t, `kind.${item.kind}`, item.kind)}</td>
+<td data-label="${t("dash.colAlias")}">${item.alias ? html`<a href="/aliases/${encodeURIComponent(item.alias)}"><code>${item.alias}</code></a>` : ""}</td><td data-label="${t("dash.colStatus")}">${statusPill(t, item.status)}</td>
+<td data-label="${t("dash.colDetail")}" class="muted">${item.detail ?? ""}</td></tr>`,
+)}
+</tbody></table>`;
+}
+
+/** Every forward and event, newest first, a page at a time. */
+export function activityListPage(t: Translate, input: { items: ActivityItem[]; page: number; lastPage: number }): Html {
+	const { items, page: current, lastPage } = input;
+	const at = (n: number) => (n > 1 ? `/activity?page=${n}` : "/activity");
+	return page(
+		t("nav.activity"),
+		html`<main><section>
+<h2>${t("nav.activity")}</h2>
+${activityTable(t, items)}
+${lastPage > 1
+	? html`<nav class="pager" aria-label="${t("dash.pages")}">
+${current > 1 ? html`<a href="${at(current - 1)}">← ${t("dash.prev")}</a>` : ""}
+<span class="muted">${current} / ${lastPage}</span>
+${current < lastPage ? html`<a href="${at(current + 1)}">${t("dash.next")} →</a>` : ""}
+</nav>`
+	: ""}
+</section></main>`,
+		{ t, nav: true, current: "/activity", path: "/activity" },
 	);
 }
 
@@ -594,7 +622,8 @@ const TOKEN_PERMISSIONS: ["zone" | "account", string, string][] = [
 export function connectionPage(
 	t: Translate,
 	input: {
-		values: { mailflareUrl: string; publicUrl: string };
+		values: { mailflareUrl: string; publicUrl: string; outboundProvider: OutboundProvider; workersPlan: WorkersPlan };
+		hasOutboundKey: boolean;
 		hasApiKey: boolean;
 		hasWebhookSecret: boolean;
 		mailflare: boolean;
@@ -605,7 +634,7 @@ export function connectionPage(
 		notice?: string;
 	},
 ): Html {
-	const { values, hasApiKey, hasWebhookSecret, mailflare, fixed, webhookUrl, missing, cloudflare, notice } = input;
+	const { values, hasOutboundKey, hasApiKey, hasWebhookSecret, mailflare, fixed, webhookUrl, missing, cloudflare, notice } = input;
 	const fixedNote = (key: string) => (fixed.has(key) ? html`<p class="help">${t("conn.fixed")}</p>` : "");
 	const disabled = (key: string) => (fixed.has(key) ? "disabled" : "");
 	const secretField = (key: string, label: string, isSet: boolean, help: string) => html`
@@ -661,6 +690,23 @@ ${checkbox("replaceCatchAll", false, t("cf.replaceCatchAll"), t("cf.replaceCatch
 <h2>${t("conn.publicUrl")}</h2>
 <input id="publicUrl" name="publicUrl" type="url" value="${values.publicUrl}" placeholder="https://alias.example.com" aria-label="${t("conn.publicUrl")}" ${disabled("publicUrl")} />
 <p class="help">${t("conn.publicUrlHelp")}</p>${fixedNote("publicUrl")}
+<p><button class="primary">${t("conn.saveButton")}</button></p>
+</section>
+<section id="sending">
+<h2>${t("conn.sendingTitle")}</h2>
+<p class="help">${t("conn.sendingHelp")}</p>
+<label for="workersPlan">${t("conn.plan")}</label>
+<select id="workersPlan" name="workersPlan" ${disabled("workersPlan")}>
+${WORKERS_PLANS.map((plan) => html`<option value="${plan}" ${values.workersPlan === plan ? "selected" : ""}>${t(`conn.plan.${plan}`)}</option>`)}
+</select>
+<p class="help">${t("conn.planHelp")}</p>${fixedNote("workersPlan")}
+${values.workersPlan === "free" && values.outboundProvider === "cloudflare" ? html`<p class="notice">${t("conn.freeNeedsProvider")}</p>` : ""}
+<label for="outboundProvider">${t("conn.provider")}</label>
+<select id="outboundProvider" name="outboundProvider" ${disabled("outboundProvider")}>
+${OUTBOUND_PROVIDERS.map((provider) => html`<option value="${provider}" ${values.outboundProvider === provider ? "selected" : ""}>${t(`conn.provider.${provider}`)}</option>`)}
+</select>
+<p class="help">${t("conn.providerHelp")}</p>${fixedNote("outboundProvider")}
+${secretField("outboundApiKey", t("conn.providerKey"), hasOutboundKey, t("conn.providerKeyHelp"))}
 <p><button class="primary">${t("conn.saveButton")}</button></p>
 </section>
 <section id="mailflare">

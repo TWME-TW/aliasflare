@@ -13,6 +13,12 @@ interface Env {
 	CLOUDFLARE_API_TOKEN?: string;
 	/** Name of this Worker, when it is not "aliasflare". */
 	WORKER_NAME?: string;
+	/** "cloudflare" (Email Sending, Workers Paid), "resend" or "smtp2go": what sends mail to other people. */
+	OUTBOUND_PROVIDER?: string;
+	/** API key of the Resend or SMTP2GO account. */
+	OUTBOUND_API_KEY?: string;
+	/** "free" or "paid": the Workers plan, which sets how much one request may do. */
+	WORKERS_PLAN?: string;
 	/** Optional service binding to the Mailflare Worker, used instead of its public URL. */
 	MAILFLARE_SERVICE?: Fetcher;
 }

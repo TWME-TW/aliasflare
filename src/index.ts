@@ -17,7 +17,8 @@ import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
 import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api } from "./compat/api";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias } from "./compat/aliases";
-import { ConfigError, DOMAIN_PATTERN, envOverrides, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
+import { ConfigError, DOMAIN_PATTERN, envOverrides, isWorkersPlan, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
+import { isOutboundProvider } from "./outbound";
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
@@ -65,6 +66,7 @@ import {
 	settingsPage,
 	setupPage,
 	ALIAS_PAGE_SIZES,
+	activityListPage,
 	DEFAULT_ALIAS_PAGE_SIZE,
 	type ActivityItem,
 } from "./ui";
@@ -360,6 +362,45 @@ app.use("*", async (c, next) => {
 	await next();
 });
 
+/** Entries of recent activity on the alias list; the rest are on the activity page. */
+/** Alias domains one Cloudflare setup run may handle on the Workers Free plan. */
+const FREE_PLAN_SETUP_DOMAINS = 3;
+const DASHBOARD_ACTIVITY = 10;
+const ACTIVITY_PER_PAGE = 50;
+
+/**
+ * Forwards and other events, newest first. One compound query whose two halves each read an
+ * index in time order (forwards_updated_idx, events_created_idx), so a page never sorts the
+ * whole history.
+ */
+async function activityPage(db: D1Database, limit: number, offset: number): Promise<ActivityItem[]> {
+	const { results } = await db
+		.prepare(
+			`SELECT 'forward' AS kind, status, alias_address AS alias,
+				CASE WHEN error IS NOT NULL THEN error
+					WHEN trackers_removed > 0 THEN COALESCE(subject, '') || ' · ' || trackers_removed || ' tracker(s)'
+					ELSE subject END AS detail,
+				updated_at AS at FROM forwards
+			UNION ALL
+			SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
+			ORDER BY at DESC LIMIT ? OFFSET ?`,
+		)
+		.bind(limit, offset)
+		.all<ActivityItem>();
+	return results;
+}
+
+app.get("/activity", async (c) => {
+	const db = c.env.DB;
+	const page = pageParam(c.req.query("page"), 1);
+	const [items, counted] = await Promise.all([
+		activityPage(db, ACTIVITY_PER_PAGE, (page - 1) * ACTIVITY_PER_PAGE),
+		db.prepare("SELECT (SELECT COUNT(*) FROM forwards) + (SELECT COUNT(*) FROM events) AS total").first<{ total: number }>(),
+	]);
+	const lastPage = Math.max(1, Math.ceil((counted?.total ?? 0) / ACTIVITY_PER_PAGE));
+	return c.html(activityListPage(c.get("t"), { items, page, lastPage }));
+});
+
 const ALIAS_FILTERS = ["all", "active", "disabled", "pinned", "deleted"] as const;
 export type AliasFilter = (typeof ALIAS_FILTERS)[number];
 /**
@@ -400,19 +441,7 @@ app.get("/", async (c) => {
 		db.prepare(`SELECT COUNT(*) AS total FROM aliases ${clause}`).bind(...params).first<{ total: number }>(),
 	]);
 	const list = { query, filter, page: pageNumber, perPage, total: counted?.total ?? 0 };
-	const { results: activity } = await db
-		.prepare(
-			`SELECT kind, status, alias, detail, at FROM (
-				SELECT 'forward' AS kind, status, alias_address AS alias,
-					CASE WHEN error IS NOT NULL THEN error
-						WHEN trackers_removed > 0 THEN COALESCE(subject, '') || ' · ' || trackers_removed || ' tracker(s)'
-						ELSE subject END AS detail,
-					updated_at AS at FROM forwards
-				UNION ALL
-				SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
-			) ORDER BY at DESC LIMIT 50`,
-		)
-		.all<ActivityItem>();
+	const activity = await activityPage(db, DASHBOARD_ACTIVITY, 0);
 	return c.html(
 		dashboardPage(c.get("t"), { settings, aliases, list, activity, missing: missingConnection(settings), notice: noticeFrom(c) }),
 	);
@@ -481,7 +510,8 @@ async function renderConnection(c: C, config: AppConfig, setup?: DomainSetup[]) 
 	const settings = await loadSettings(c.env.DB);
 	return c.html(
 		connectionPage(c.get("t"), {
-			values: { mailflareUrl: config.mailflareUrl, publicUrl: config.publicUrl },
+			values: { mailflareUrl: config.mailflareUrl, publicUrl: config.publicUrl, outboundProvider: config.outboundProvider, workersPlan: config.workersPlan },
+			hasOutboundKey: !!config.outboundApiKey,
 			hasApiKey: !!config.mailflareApiKey,
 			hasWebhookSecret: !!config.webhookSecret,
 			mailflare: mailflareReady(config),
@@ -517,6 +547,10 @@ app.post("/connection/cloudflare", async (c) => {
 	const chosen = (Array.isArray(form.domains) ? form.domains : [form.domains]).filter((domain): domain is string => typeof domain === "string");
 	const domains = settings.aliasDomains.filter((domain) => chosen.includes(domain));
 	if (!domains.length) return redirectWithNotice(c, "/connection", "notice.needAliasDomains");
+	// Each domain takes about a dozen Cloudflare API calls; the Free plan allows 50 subrequests per request.
+	if (config.workersPlan === "free" && domains.length > FREE_PLAN_SETUP_DOMAINS) {
+		return redirectWithNotice(c, "/connection", "notice.freeSetupLimit", { count: String(FREE_PLAN_SETUP_DOMAINS) });
+	}
 	if (!token) return redirectWithNotice(c, "/connection", "notice.needCloudflareToken");
 	const setup = await setUpCloudflare({ token, domains, workerName: config.workerName, replaceCatchAll: form.replaceCatchAll === "1" });
 	return renderConnection(c, config, setup);
@@ -539,8 +573,16 @@ app.post("/connection", async (c) => {
 		if (origin === null) return redirectWithNotice(c, "/connection", "notice.badPublicUrl");
 		values.publicUrl = origin;
 	}
+	if (!fixed.has("outboundProvider") && text("outboundProvider")) {
+		if (!isOutboundProvider(text("outboundProvider"))) return redirectWithNotice(c, "/connection", "notice.badProvider");
+		values.outboundProvider = text("outboundProvider");
+	}
+	if (!fixed.has("workersPlan") && text("workersPlan")) {
+		if (!isWorkersPlan(text("workersPlan"))) return redirectWithNotice(c, "/connection", "notice.badProvider");
+		values.workersPlan = text("workersPlan");
+	}
 	// Secret fields are write-only: blank keeps the stored value.
-	for (const key of ["mailflareApiKey", "webhookSecret"] as const) {
+	for (const key of ["mailflareApiKey", "webhookSecret", "outboundApiKey"] as const) {
 		if (!fixed.has(key) && text(key)) values[key] = text(key);
 	}
 	await saveConfig(c.env.DB, values);
@@ -618,7 +660,7 @@ app.post("/import/:source", async (c) => {
 			if (!safeHttpsUrl(host.href, ownHosts)) return render({ error: t("imp.err.badServer") });
 			server = url.origin;
 			// One budget for the whole import, so aliases and contacts together stay inside Workers' subrequest limit.
-			const budget = newFetchBudget();
+			const budget = newFetchBudget(c.get("config").workersPlan);
 			aliases = await source.fetch(server, apiKey, budget);
 			selection = selectByDomain(aliases, domains);
 			// Contacts are fetched only for the aliases being imported, one list per alias.
@@ -641,6 +683,8 @@ app.post("/import/:source", async (c) => {
 	}
 	const result = await importAliases(c.env.DB, settings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
 		keepDestinations: form.destinations === "1",
+		// Fewer, larger batches on the Free plan, where a request may make only 50 D1 queries.
+		batchSize: c.get("config").workersPlan === "free" ? 500 : 100,
 	});
 	console.log(JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length, newDestinations: result.newDestinations.length }));
 	return render({ result });
