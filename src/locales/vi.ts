@@ -280,7 +280,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "Đã thêm {count} quy tắc.",
 	"imp.doneBlocked": "Đã thêm {count} người gửi vào danh sách chặn.",
 	"imp.unread": "Không đọc được các mục này nên chúng không được nhập: {parts}. Mọi thứ còn lại đã được nhập. Nhập lại là an toàn.",
-	"imp.rulesSkipped": "Các quy tắc này không được nhập: chúng dùng thứ mà aliasflare không hỗ trợ (chẳng hạn biểu thức chính quy, webhook, mã hóa hoặc nhãn), hoặc đã có sẵn 50 quy tắc. Hãy thêm lại thủ công nếu bạn cần:",
+	"imp.rulesSkipped": "Các quy tắc này không được nhập: chúng dùng thứ mà aliasflare không hỗ trợ (chẳng hạn biểu thức chính quy, webhook, mã hóa hoặc nhãn), hoặc chuyển tiếp đến địa chỉ không nằm trong các địa chỉ chuyển tiếp của bạn tại đây, hoặc đã có sẵn 50 quy tắc. Hãy thêm lại thủ công nếu bạn cần:",
 	"hist.title": "Lịch sử đã nhập",
 	"hist.from": "Nhập từ {source} vào {date}.",
 	"hist.help": "Các số liệu và ngày tháng bên dưới đã xảy ra tại {source}. Các ứng dụng kết nối ở đây thấy chúng được cộng vào hoạt động được ghi nhận tại đây.",

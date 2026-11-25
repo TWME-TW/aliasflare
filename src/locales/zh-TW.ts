@@ -274,7 +274,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "已新增 {count} 條規則。",
 	"imp.doneBlocked": "已將 {count} 位寄件者加入封鎖名單。",
 	"imp.unread": "以下內容無法讀取，因此未匯入：{parts}。其餘內容都已匯入。重複匯入也沒關係。",
-	"imp.rulesSkipped": "以下規則未匯入：它們使用了 aliasflare 不支援的功能（例如正規表示式、Webhook、加密或標籤），或是已經有 50 條規則。如有需要，請手動重新新增：",
+	"imp.rulesSkipped": "以下規則未匯入：它們用到 aliasflare 不支援的功能（例如正規表示式、Webhook、加密或標籤）、會轉寄到這裡沒有設定的轉寄地址，或規則已達 50 條上限。如有需要，請手動重新建立：",
 	"hist.title": "匯入的歷史紀錄",
 	"hist.from": "於 {date} 從 {source} 匯入。",
 	"hist.help": "以下數量和時間是在 {source} 發生的。連到這裡的 App 看到的數字，會再加上這裡記錄的活動。",

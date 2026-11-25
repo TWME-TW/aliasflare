@@ -295,7 +295,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "Sheria {count} zimeongezwa.",
 	"imp.doneBlocked": "Watumaji {count} wameongezwa kwenye orodha ya waliozuiwa.",
 	"imp.unread": "Hizi hazikuweza kusomwa, kwa hiyo hazikuletwa: {parts}. Kila kitu kingine kililetwa. Kuleta tena ni salama.",
-	"imp.rulesSkipped": "Sheria hizi hazikuletwa: zinatumia kitu ambacho aliasflare haifanyi (kama misemo ya kawaida, webhooks, usimbaji fiche au lebo), au tayari kulikuwa na sheria 50. Ziongeze tena kwa mkono ukihitaji:",
+	"imp.rulesSkipped": "Sheria hizi hazikuletwa: zinatumia kitu ambacho aliasflare haifanyi (kama misemo ya kawaida, webhooks, usimbaji fiche au lebo), au zinatumwa kwa anwani isiyo mojawapo ya anwani zako za kusambaza hapa, au tayari kulikuwa na sheria 50. Ziongeze tena kwa mkono ukihitaji:",
 	"hist.title": "Historia iliyoletwa",
 	"hist.from": "Imeletwa kutoka {source} tarehe {date}.",
 	"hist.help": "Hesabu na tarehe zilizo hapa chini zilitokea {source}. Programu zilizounganishwa hapa huziona zikiongezwa kwenye shughuli iliyorekodiwa hapa.",

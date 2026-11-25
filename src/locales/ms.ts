@@ -280,7 +280,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "{count} peraturan ditambah.",
 	"imp.doneBlocked": "{count} pengirim ditambah ke senarai sekatan.",
 	"imp.unread": "Item ini tidak dapat dibaca, jadi tidak diimport: {parts}. Semua yang lain telah diimport. Mengimport semula adalah selamat.",
-	"imp.rulesSkipped": "Peraturan ini tidak diimport: ia menggunakan sesuatu yang aliasflare tidak lakukan (seperti ungkapan biasa, webhook, penyulitan atau label), atau sudah ada 50 peraturan. Tambahkan semula secara manual jika anda memerlukannya:",
+	"imp.rulesSkipped": "Peraturan ini tidak diimport: ia menggunakan sesuatu yang aliasflare tidak lakukan (seperti ungkapan biasa, webhook, penyulitan atau label), atau memajukan ke alamat yang bukan salah satu alamat pemajuan anda di sini, atau sudah ada 50 peraturan. Tambahkan semula secara manual jika anda memerlukannya:",
 	"hist.title": "Sejarah diimport",
 	"hist.from": "Diimport daripada {source} pada {date}.",
 	"hist.help": "Kiraan dan tarikh di bawah berlaku di {source}. Aplikasi yang disambungkan ke sini melihatnya ditambah kepada aktiviti yang direkodkan di sini.",

@@ -280,7 +280,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "Dodano reguły: {count}.",
 	"imp.doneBlocked": "Dodano do listy blokad nadawców: {count}.",
 	"imp.unread": "Nie udało się odczytać tych danych, więc nie zostały zaimportowane: {parts}. Cała reszta została zaimportowana. Ponowny import jest bezpieczny.",
-	"imp.rulesSkipped": "Te reguły nie zostały zaimportowane: używają czegoś, czego aliasflare nie obsługuje (np. wyrażeń regularnych, webhooków, szyfrowania lub etykiet), albo było już 50 reguł. Jeśli ich potrzebujesz, dodaj je ponownie ręcznie:",
+	"imp.rulesSkipped": "Te reguły nie zostały zaimportowane: używają czegoś, czego aliasflare nie obsługuje (np. wyrażeń regularnych, webhooków, szyfrowania lub etykiet), albo przekazują dalej na adres, który nie jest jednym z Twoich adresów przekierowania tutaj, albo było już 50 reguł. Jeśli ich potrzebujesz, dodaj je ponownie ręcznie:",
 	"hist.title": "Zaimportowana historia",
 	"hist.from": "Zaimportowano z {source} dnia {date}.",
 	"hist.help": "Poniższe liczby i daty dotyczą zdarzeń w {source}. Połączone tu aplikacje widzą je dodane do aktywności zapisanej tutaj.",

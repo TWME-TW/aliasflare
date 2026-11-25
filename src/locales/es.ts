@@ -295,7 +295,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "Se añadieron {count} reglas.",
 	"imp.doneBlocked": "Se añadieron {count} remitentes a la lista de bloqueo.",
 	"imp.unread": "No se pudieron leer, así que no se importaron: {parts}. Todo lo demás sí se importó. Importar de nuevo es seguro.",
-	"imp.rulesSkipped": "Estas reglas no se importaron: usan algo que aliasflare no hace (como expresiones regulares, webhooks, cifrado o etiquetas), o ya había 50 reglas. Añádelas de nuevo a mano si las necesitas:",
+	"imp.rulesSkipped": "Estas reglas no se importaron: usan algo que aliasflare no hace (como expresiones regulares, webhooks, cifrado o etiquetas), o reenvían a una dirección que no es una de tus direcciones de reenvío aquí, o ya había 50 reglas. Añádelas de nuevo a mano si las necesitas:",
 	"hist.title": "Historial importado",
 	"hist.from": "Importado desde {source} el {date}.",
 	"hist.help": "Los recuentos y las fechas de abajo ocurrieron en {source}. Las apps conectadas aquí los ven sumados a la actividad registrada aquí.",

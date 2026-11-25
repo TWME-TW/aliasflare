@@ -280,7 +280,7 @@ const dictionary: Dictionary = {
 	"imp.doneRules": "{count} kural eklendi.",
 	"imp.doneBlocked": "Engelleme listesine {count} gönderen eklendi.",
 	"imp.unread": "Bunlar okunamadığı için içe aktarılmadı: {parts}. Geri kalan her şey içe aktarıldı. Yeniden içe aktarmak güvenlidir.",
-	"imp.rulesSkipped": "Bu kurallar içe aktarılmadı: aliasflare'in yapmadığı bir şeyi kullanıyorlar (düzenli ifadeler, webhook'lar, şifreleme veya etiketler gibi) ya da zaten 50 kural vardı. Gerekirse bunları elle yeniden ekleyin:",
+	"imp.rulesSkipped": "Bu kurallar içe aktarılmadı: aliasflare'in yapmadığı bir şeyi kullanıyorlar (düzenli ifadeler, webhook'lar, şifreleme veya etiketler gibi) ya da burada yönlendirilecek adreslerinizden biri olmayan bir adrese yönlendiriyorlar, ya da zaten 50 kural vardı. Gerekirse bunları elle yeniden ekleyin:",
 	"hist.title": "İçe aktarılan geçmiş",
 	"hist.from": "{date} tarihinde {source} kaynağından içe aktarıldı.",
 	"hist.help": "Aşağıdaki sayılar ve tarihler {source} üzerinde gerçekleşti. Burada bağlı uygulamalar bunları, burada kaydedilen etkinliğe eklenmiş olarak görür.",
