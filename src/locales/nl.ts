@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "wordt verwerkt",
 	"settings.title": "Instellingen",
 	"settings.section": "Doorsturen en antwoorden",
+	"settings.display": "Thema en taal",
 	"settings.destination": "Standaard doorstuuradres",
 	"settings.destinationHelp":
 		"Je echte inbox. Alleen e-mail van dit adres, met een geslaagde DMARC-controle, mag via omgekeerde aliassen worden verstuurd (tenzij een alias een eigen adres heeft).",

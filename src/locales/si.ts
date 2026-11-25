@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "සැකසීම්",
 	"settings.section": "යොමු කිරීම සහ පිළිතුරු",
+	"settings.display": "තේමාව සහ භාෂාව",
 	"settings.destination": "පෙරනිමි යොමු කිරීමේ ලිපිනය",
 	"settings.destinationHelp":
 		"ඔබේ සැබෑ එන ලිපි පෙට්ටිය. ප්‍රතිලෝම අන්වර්ථ හරහා යැවිය හැක්කේ මෙම ලිපිනයෙන් පැමිණෙන, DMARC සමත් වන තැපැල් පමණි (අන්වර්ථයකට තමන්ගේම ලිපිනයක් නොමැති නම්).",

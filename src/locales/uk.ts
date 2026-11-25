@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "обробляється",
 	"settings.title": "Налаштування",
 	"settings.section": "Пересилання та відповіді",
+	"settings.display": "Тема та мова",
 	"settings.destination": "Типова адреса пересилання",
 	"settings.destinationHelp":
 		"Ваша справжня поштова скринька. Через зворотні псевдоніми можна надсилати лише листи з цієї адреси, що пройшли перевірку DMARC (якщо в псевдоніма немає власної адреси).",

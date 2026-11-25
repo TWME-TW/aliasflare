@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "સેટિંગ્સ",
 	"settings.section": "ફૉરવર્ડિંગ અને જવાબો",
+	"settings.display": "થીમ અને ભાષા",
 	"settings.destination": "ડિફૉલ્ટ ફૉરવર્ડિંગ સરનામું",
 	"settings.destinationHelp": "તમારું વાસ્તવિક ઇનબૉક્સ. ફક્ત આ સરનામાંથી, DMARC પાસ સાથે આવેલો મેઇલ જ રિવર્સ ઉપનામો દ્વારા મોકલી શકાય છે (જો ઉપનામનું પોતાનું સરનામું ન હોય તો).",
 	"settings.senderFormat": "મોકલનારના સરનામાનું ફૉર્મેટ",

@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "in elaborazione",
 	"settings.title": "Impostazioni",
 	"settings.section": "Inoltro e risposte",
+	"settings.display": "Tema e lingua",
 	"settings.destination": "Indirizzo di inoltro predefinito",
 	"settings.destinationHelp":
 		"La tua vera casella. Solo la posta proveniente da questo indirizzo, con DMARC superato, può essere inviata tramite alias inversi (a meno che un alias abbia un indirizzo proprio).",

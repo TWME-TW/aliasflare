@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "ക്രമീകരണങ്ങൾ",
 	"settings.section": "ഫോർവേഡിംഗും മറുപടികളും",
+	"settings.display": "തീമും ഭാഷയും",
 	"settings.destination": "ഡിഫോൾട്ട് ഫോർവേഡിംഗ് വിലാസം",
 	"settings.destinationHelp": "നിങ്ങളുടെ യഥാർത്ഥ ഇൻബോക്സ്. ഈ വിലാസത്തിൽ നിന്നുള്ളതും DMARC വിജയിച്ചതുമായ മെയിൽ മാത്രമേ റിവേഴ്സ് അപരനാമങ്ങൾ വഴി അയയ്ക്കാൻ കഴിയൂ (അപരനാമത്തിന് സ്വന്തം വിലാസമുണ്ടെങ്കിൽ ഒഴികെ).",
 	"settings.senderFormat": "അയച്ചയാളുടെ വിലാസ ഫോർമാറ്റ്",

@@ -70,6 +70,7 @@ export const en = {
 
 	"settings.title": "Settings",
 	"settings.section": "Forwarding and replies",
+	"settings.display": "Display and language",
 	"settings.destination": "Default forwarding address",
 	"settings.destinationHelp":
 		"Your real inbox. Only mail from this address, with a DMARC pass, may be sent through reverse aliases (unless an alias has its own address).",

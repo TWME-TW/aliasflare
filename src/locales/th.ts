@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "กำลังประมวลผล",
 	"settings.title": "การตั้งค่า",
 	"settings.section": "การส่งต่อและการตอบกลับ",
+	"settings.display": "ธีมและภาษา",
 	"settings.destination": "ที่อยู่ส่งต่อเริ่มต้น",
 	"settings.destinationHelp":
 		"กล่องจดหมายจริงของคุณ เฉพาะอีเมลจากที่อยู่นี้ที่ผ่าน DMARC เท่านั้นจึงจะส่งผ่านนามแฝงย้อนกลับได้ (เว้นแต่นามแฝงนั้นมีที่อยู่ของตัวเอง)",

@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "przetwarzanie",
 	"settings.title": "Ustawienia",
 	"settings.section": "Przekazywanie i odpowiedzi",
+	"settings.display": "Motyw i język",
 	"settings.destination": "Domyślny adres przekazywania",
 	"settings.destinationHelp":
 		"Twoja prawdziwa skrzynka. Tylko poczta z tego adresu, z pozytywnym wynikiem DMARC, może być wysyłana przez aliasy zwrotne (chyba że alias ma własny adres).",

@@ -547,5 +547,59 @@ export const APP_SCRIPT = `(() => {
       try { sessionStorage.setItem(PAGER_KEY, JSON.stringify({ path: location.pathname, index, top })); } catch {}
     });
   });
+
+  // A label's colour: picking one shows it on the closed button and folds the palette away.
+  for (const pick of document.querySelectorAll("details.colour-pick")) {
+    const dot = pick.querySelector("summary .dot");
+    pick.addEventListener("change", (event) => {
+      const swatch = event.target instanceof HTMLInputElement ? event.target.nextElementSibling : null;
+      if (dot && swatch && swatch.dataset.colour) dot.dataset.colour = swatch.dataset.colour;
+      pick.open = false;
+      pick.querySelector("summary").focus();
+    });
+  }
+  document.addEventListener("click", (event) => {
+    for (const pick of document.querySelectorAll("details.colour-pick[open]")) if (!pick.contains(event.target)) pick.open = false;
+  });
+
+  // The settings page's jump bar marks the section in view.
+  const jumps = [...document.querySelectorAll(".jump a[href^='#']")];
+  if (jumps.length && "IntersectionObserver" in window) {
+    const mark = (id) => { for (const a of jumps) a.toggleAttribute("aria-current", a.getAttribute("href") === "#" + id); };
+    const seen = new Map();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) seen.set(entry.target.id, entry.isIntersecting);
+      const first = jumps.map((a) => a.getAttribute("href").slice(1)).find((id) => seen.get(id));
+      if (first) mark(first);
+    }, { rootMargin: "-64px 0px -55% 0px" });
+    for (const a of jumps) { const section = document.getElementById(a.getAttribute("href").slice(1)); if (section) observer.observe(section); }
+  }
+
+  // A click on a link to another page answers at once: the menu shows where you are going, a bar
+  // runs along the top and the old content fades, while the next page loads (often already fetched).
+  const root = document.documentElement;
+  const leaving = (link) => {
+    root.setAttribute("data-navigating", "");
+    const item = link && link.closest(".sidebar a");
+    if (item) {
+      for (const other of document.querySelectorAll(".sidebar a[aria-current]")) other.removeAttribute("aria-current");
+      item.setAttribute("aria-current", "page");
+    }
+  };
+  document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    if (!link || link.target || link.hasAttribute("download")) return;
+    const url = new URL(link.href, location.href);
+    if (url.origin !== location.origin || url.pathname.startsWith("/assets/")) return;
+    // A link to a place on this same page only scrolls.
+    if (url.pathname === location.pathname && url.search === location.search && url.hash) return;
+    leaving(link);
+  });
+  for (const form of document.querySelectorAll('form[method="get"], form:not([method])')) {
+    form.addEventListener("submit", (event) => { if (!event.defaultPrevented && !form.hasAttribute("data-autosave")) leaving(null); });
+  }
+  // Coming back with the Back button shows the page as it was left: undo the fading.
+  addEventListener("pageshow", (event) => { if (event.persisted) root.removeAttribute("data-navigating"); });
 })();
 `;

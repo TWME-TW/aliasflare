@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "ప్రాసెస్ అవుతోంది",
 	"settings.title": "సెట్టింగ్‌లు",
 	"settings.section": "ఫార్వర్డింగ్ మరియు సమాధానాలు",
+	"settings.display": "థీమ్ మరియు భాష",
 	"settings.destination": "డిఫాల్ట్ ఫార్వర్డింగ్ చిరునామా",
 	"settings.destinationHelp":
 		"మీ అసలు ఇన్‌బాక్స్. ఈ చిరునామా నుండి వచ్చిన, DMARC పాస్ అయిన మెయిల్ మాత్రమే రివర్స్ మారుపేర్ల ద్వారా పంపబడుతుంది (ఒక మారుపేరుకు సొంత చిరునామా ఉంటే తప్ప).",

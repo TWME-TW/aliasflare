@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "处理中",
 	"settings.title": "设置",
 	"settings.section": "转发与回复",
+	"settings.display": "显示与语言",
 	"settings.destination": "默认转发地址",
 	"settings.destinationHelp": "你的真实邮箱。只有从这个地址发出、且通过 DMARC 的邮件，才能通过反向别名发出（除非该别名另外指定了转发地址）。",
 	"settings.senderFormat": "发件人显示格式（Sender Address Format）",

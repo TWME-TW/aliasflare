@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "処理中",
 	"settings.title": "設定",
 	"settings.section": "転送と返信",
+	"settings.display": "テーマと言語",
 	"settings.destination": "デフォルトの転送先",
 	"settings.destinationHelp": "あなたの本当の受信箱です。このアドレスから送信され DMARC に合格したメールだけがリバースエイリアス経由で送信できます（エイリアスごとに転送先がある場合を除く）。",
 	"settings.senderFormat": "差出人の表示形式（Sender Address Format）",

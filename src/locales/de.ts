@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "in Bearbeitung",
 	"settings.title": "Einstellungen",
 	"settings.section": "Weiterleitung und Antworten",
+	"settings.display": "Erscheinungsbild und Sprache",
 	"settings.destination": "Standard-Weiterleitungsadresse",
 	"settings.destinationHelp":
 		"Dein echtes Postfach. Nur E-Mails von dieser Adresse mit bestandener DMARC-Prüfung dürfen über Reverse-Aliasse gesendet werden (außer ein Alias hat eine eigene Adresse).",

@@ -68,6 +68,7 @@ const dictionary: Dictionary = {
 
 	"settings.title": "설정",
 	"settings.section": "전달 및 답장",
+	"settings.display": "테마 및 언어",
 	"settings.destination": "기본 전달 주소",
 	"settings.destinationHelp":
 		"실제 받은편지함입니다. 이 주소에서 보낸 메일 중 DMARC를 통과한 메일만 역방향 별칭을 통해 보낼 수 있습니다(별칭에 자체 주소가 있는 경우 제외).",

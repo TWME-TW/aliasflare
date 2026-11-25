@@ -61,6 +61,7 @@ const dictionary: Dictionary = {
 	"status.processing": "প্রক্রিয়া চলছে",
 	"settings.title": "সেটিংস",
 	"settings.section": "ফরোয়ার্ডিং ও উত্তর",
+	"settings.display": "থিম ও ভাষা",
 	"settings.destination": "ডিফল্ট ফরোয়ার্ডিং ঠিকানা",
 	"settings.destinationHelp":
 		"আপনার আসল ইনবক্স। শুধু এই ঠিকানা থেকে আসা, DMARC পাস করা মেইল রিভার্স অ্যালিয়াসের মাধ্যমে পাঠানো যাবে (যদি না কোনো অ্যালিয়াসের নিজস্ব ঠিকানা থাকে)।",

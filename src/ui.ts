@@ -124,6 +124,14 @@ form.row textarea { flex:1 1 240px; width:auto; }
 a.label-chip:hover { background:color-mix(in oklab, var(--lc) calc(var(--lab-tint) + 8%), var(--card)); }
 ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`).join("\n")}
 .swatches { display:flex; flex-wrap:wrap; gap:2px; border:none; margin:0; padding:0; }
+.colour-pick { display:flex; }
+.colour-pick > summary { display:inline-flex; align-items:center; gap:6px; min-height:40px; padding:0 10px; border:1px solid var(--line); border-radius:999px; background:var(--card); cursor:pointer; list-style:none; }
+.colour-pick > summary::-webkit-details-marker { display:none; }
+.colour-pick > summary::after { content:"▾"; color:var(--muted); font-size:12px; }
+.colour-pick > summary:hover { background:var(--hover); }
+.colour-pick .dot { width:20px; height:20px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); }
+.colour-pick[open] { flex:1 1 100%; order:5; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.colour-pick[open] > summary::after { content:"▴"; }
 .swatch { position:relative; display:inline-flex; padding:3px; cursor:pointer; }
 .swatch input { position:absolute; opacity:0; width:1px; height:1px; }
 .swatch span { width:24px; height:24px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); transition:transform .1s; }
@@ -299,9 +307,31 @@ table.aliases td.c-mode select { width:auto; min-width:0; }
 @media (max-width: 600px) { .theme-btn .theme-text { display:none; } }
 [dir="rtl"] .arrow { display:inline-block; transform:scaleX(-1); }
 
+/* Moving between pages: the old page answers the click at once (see the page script), and the
+   new one fades in over it while the bar and menu stay put. */
+html[data-navigating] .content, html[data-navigating] body > main { opacity:.55; pointer-events:none; transition:opacity .2s .08s; }
+html[data-navigating] body::before { content:""; position:fixed; inset-inline:0; top:0; height:3px; z-index:50; background:var(--primary); transform-origin:0 50%; animation:nav-bar 8s cubic-bezier(.1,.7,.2,1) forwards; }
+html[dir="rtl"][data-navigating] body::before { transform-origin:100% 50%; }
+@keyframes nav-bar { from { transform:scaleX(.08); } to { transform:scaleX(.92); } }
+@media (prefers-reduced-motion: no-preference) {
+	@view-transition { navigation: auto; }
+	.topbar { view-transition-name: topbar; }
+	.sidebar { view-transition-name: sidebar; }
+	::view-transition-old(root), ::view-transition-new(root) { animation-duration:.14s; }
+	::view-transition-group(sidebar), ::view-transition-group(topbar) { animation-duration:0s; }
+}
+@media (prefers-reduced-motion: reduce) { html[data-navigating] body::before { animation:none; transform:scaleX(.6); } }
+
 .lang-label { margin:0; display:flex; }
 .sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
 .mt12 { margin-top:12px; }
+/* The settings page's sections, one tap away; it stays at the top while the page scrolls. */
+.jump { position:sticky; top:0; z-index:5; display:flex; gap:8px; overflow-x:auto; scrollbar-width:none; padding:8px 0; background:var(--bg); }
+.jump::-webkit-scrollbar { display:none; }
+.jump a { flex:none; display:inline-flex; align-items:center; min-height:36px; padding:0 14px; border-radius:999px; background:var(--card); border:1px solid var(--line); color:var(--text); font-size:14px; font-weight:500; white-space:nowrap; }
+.jump a:hover { background:var(--hover); text-decoration:none; }
+.jump a[aria-current] { background:var(--nav-active); border-color:transparent; color:var(--nav-active-text); }
+section[id] { scroll-margin-top:64px; }
 .m0 { margin:0; }
 .mono { font-family:ui-monospace,monospace; direction:ltr; unicode-bidi:isolate; }
 `);
@@ -784,9 +814,12 @@ export function settingsPage(t: Translate, input: { settings: Settings; origin: 
 		t("settings.title"),
 		html`<main>
 ${noticeBox(notice)}
+<nav class="jump" aria-label="${t("settings.title")}">
+<a href="#language-settings">${t("settings.display")}</a><a href="#forwarding">${t("settings.section")}</a><a href="#unsubscribe">${t("settings.unsubscribe")}</a><a href="#clients">${t("set.clients")}</a>
+</nav>
 <form class="sections" method="post" action="/settings" data-autosave data-msg-failed="${t("link.error")}">
 <section id="language-settings">
-<h2>${t("nav.language")}</h2>
+<h2>${t("settings.display")}</h2>
 <label for="uiTheme">${t("theme.label")}</label>
 <select id="uiTheme" name="uiTheme">
 ${THEMES.map((mode) => html`<option value="${mode}" ${(t.theme ?? "system") === mode ? "selected" : ""}>${t(`theme.${mode}`)}</option>`)}
@@ -804,7 +837,7 @@ ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${
 ${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${settings.language === locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
 </select>
 </section>
-<section>
+<section id="forwarding">
 <h2>${t("settings.section")}</h2>
 <label for="defaultDestination">${t("settings.destination")}</label>
 <input id="defaultDestination" name="defaultDestination" type="email" value="${settings.defaultDestination}" placeholder="you@gmail.com" />
@@ -832,8 +865,11 @@ ${checkbox("removeTrackers", settings.removeTrackers, t("settings.trackers"), t(
 ${checkbox("showBanner", settings.showBanner, t("settings.banner"), t("settings.bannerHelp"))}
 ${checkbox("createAliasesFromMail", settings.createAliasesFromMail, t("settings.createFromMail"), t("settings.createFromMailHelp"))}
 ${checkbox("autoForwardNewAliases", settings.autoForwardNewAliases, t("settings.autoForward"), t("settings.autoForwardHelp"))}
+</section>
 
-<label for="unsubscribeBehavior">${t("settings.unsubscribe")}</label>
+<section id="unsubscribe">
+<h2>${t("settings.unsubscribe")}</h2>
+<label for="unsubscribeBehavior" class="sr">${t("settings.unsubscribe")}</label>
 <select id="unsubscribeBehavior" name="unsubscribeBehavior">
 ${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<option value="${behavior}" ${settings.unsubscribeBehavior === behavior ? "selected" : ""}>${t(`unsub.${behavior}`)}</option>`)}
 </select>
@@ -1375,9 +1411,11 @@ ${extra.filter(([, value]) => value).map(([key, value]) => html`<p>${t(key)}: <c
 function swatches(t: Translate, current: string, id: string): Html {
 	const colours: string[] = [...LABEL_COLOURS];
 	if (!colours.includes(current)) colours.push(current);
-	return html`<fieldset class="swatches"><legend class="sr">${t("labels.colour")}</legend>${colours.map(
+	// One dot shows the colour; the palette opens under it when it is pressed.
+	return html`<details class="colour-pick"><summary title="${t("labels.colour")}"><span class="sr">${t("labels.colour")}</span><span class="dot" data-colour="${nearestColour(current)}"></span></summary>
+<fieldset class="swatches"><legend class="sr">${t("labels.colour")}</legend>${colours.map(
 		(colour) => html`<label class="swatch" title="${colour}"><input type="radio" name="colour" value="${colour}" id="c-${id}-${colour.slice(1)}" ${colour === current ? "checked" : ""} /><span data-colour="${nearestColour(colour)}"></span></label>`,
-	)}</fieldset>`;
+	)}</fieldset></details>`;
 }
 
 /**
