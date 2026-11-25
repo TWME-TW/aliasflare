@@ -158,6 +158,12 @@ function redirectWithNotice(c: C, path: string, key: MessageKey, params?: Record
 	return c.redirect(noticeUrl(path, key, params));
 }
 
+/** The notice as JSON for a form saved in place (X-Autosave), otherwise a redirect that shows it. */
+function savedNotice(c: C, path: string, key: MessageKey, ok: boolean, params?: Record<string, string>) {
+	if (c.req.header("X-Autosave") === "1") return c.json({ ok, message: c.get("t")(key, params) }, ok ? 200 : 400);
+	return redirectWithNotice(c, path, key, params);
+}
+
 /** The notice named in the URL, translated, or nothing for an unknown key. */
 function noticeFrom(c: C): string | undefined {
 	const key = c.req.query("notice");
@@ -1021,9 +1027,9 @@ app.post("/aliases/:address/mode", async (c) => {
 	const address = normalizeEmail(c.req.param("address"));
 	const form = await c.req.parseBody();
 	const back = aliasBack(form, address);
-	if (!isForwardMode(form.mode)) return redirectWithNotice(c, back, "notice.badMode");
-	if (!(await setForwardMode(c.env.DB, address, form.mode))) return redirectWithNotice(c, back, "notice.aliasMissing");
-	return redirectWithNotice(c, back, "notice.modeSaved", { alias: address });
+	if (!isForwardMode(form.mode)) return savedNotice(c, back, "notice.badMode", false);
+	if (!(await setForwardMode(c.env.DB, address, form.mode))) return savedNotice(c, back, "notice.aliasMissing", false);
+	return savedNotice(c, back, "notice.modeSaved", true, { alias: address });
 });
 
 app.post("/aliases/new", async (c) => {
@@ -1068,13 +1074,13 @@ app.post("/aliases/:address/destination", async (c) => {
 	const back = aliasBack(form, address);
 	const raw = typeof form.destination === "string" ? form.destination.trim() : "";
 	const destination = raw ? extractEmail(raw) : null;
-	if (raw && !destination) return redirectWithNotice(c, back, "notice.badDestination");
+	if (raw && !destination) return savedNotice(c, back, "notice.badDestination", false);
 	if (destination && (isOwnAddress(destination, [...(await loadSettings(c.env.DB)).aliasDomains, domainOf(address)]) || destination === address)) {
-		return redirectWithNotice(c, back, "notice.loop");
+		return savedNotice(c, back, "notice.loop", false);
 	}
 	const saved = await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL").bind(destination, now(), address).run();
-	if (!saved.meta.changes) return redirectWithNotice(c, back, "notice.aliasMissing");
-	return redirectWithNotice(c, back, "notice.aliasDestinationSaved", { alias: address });
+	if (!saved.meta.changes) return savedNotice(c, back, "notice.aliasMissing", false);
+	return savedNotice(c, back, "notice.aliasDestinationSaved", true, { alias: address });
 });
 
 app.post("/aliases/:address/note", async (c) => {

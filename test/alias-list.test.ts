@@ -99,7 +99,7 @@ describe("creation time", () => {
 		const cookie = await signIn(db);
 		const iso = new Date(created * 1000).toISOString();
 		const list = await (await app.fetch(new Request("https://alias.test/", { headers: { cookie } }), env)).text();
-		expect(list).toContain("<th>Created</th>");
+		expect(list).toContain('<th class="c-created">Created</th>');
 		expect(list).toContain(`<td class="c-created" data-label="Created"><time datetime="${iso}"`);
 		const page = await (await app.fetch(new Request("https://alias.test/aliases/shop%40me.test", { headers: { cookie } }), env)).text();
 		expect(page).toContain(`Created <time datetime="${iso}">`);

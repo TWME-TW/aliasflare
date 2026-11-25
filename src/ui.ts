@@ -155,12 +155,11 @@ footer.page { display:flex; justify-content:center; padding:24px 16px; }
 	table.rt.aliases td.pick { grid-row:1; grid-column:1; width:auto; }
 	table.rt.aliases td.c-alias { grid-row:1; grid-column:2; }
 	table.rt.aliases .alias-cell { display:flex; flex-wrap:nowrap; min-width:0; }
-	table.rt.aliases .alias-cell code { overflow-wrap:anywhere; }
+	table.rt.aliases .alias-cell code { overflow-wrap:anywhere; white-space:normal; }
 	table.rt.aliases td.c-used { grid-row:1; grid-column:3; color:var(--muted); font-size:12px; white-space:nowrap; }
 	table.rt.aliases td.c-note { grid-row:2; grid-column:1 / -1; }
 	table.rt.aliases td.c-mode { grid-row:3; grid-column:1 / -1; }
-	table.rt.aliases td.c-mode form.row { display:flex; gap:8px; }
-	table.rt.aliases td.c-mode select { flex:1; }
+	table.rt.aliases td.c-mode select { flex:1; width:100%; }
 	table.rt.aliases td.c-note input, table.rt.aliases td.c-mode select { min-height:40px; padding-top:6px; padding-bottom:6px; }
 	table.rt.aliases td.c-dest, table.rt.aliases td.c-count, table.rt.aliases td.c-created { display:none; }
 	table.rt.activity tr { grid-template-columns:5.25rem minmax(0,1fr) auto; align-items:center; gap:4px 8px; padding:8px 12px; }
@@ -193,6 +192,13 @@ th.pick, td.pick { width:36px; }
 td.pick input, th.pick input { width:18px; height:18px; accent-color:var(--primary); }
 .pager { display:flex; gap:16px; justify-content:center; align-items:center; margin-top:12px; }
 form.note input { width:100%; min-width:12ch; }
+form.inline-save { display:flex; gap:6px; align-items:center; }
+form.inline-save input, form.inline-save select { width:100%; min-width:12ch; }
+table.aliases td.c-alias code { white-space:nowrap; }
+table.aliases .alias-cell { flex-wrap:nowrap; }
+table.aliases td.c-used, table.aliases td.c-created { white-space:nowrap; }
+@media (min-width: 901px) and (max-width: 1400px) { table.aliases .c-created { display:none; } }
+table.aliases td.c-mode select { width:auto; min-width:0; }
 .toast { position:fixed; inset-inline:0; bottom:24px; margin:0 auto; width:max-content; max-width:calc(100vw - 32px); z-index:10;
 	padding:12px 20px; border-radius:12px; background:#323232; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
 .toast.bad { background:var(--danger); color:#fff; }
@@ -540,7 +546,7 @@ ${actions.map(([value, label]) => html`<option value="${value}" ${value === "not
 <button class="primary">${t("bulk.apply")}</button>
 </form>
 <table class="rt compact aliases">
-<thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th><th>${t("dash.colLastUsed")}</th><th>${t("keys.colCreated")}</th></tr></thead>
+<thead><tr><th class="pick"><input type="checkbox" aria-label="${t("dash.selectAll")}" data-select-all /></th><th>${t("dash.colAlias")}</th><th>${t("dash.colNote")}</th><th>${t("dash.colForwardTo")}</th><th>${t("dash.colMode")}</th><th>${t("dash.colContacts")}</th><th>${t("dash.colLastUsed")}</th><th class="c-created">${t("keys.colCreated")}</th></tr></thead>
 <tbody>
 ${aliases.map((alias) => {
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
@@ -551,12 +557,14 @@ ${aliases.map((alias) => {
 <input type="hidden" name="back" value="list" />
 <input type="text" name="note" value="${alias.note ?? ""}" maxlength="${MAX_NOTE_LENGTH}" placeholder="${t("alias.notePlaceholder")}" aria-label="${t("dash.colNote")}: ${alias.address}" />
 <noscript><button>${t("common.save")}</button></noscript></form></td>
-<td class="c-dest" data-label="${t("dash.colForwardTo")}"><form class="row" method="post" action="${base}/destination">
-<input type="email" name="destination" value="${alias.destination ?? ""}" placeholder="${settings.defaultDestination || t("dash.default")}" aria-label="${t("dash.colForwardTo")}" />
-<button>${t("common.save")}</button></form></td>
-<td class="c-mode" data-label="${t("dash.colMode")}"><form class="row" method="post" action="${base}/mode">
-<select name="mode" aria-label="${t("dash.colMode")}">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select>
-<button>${t("common.set")}</button></form></td>
+<td class="c-dest" data-label="${t("dash.colForwardTo")}"><form class="inline-save" method="post" action="${base}/destination" data-autosave data-msg-failed="${t("link.error")}">
+<input type="hidden" name="back" value="list" />
+<input type="email" name="destination" value="${alias.destination ?? ""}" maxlength="254" placeholder="${settings.defaultDestination || t("dash.default")}" aria-label="${t("dash.colForwardTo")}: ${alias.address}" />
+<noscript><button>${t("common.save")}</button></noscript></form></td>
+<td class="c-mode" data-label="${t("dash.colMode")}"><form class="inline-save" method="post" action="${base}/mode" data-autosave data-msg-failed="${t("link.error")}">
+<input type="hidden" name="back" value="list" />
+<select name="mode" aria-label="${t("dash.colMode")}: ${alias.address}">${FORWARD_MODES.map((mode) => html`<option value="${mode.value}" ${alias.forward_mode === mode.value ? "selected" : ""}>${t(`mode.${mode.value}`)}</option>`)}</select>
+<noscript><button>${t("common.set")}</button></noscript></form></td>
 <td class="c-count" data-label="${t("dash.colContacts")}">${alias.contacts}</td>
 <td class="c-used" data-label="${t("dash.colLastUsed")}">${alias.used_at ? html`<time datetime="${isoTime(alias.used_at)}" title="${when(alias.used_at, t.locale)}">${ago(alias.used_at, t.locale)}</time>` : html`<span class="muted">${t("dash.neverUsed")}</span>`}</td>
 <td class="c-created" data-label="${t("keys.colCreated")}"><time datetime="${isoTime(alias.created_at)}" title="${when(alias.created_at, t.locale)}">${ago(alias.created_at, t.locale)}</time></td>
