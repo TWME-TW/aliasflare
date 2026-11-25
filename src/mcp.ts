@@ -130,13 +130,19 @@ async function callTool(db: D1Database, settings: Settings, name: string, args: 
 		case "list_domains":
 			return { data: { domains: settings.aliasDomains, default_domain: settings.aliasDomains[0] ?? null } };
 		case "list_aliases": {
-			const page = Number.isInteger(args.page) && (args.page as number) >= 1 ? Math.min(args.page as number, 10_000) : 1;
+			if (args.page !== undefined && (!Number.isInteger(args.page) || (args.page as number) < 1)) {
+				return { error: "page must be a positive integer." };
+			}
+			if (args.status !== undefined && args.status !== "all" && args.status !== "enabled" && args.status !== "disabled") {
+				return { error: "status must be one of: all, enabled, disabled." };
+			}
+			const page = args.page !== undefined ? Math.min(args.page as number, 10_000) : 1;
 			const status = args.status === "enabled" ? true : args.status === "disabled" ? false : undefined;
 			const { aliases, total } = await listAliasViews(db, { search: text(args.search, 100), enabled: status, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
 			return { data: { aliases: aliases.map(view), total, page, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) } };
 		}
 		case "create_alias": {
-			const domain = (text(args.domain, 253) ?? settings.aliasDomains[0] ?? "").trim().toLowerCase();
+			const domain = (text(args.domain, 253)?.trim() || settings.aliasDomains[0] || "").toLowerCase();
 			const note = text(args.note, MAX_NOTE)?.trim() || null;
 			const localPart = text(args.local_part, 64);
 			const alias = localPart?.trim()
@@ -180,13 +186,22 @@ mcp.use("*", async (c, next) => {
 	await next();
 });
 
-// Streamable HTTP: a stateless server has no stream to offer on GET and no session to DELETE.
-mcp.on(["GET", "DELETE"], "/", (c) => c.body(null, 405, { Allow: "POST" }));
+const isLoopbackHost = (host: string) => host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+
+// Streamable HTTP: a stateless server has no stream to offer on GET, no session to DELETE and no CORS preflight.
+mcp.on(["GET", "DELETE", "OPTIONS"], "/", (c) => c.body(null, 405, { Allow: "POST" }));
 
 mcp.post("/", async (c) => {
 	// A browser page on another site must not reach this (DNS rebinding); clients send no Origin.
+	// Trust only configured origins (or loopback when Host is also loopback), never an arbitrary Host header.
 	const origin = c.req.header("Origin");
-	if (origin && origin !== new URL(c.req.url).origin && origin !== c.get("config").publicUrl) return c.text("Forbidden", 403);
+	if (origin) {
+		const config = c.get("config");
+		const requestUrl = new URL(c.req.url);
+		const allowed = [config.publicUrl, config.siteOrigin].filter(Boolean);
+		if (isLoopbackHost(requestUrl.hostname)) allowed.push(requestUrl.origin);
+		if (!allowed.includes(origin)) return c.text("Forbidden", 403);
+	}
 
 	const settings = await loadSettings(c.env.DB);
 	if (!settings.mcpServer) return c.json({ error: "The MCP server is off. Turn it on in the aliasflare settings." }, 404);
@@ -211,11 +226,21 @@ mcp.post("/", async (c) => {
 		return rpcError(c, null, -32700, "Parse error", 400);
 	}
 	if (!message || typeof message !== "object" || Array.isArray(message)) return rpcError(c, null, -32600, "One JSON-RPC message per request.", 400);
-	const { id, method, params } = message as { id?: unknown; method?: unknown; params?: unknown };
+	const record = message as Record<string, unknown>;
+	const { jsonrpc, id, method, params } = record;
+	if (jsonrpc !== "2.0") return rpcError(c, id ?? null, -32600, "Invalid Request", 400);
 	// A notification or a response from the client: accepted, nothing to answer.
-	if (id === undefined) return c.body(null, 202);
+	if (id === undefined) {
+		if (typeof method !== "string" && !Object.hasOwn(record, "result") && !Object.hasOwn(record, "error")) {
+			return rpcError(c, null, -32600, "Invalid Request", 400);
+		}
+		return c.body(null, 202);
+	}
 	if (typeof method !== "string") return rpcError(c, id, -32600, "Invalid Request", 400);
-	const args = (params && typeof params === "object" && !Array.isArray(params) ? params : {}) as Json;
+	if (params !== undefined && (!params || typeof params !== "object" || Array.isArray(params))) {
+		return rpcError(c, id, -32602, "Invalid params");
+	}
+	const args = (params ?? {}) as Json;
 
 	const result = (value: unknown) => c.json({ jsonrpc: "2.0", id, result: value });
 	try {
@@ -235,7 +260,10 @@ mcp.post("/", async (c) => {
 				return result({ tools: TOOLS });
 			case "tools/call": {
 				const name = typeof args.name === "string" ? args.name : "";
-				const input = (args.arguments && typeof args.arguments === "object" && !Array.isArray(args.arguments) ? args.arguments : {}) as Json;
+				if (args.arguments !== undefined && (!args.arguments || typeof args.arguments !== "object" || Array.isArray(args.arguments))) {
+					return rpcError(c, id, -32602, "Invalid params");
+				}
+				const input = (args.arguments ?? {}) as Json;
 				let outcome: ToolResult;
 				try {
 					outcome = await callTool(c.env.DB, settings, name, input);

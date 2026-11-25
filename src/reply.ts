@@ -140,7 +140,10 @@ function threadIds(ids: string[], toOriginal: Map<string, string>, destination: 
 	const ownSite = siteOf(domainOf(destination));
 	return ids.flatMap((id) => {
 		const original = toOriginal.get(id);
-		if (original) return [original];
+		if (original) {
+			const safe = parseMessageIds(original)[0];
+			return safe ? [safe] : [];
+		}
 		const domain = id.slice(1, -1).split("@").pop() ?? "";
 		return domain.includes(".") && siteOf(domain) === ownSite ? [] : [id];
 	});
@@ -252,6 +255,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	// owner's, so neither the banner nor any signed link may reach the correspondent.
 	let html = email.html ? await removeBanner(stripSignedLinks(email.html)) : undefined;
 	let text = email.text ? stripSignedLinks(email.text) : undefined;
+	const replacements: Replacement[] = [];
 	if (settings.reverseAliasReplacement) {
 		const body = `${html ?? ""}\n${text ?? ""}`;
 		// mailto: links may write the "+" of a reverse alias as %2B.
@@ -260,11 +264,16 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			.filter((local): local is string => !!local);
 		// Only this alias's own correspondents: a reverse alias of another alias stays as it is.
 		const contacts = await getContactsByReverseLocals(db, contact.alias_address, reverseLocals);
-		const replacements: Replacement[] = contacts.flatMap((found) => [
-			{ from: reverseAddress(found.reverse_local, reverseDomain), to: found.email },
-			{ from: `${found.reverse_local}@${reverseDomain}`, to: found.email },
-		]);
-		for (const owner of owners) replacements.push({ from: owner, to: contact.alias_address });
+		for (const found of contacts) {
+			replacements.push(
+				{ from: reverseAddress(found.reverse_local, reverseDomain), to: found.email },
+				{ from: `${found.reverse_local}@${reverseDomain}`, to: found.email },
+			);
+		}
+	}
+	// Always scrub the owner's own address from quoted replies, even when reverse-alias replacement is off.
+	for (const owner of owners) replacements.push({ from: owner, to: contact.alias_address });
+	if (replacements.length) {
 		if (html) html = replaceAddresses(html, replacements, { encodedPlus: true });
 		if (text) text = replaceAddresses(text, replacements, { encodedPlus: true });
 	}
@@ -283,7 +292,11 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(`Too many attachments: at most ${limit} per message`);
 		return;
 	}
-	const files = email.attachments.map((attachment, index) => ({ ...cleanAttachment(attachment, index), inline: attachment.disposition === "inline", content: attachment.content as ArrayBuffer }));
+	const files = email.attachments.map((attachment, index) => ({
+		...cleanAttachment(attachment, index),
+		inline: attachment.disposition === "inline" || !!attachment.related,
+		content: attachment.content as ArrayBuffer,
+	}));
 	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, files.map((file) => file.filename));
 	if (refused) {
 		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: refused });

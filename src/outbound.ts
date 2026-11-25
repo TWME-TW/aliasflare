@@ -8,7 +8,7 @@
  */
 import type { AppConfig } from "./config";
 import { bytesToBase64 } from "./crypto";
-import { isPublicHost, safeHttpsUrl } from "./format";
+import { hostnameOf, isPublicHost, safeHttpsUrl } from "./format";
 import { buildMime, formatAddress, newMessageId } from "./mime";
 import { sendSmtp, type SmtpSecurity } from "./smtp";
 import { readTextLimited } from "./streams";
@@ -384,7 +384,13 @@ async function viaCustom(apiKey: string, options: OutboundOptions, message: Outb
 	const messageId = newMessageId(message.from);
 	const values = customValues(message, apiKey, messageId, () => buildMime(message, messageId));
 	const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
-	for (const [name, value] of parseHeaderLines(options.customHeaders)) headers[name] = fillTemplate(value, values, "text");
+	for (const [name, value] of parseHeaderLines(options.customHeaders)) {
+		const lower = name.toLowerCase();
+		for (const existing of Object.keys(headers)) {
+			if (existing.toLowerCase() === lower) delete headers[existing];
+		}
+		headers[name] = fillTemplate(value, values, "text");
+	}
 	const { json } = await request(safeUrl.href, headers, fillTemplate(options.customBody, values, "json"));
 	if (!options.customIdPath) return undefined;
 	let found: unknown = json;
@@ -420,7 +426,7 @@ export async function sendOutbound(env: Env, config: AppConfig, message: Outboun
 	// An SMTP server may take mail without a password; everything else needs its secret.
 	if (!config.outboundApiKey && !(provider === "smtp" && !options.smtpUsername) && provider !== "custom") throw new OutboundError(`No API key is set for ${provider}`);
 	const key = config.outboundApiKey;
-	const blockedHosts = [config.publicUrl, config.siteOrigin, config.mailflareUrl].filter(Boolean).map((url) => new URL(url).hostname);
+	const blockedHosts = [config.publicUrl, config.siteOrigin, config.mailflareUrl].map(hostnameOf).filter((host): host is string => !!host);
 	const messageId =
 		provider === "postmark"
 			? await viaPostmark(key, message)

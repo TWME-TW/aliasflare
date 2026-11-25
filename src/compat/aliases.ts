@@ -4,7 +4,8 @@
  * which is why new aliases may only use the configured alias domains (catch-all in Mailflare).
  */
 import { now, type AliasRow, type ContactRow } from "../db";
-import { cleanDisplayName, normalizeEmail } from "../format";
+import { isOwnAddress } from "../domains";
+import { cleanDisplayName, MAX_NOTE_LENGTH, normalizeEmail } from "../format";
 import type { RandomAliasFormat, Settings } from "../settings";
 
 export type AliasStats = {
@@ -152,9 +153,11 @@ export async function listDestinations(db: D1Database, settings: Settings): Prom
 	const counts = new Map<string, number>();
 	for (const row of results) {
 		const email = row.destination || settings.defaultDestination;
-		if (email) counts.set(email, (counts.get(email) ?? 0) + Number(row.n));
+		if (email && !isOwnAddress(email, settings.aliasDomains)) counts.set(email, (counts.get(email) ?? 0) + Number(row.n));
 	}
-	if (settings.defaultDestination && !counts.has(settings.defaultDestination)) counts.set(settings.defaultDestination, 0);
+	if (settings.defaultDestination && !isOwnAddress(settings.defaultDestination, settings.aliasDomains) && !counts.has(settings.defaultDestination)) {
+		counts.set(settings.defaultDestination, 0);
+	}
 	const out: Destination[] = [];
 	for (const [email, aliasCount] of counts) {
 		out.push({ email, aliasCount, isDefault: email === settings.defaultDestination, ...(await destinationIds(email)) });
@@ -229,13 +232,14 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 	if (!LOCAL_PART.test(localPart) || localPart.includes("..")) throw new ClientError(400, "The alias contains characters that are not allowed.");
 	const address = normalizeEmail(`${localPart}@${domain}`);
 	const name = cleanDisplayName(input.name);
+	const note = input.note?.trim().slice(0, MAX_NOTE_LENGTH) || null;
 	const existing = await db.prepare("SELECT * FROM aliases WHERE address = ?").bind(address).first<AliasRow>();
 	const timestamp = now();
 	if (existing && (!existing.deleted_at || input.allowRestore === false)) throw new ClientError(409, "This alias already exists.");
 	if (existing) {
 		await db
 			.prepare("UPDATE aliases SET deleted_at = NULL, forward_mode = 'all', forward_enabled = 1, note = ?, name = ?, destination = ?, updated_at = ? WHERE address = ?")
-			.bind(input.note ?? null, name, input.destination ?? null, timestamp, address)
+			.bind(note, name, input.destination ?? null, timestamp, address)
 			.run();
 	} else {
 		// Replies need a Mailflare mailbox; until the alias first receives mail, borrow the one of
@@ -251,7 +255,7 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 					`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, num_id, uid, created_at, updated_at)
 					 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT COALESCE(MAX(num_id), 0) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
 				)
-				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, input.note ?? null, name, crypto.randomUUID(), timestamp, timestamp)
+				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, note, name, crypto.randomUUID(), timestamp, timestamp)
 				.run();
 		for (let attempt = 0; ; attempt += 1) {
 			if ((await insert()).meta.changes > 0) break;

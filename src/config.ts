@@ -163,13 +163,15 @@ export async function loadConfig(env: Env): Promise<AppConfig> {
 			.run();
 		signingSecret = (await readStored(env.DB)).signingSecret?.trim() ?? "";
 	}
+	const mailflareUrl = validOrigin(pick("mailflareUrl")) ?? "";
+	const publicUrl = validOrigin(pick("publicUrl")) ?? "";
 	return {
-		mailflareUrl: pick("mailflareUrl").replace(/\/+$/, ""),
+		mailflareUrl,
 		mailflareApiKey: pick("mailflareApiKey"),
 		webhookSecret: pick("webhookSecret"),
 		signingSecret,
-		publicUrl: pick("publicUrl").replace(/\/+$/, ""),
-		siteOrigin: pick("publicUrl").replace(/\/+$/, "") || (validOrigin(stored.siteOrigin ?? "") ?? ""),
+		publicUrl,
+		siteOrigin: publicUrl || (validOrigin(stored.siteOrigin ?? "") ?? ""),
 		// Only from the CLOUDFLARE_API_TOKEN secret: a token typed on the dashboard is never stored.
 		cloudflareApiToken: env.CLOUDFLARE_API_TOKEN?.trim() ?? "",
 		workerName: pick("workerName").toLowerCase() || "aliasflare",

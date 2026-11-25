@@ -37,6 +37,63 @@ export function bannerText(info: BannerInfo, trackersRemoved: number, t: Transla
 	return `${lines.join("\n")}\n${"-".repeat(40)}\n\n`;
 }
 
+/** Linear-time scan for a leading <!doctype>/<html>/<head>...</head> block when HTMLRewriter is unavailable. */
+function leadingHeadBlock(html: string): string {
+	const lower = html.toLowerCase();
+	const len = html.length;
+	let pos = 0;
+	const skipWs = () => {
+		while (pos < len && /\s/.test(html[pos]!)) pos += 1;
+	};
+	skipWs();
+	if (lower.startsWith("<!doctype", pos)) {
+		const close = html.indexOf(">", pos);
+		if (close < 0) return "";
+		pos = close + 1;
+		skipWs();
+	}
+	if (lower.startsWith("<html", pos) && (pos + 5 === len || /[\s>/]/.test(html[pos + 5]!))) {
+		const close = html.indexOf(">", pos);
+		if (close < 0) return html.slice(0, pos);
+		pos = close + 1;
+		skipWs();
+	}
+	if (lower.startsWith("<head", pos) && (pos + 5 === len || /[\s>/]/.test(html[pos + 5]!))) {
+		const openEnd = html.indexOf(">", pos);
+		if (openEnd < 0) return html.slice(0, pos);
+		let scan = openEnd + 1;
+		while (scan < len) {
+			const nextTag = html.indexOf("<", scan);
+			if (nextTag < 0) return html.slice(0, pos);
+			if (lower.startsWith("<!--", nextTag)) {
+				const end = html.indexOf("-->", nextTag + 4);
+				if (end < 0) return html.slice(0, pos);
+				scan = end + 3;
+			} else if (lower.startsWith("</head", nextTag) && (nextTag + 6 === len || /[\s>]/.test(html[nextTag + 6]!))) {
+				const close = html.indexOf(">", nextTag + 6);
+				if (close < 0) return html.slice(0, pos);
+				pos = close + 1;
+				skipWs();
+				return html.slice(0, pos);
+			} else {
+				const rawTag = (["style", "script", "title"] as const).find(
+					(tag) => lower.startsWith(`<${tag}`, nextTag) && (nextTag + tag.length + 1 === len || /[\s>/]/.test(html[nextTag + tag.length + 1]!)),
+				);
+				if (rawTag) {
+					const end = lower.indexOf(`</${rawTag}`, nextTag + rawTag.length + 1);
+					if (end < 0) return html.slice(0, pos);
+					const close = html.indexOf(">", end + rawTag.length + 2);
+					if (close < 0) return html.slice(0, pos);
+					scan = close + 1;
+				} else {
+					scan = nextTag + 1;
+				}
+			}
+		}
+	}
+	return html.slice(0, pos);
+}
+
 /** Removes trackers from forwarded HTML and text, then adds the banner. */
 export async function transformForward(
 	input: { html?: string; text?: string },
@@ -46,7 +103,7 @@ export async function transformForward(
 	let trackersRemoved = 0;
 
 	if (options.removeTrackers) {
-		if (html) {
+		if (html && typeof HTMLRewriter !== "undefined") {
 			html = await new HTMLRewriter()
 				.on("img", {
 					element(element) {
@@ -114,7 +171,7 @@ export async function transformForward(
 				}
 			}
 			if (!inserted) {
-				const lead = /^\s*(?:<!doctype[^>]*>\s*)?(?:<html\b[^>]*>\s*)?(?:<head\b[^>]*>(?:<!--[\s\S]*?-->|<style\b[^>]*>[\s\S]*?<\/style>|<script\b[^>]*>[\s\S]*?<\/script>|<title\b[^>]*>[\s\S]*?<\/title>|(?!<\/head\b)[\s\S])*?<\/head\s*>\s*)?/i.exec(html)?.[0] ?? "";
+				const lead = leadingHeadBlock(html);
 				html = lead + block + html.slice(lead.length);
 			}
 		}

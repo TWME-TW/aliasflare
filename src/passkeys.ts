@@ -42,10 +42,18 @@ export async function hasPasskeys(db: D1Database): Promise<boolean> {
 	return (await db.prepare("SELECT 1 AS one FROM passkeys LIMIT 1").first()) !== null;
 }
 
+const VALID_TRANSPORTS = new Set<AuthenticatorTransport>(["ble", "hybrid", "internal", "nfc", "usb"]);
+
+function normalizeTransports(value: unknown): AuthenticatorTransport[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const clean = [...new Set(value.filter((item): item is AuthenticatorTransport => typeof item === "string" && VALID_TRANSPORTS.has(item as AuthenticatorTransport)))];
+	return clean.length ? clean : undefined;
+}
+
 function transportsOf(row: PasskeyRow): AuthenticatorTransport[] | undefined {
 	if (!row.transports) return undefined;
 	try {
-		return JSON.parse(row.transports) as AuthenticatorTransport[];
+		return normalizeTransports(JSON.parse(row.transports));
 	} catch {
 		return undefined;
 	}
@@ -150,11 +158,12 @@ export async function completeRegistration(
 	});
 	if (!verification.verified || !verification.registrationInfo) return null;
 	const { credential } = verification.registrationInfo;
+	const transports = normalizeTransports(credential.transports);
 	const row: PasskeyRow = {
 		id: credential.id,
 		public_key: isoBase64URL.fromBuffer(credential.publicKey),
 		counter: credential.counter,
-		transports: credential.transports ? JSON.stringify(credential.transports) : null,
+		transports: transports ? JSON.stringify(transports) : null,
 		name: name.trim().slice(0, 60) || "Passkey",
 		created_at: now(),
 		last_used_at: null,
