@@ -5,7 +5,8 @@ import { getAlias, now, recordEvent, setForwardMode, type ForwardRow } from "./d
 import { domainOf, extractEmail } from "./format";
 import type { Translate } from "./i18n";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
-import { loadSettings, type UnsubscribeBehavior } from "./settings";
+import { loadSettings, unsubscribeRuleFor, type UnsubscribeBehavior, type UnsubscribeFallback } from "./settings";
+import { isOwnAddress } from "./domains";
 
 const TIMEOUT_MS = 10_000;
 
@@ -24,6 +25,12 @@ export type LinkTarget = {
 	action: LinkAction;
 	kind: "unsubscribe" | "action";
 	plan: UnsubscribePlan;
+	/** When the sender's own unsubscribe cannot be used. */
+	fallback: UnsubscribeFallback;
+	/** Where "redirect_contact" sends the sender's mail ("" when none is set). */
+	redirect: string;
+	/** Domains a redirect may not point into: it would loop. */
+	ownDomains: string[];
 	token: string;
 };
 
@@ -51,7 +58,7 @@ export async function resolveLink(
 	let forwardId: string;
 	if (kind === "unsubscribe") {
 		forwardId = payload;
-		action = settings.unsubscribeBehavior;
+		action = "preserve_original"; // replaced below, once the alias is known
 	} else {
 		const [verb, id] = payload.split("~");
 		if (!id || (verb !== "block" && verb !== "disable")) return null;
@@ -60,6 +67,10 @@ export async function resolveLink(
 	}
 	const loaded = await loadForward(env.DB, forwardId);
 	if (!loaded) return null;
+	// The alias's domain may have unsubscribe settings of its own.
+	const rule = unsubscribeRuleFor(settings, loaded.forward.alias_address);
+	if (kind === "unsubscribe") action = rule.behavior;
+	const ownDomains = [...settings.aliasDomains, loaded.forward.alias_address.split("@").pop() ?? ""].filter(Boolean);
 	const plan =
 		action === "preserve_original"
 			? unsubscribePlan(loaded.forward, loaded.contactEmail, {
@@ -68,16 +79,34 @@ export async function resolveLink(
 					ownDomains: [...settings.aliasDomains, loaded.forward.alias_address.split("@").pop() ?? ""].filter(Boolean),
 				})
 			: null;
-	return { ...loaded, action, kind, plan, token };
+	return { ...loaded, action, kind, plan, fallback: rule.fallback, redirect: rule.redirect, ownDomains, token };
 }
 
 export function describeAction(target: LinkTarget, t: Translate): string {
-	const { forward, contactEmail, action, plan } = target;
+	const { forward, contactEmail, action, plan, fallback } = target;
 	const sender = contactEmail ?? t("action.thisSender");
-	if (action === "disable_alias") return t("action.disable", { alias: forward.alias_address });
-	if (action === "preserve_original" && plan?.kind === "mail") return t("action.preserveMail", { sender, alias: forward.alias_address, target: plan.to });
-	if (action === "preserve_original" && plan) return t("action.preserve", { sender });
-	return t("action.block", { sender, alias: forward.alias_address });
+	const alias = forward.alias_address;
+	const simple = (what: UnsubscribeFallback): string =>
+		what === "disable_alias"
+			? t("action.disable", { alias })
+			: what === "redirect_contact"
+				? t("action.redirect", { sender, alias, target: target.redirect || "?" })
+				: what === "none"
+					? t("action.nothing", { sender })
+					: t("action.block", { sender, alias });
+	if (action !== "preserve_original") return simple(action);
+	// No unsubscribe of the sender's own: what happens instead is what happens.
+	if (!plan) return simple(fallback);
+	// The usual case keeps its one sentence; another fallback is added as a second one.
+	if (fallback === "block_contact") return plan.kind === "mail" ? t("action.preserveMail", { sender, alias, target: plan.to }) : t("action.preserve", { sender });
+	const first = plan.kind === "mail" ? t("action.preserveMailOnly", { sender, alias, target: plan.to }) : t("action.preserveOnly", { sender });
+	const then =
+		fallback === "disable_alias"
+			? t("action.thenDisable", { alias })
+			: fallback === "redirect_contact"
+				? t("action.thenRedirect", { sender, target: target.redirect || "?" })
+				: t("action.thenNothing");
+	return `${first} ${then}`;
 }
 
 function parseUris(value: string): string[] {
@@ -202,6 +231,27 @@ async function runOriginalUnsubscribe(env: Env, config: AppConfig, forward: Forw
 	return `${plan.kind === "post" ? "one-click POST to" : "visited"} ${new URL(plan.url).hostname}`;
 }
 
+/** Sends this sender's mail to the alias to another address from now on. */
+async function redirectContact(env: Env, target: LinkTarget): Promise<string> {
+	const { forward, redirect, ownDomains } = target;
+	if (!forward.contact_id) throw new Error("This message has no sender on record");
+	if (!redirect) throw new Error("No address is set to send this sender's mail to");
+	if (isOwnAddress(redirect, ownDomains)) throw new Error("The redirect address is on an alias domain");
+	await env.DB.prepare("UPDATE contacts SET destination = ?, blocked = 0 WHERE id = ?").bind(redirect, forward.contact_id).run();
+	return `sender's mail now goes to ${redirect}`;
+}
+
+/** One of the simple actions (everything but the sender's own unsubscribe). */
+async function simpleAction(env: Env, target: LinkTarget, action: UnsubscribeFallback): Promise<string> {
+	if (action === "disable_alias") {
+		await setForwardMode(env.DB, target.forward.alias_address, "none");
+		return "alias forwarding turned off";
+	}
+	if (action === "redirect_contact") return await redirectContact(env, target);
+	if (action === "none") throw new Error("This sender has no unsubscribe of its own, and nothing else is set to happen");
+	return await blockContact(env, target.forward);
+}
+
 async function blockContact(env: Env, forward: ForwardRow): Promise<string> {
 	if (!forward.contact_id) throw new Error("This message has no sender on record");
 	await env.DB.prepare("UPDATE contacts SET blocked = 1 WHERE id = ?").bind(forward.contact_id).run();
@@ -241,20 +291,21 @@ export async function performAction(env: Env, config: AppConfig, target: LinkTar
 	let detail: string;
 	let done: LinkTarget = target;
 	try {
-		if (action === "disable_alias") {
-			await setForwardMode(env.DB, forward.alias_address, "none");
-			detail = "alias forwarding turned off";
-		} else if (action === "preserve_original" && plan) {
+		if (action !== "preserve_original") {
+			detail = await simpleAction(env, target, action);
+		} else if (plan) {
 			try {
 				detail = await runOriginalUnsubscribe(env, config, forward, plan);
 			} catch (error) {
-				// Still stop the mail, even when the sender's own mechanism is broken.
+				// The sender's own mechanism is broken: what is set for that case happens instead.
 				const reason = error instanceof Error ? error.message : String(error);
-				detail = `${await blockContact(env, forward)}; the sender's unsubscribe failed: ${reason}`;
-				done = { ...target, action: "block_contact", plan: null };
+				if (target.fallback === "none") throw new Error(`The sender's unsubscribe failed: ${reason}`);
+				detail = `${await simpleAction(env, target, target.fallback)}; the sender's unsubscribe failed: ${reason}`;
+				done = { ...target, action: target.fallback, plan: null };
 			}
 		} else {
-			detail = await blockContact(env, forward);
+			detail = await simpleAction(env, target, target.fallback);
+			if (target.fallback !== "none") done = { ...target, action: target.fallback, plan: null };
 		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);

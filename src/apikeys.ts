@@ -5,7 +5,11 @@ import { newId, now } from "./db";
  * SHA-256 hash is stored, so a database leak does not reveal usable keys.
  */
 
-export type ApiKeyRow = { id: string; name: string; prefix: string; created_at: number; last_used_at: number | null };
+/** What a key is for: the SimpleLogin and addy.io apps, or the MCP server. A key works only for its own. */
+export type ApiKeyScope = "apps" | "mcp";
+export const API_KEY_SCOPES: ApiKeyScope[] = ["apps", "mcp"];
+
+export type ApiKeyRow = { id: string; name: string; prefix: string; scope: ApiKeyScope; created_at: number; last_used_at: number | null };
 
 const KEY_PREFIX = "af_";
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -26,18 +30,18 @@ function randomKey(): string {
 	return KEY_PREFIX + out.join("");
 }
 
-export async function createApiKey(db: D1Database, name: string): Promise<{ key: string; row: ApiKeyRow }> {
+export async function createApiKey(db: D1Database, name: string, scope: ApiKeyScope = "apps"): Promise<{ key: string; row: ApiKeyRow }> {
 	const key = randomKey();
-	const row: ApiKeyRow = { id: newId("key"), name: name.trim().slice(0, 60) || "API key", prefix: key.slice(0, 10), created_at: now(), last_used_at: null };
+	const row: ApiKeyRow = { id: newId("key"), name: name.trim().slice(0, 60) || "API key", prefix: key.slice(0, 10), scope, created_at: now(), last_used_at: null };
 	await db
-		.prepare("INSERT INTO api_keys (id, name, prefix, hash, created_at) VALUES (?, ?, ?, ?, ?)")
-		.bind(row.id, row.name, row.prefix, await sha256Hex(key), row.created_at)
+		.prepare("INSERT INTO api_keys (id, name, prefix, hash, scope, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+		.bind(row.id, row.name, row.prefix, await sha256Hex(key), row.scope, row.created_at)
 		.run();
 	return { key, row };
 }
 
 export async function listApiKeys(db: D1Database): Promise<ApiKeyRow[]> {
-	const { results } = await db.prepare("SELECT id, name, prefix, created_at, last_used_at FROM api_keys ORDER BY created_at").all<ApiKeyRow>();
+	const { results } = await db.prepare("SELECT id, name, prefix, scope, created_at, last_used_at FROM api_keys ORDER BY created_at").all<ApiKeyRow>();
 	return results;
 }
 
@@ -56,11 +60,11 @@ export function presentedKey(headers: { get(name: string): string | null }): str
 	return key && key.startsWith(KEY_PREFIX) && key.length <= 100 ? key : null;
 }
 
-/** Returns the matching key, recording when it was last used (at most once a minute). */
-export async function verifyApiKey(db: D1Database, key: string): Promise<ApiKeyRow | null> {
+/** Returns the matching key of this scope, recording when it was last used (at most once a minute). */
+export async function verifyApiKey(db: D1Database, key: string, scope: ApiKeyScope): Promise<ApiKeyRow | null> {
 	const row = await db
-		.prepare("SELECT id, name, prefix, created_at, last_used_at FROM api_keys WHERE hash = ?")
-		.bind(await sha256Hex(key))
+		.prepare("SELECT id, name, prefix, scope, created_at, last_used_at FROM api_keys WHERE hash = ? AND scope = ?")
+		.bind(await sha256Hex(key), scope)
 		.first<ApiKeyRow>();
 	if (row && (row.last_used_at ?? 0) < now() - 60) {
 		await db.prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?").bind(now(), row.id).run();

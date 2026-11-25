@@ -16,7 +16,7 @@ SimpleLogin 風格的**電子郵件別名與反向別名**，只需要一個 Clo
 - **主動寫信給新對象。** 為任何地址建立反向別名，從你的真實信箱開始對話。
 - **對話串。** 雙向對應 Message-ID，兩邊的對話都保持在同一串。
 
-**SimpleLogin 風格的設定**：寄件者顯示格式、反向別名替換、在反向別名中包含寄件者地址、一鍵退訂（RFC 8058，可停用別名、封鎖寄件者，或代為執行寄件者原本的退訂）。
+**SimpleLogin 風格的設定**：寄件者顯示格式、反向別名替換、在反向別名中包含寄件者地址、一鍵退訂（RFC 8058，可停用別名、封鎖寄件者、把該寄件者的信改寄到其他地址（例如專收電子報的信箱），或代為執行寄件者原本的退訂，失敗時改做你選擇的動作；每個別名網域可以有自己的設定，也能在別名頁替任何聯絡人指定轉寄地址）。
 
 **隱私與控制**（參考 addy.io、Firefox Relay、DuckDuckGo Email Protection 與 SimpleLogin）
 - **移除追蹤器**：移除追蹤像素，並清除連結中的追蹤參數。
@@ -24,7 +24,8 @@ SimpleLogin 風格的**電子郵件別名與反向別名**，只需要一個 Clo
 - **每個別名的轉寄模式**、**封鎖名單**、**搜尋與批次編輯**、可直接編輯的**備註**。
 
 **App 與瀏覽器擴充功能**
-- **SimpleLogin 與 addy.io 用戶端**：在設定中開啟 API、建立 API 金鑰，再讓官方 App 或擴充功能指向你的 Worker。
+- **SimpleLogin 與 addy.io 用戶端**：在設定中開啟 API、建立 API 金鑰，再讓官方 App 或擴充功能指向你的 Worker。Bitwarden 的別名產生器也能使用。
+- **給 AI 助理的 MCP 伺服器**：列出、建立、切換別名並編輯備註，永遠看不到信件、寄件者或活動紀錄。
 - **從 SimpleLogin 或 addy.io 匯入**，可用 API 金鑰或匯出的 CSV，也能匯入 SimpleLogin 的聯絡人。
 
 **管理介面**：通行金鑰登入、從管理介面一鍵設定 Cloudflare、35 種語言、深色模式、支援手機。
@@ -146,6 +147,7 @@ Worker 本身已對登入與 App API 做速率限制、檢查來源並簽署連�
 | `/unsubscribe/…` | 信箱服務的伺服器（一鍵退訂 POST）與一般人 | **不行** |
 | `/action/…` | 在轉寄信提示列上點擊的人 | 不建議 |
 | `/api/…` | SimpleLogin 與 addy.io 的 App 和擴充功能 | **不行** |
+| `/mcp` | AI 助理（MCP 用戶端） | **不行** |
 | `/webhook` | Mailflare | **不行** |
 | `/assets/…`、`/favicon.svg` | 上面所有頁面 | 不建議 |
 
@@ -169,6 +171,7 @@ Worker 本身已對登入與 App API 做速率限制、檢查來源並簽署連�
    and not starts_with(http.request.uri.path, "/unsubscribe/")
    and not starts_with(http.request.uri.path, "/action/")
    and not starts_with(http.request.uri.path, "/api/")
+   and not http.request.uri.path eq "/mcp"
    and not starts_with(http.request.uri.path, "/assets/")
    and not http.request.uri.path in {"/webhook" "/favicon.svg"}
    ```
@@ -176,6 +179,22 @@ Worker 本身已對登入與 App API 做速率限制、檢查來源並簽署連�
 保留 Cloudflare 免費受控規則集（預設開啟）、開啟 **Always Use HTTPS**，最低 TLS 版本設為 1.2。
 
 **請不要為這個區域開啟 Bot Fight Mode 或「I'm Under Attack」模式。** Bot Fight Mode 無法用任何規則略過，而且可能對非瀏覽器流量發出驗證，在這裡就是 App、信箱服務的一鍵退訂和 Mailflare webhook。同樣地，也絕對不要對 `/unsubscribe/`、`/api/` 或 `/webhook` 加上驗證：這些呼叫者無法完成驗證。
+
+### 10. 選用：給 AI 助理的 MCP 伺服器
+
+支援 MCP（Model Context Protocol）的 AI 助理可以替你管理別名，例如「幫我替這間商店建立一個別名」、「把給航空公司的那個別名關掉」。
+
+1. 在「設定 → App 與瀏覽器擴充功能」開啟「給 AI 助理使用的 MCP 伺服器」。
+2. 在「API 金鑰」建立一把**用途為「MCP（AI 助理）」**的金鑰。App 金鑰不能用於 MCP，MCP 金鑰也不能用於 App，所以可以分別撤銷。
+3. 在 AI 助理中加入遠端（Streamable HTTP）伺服器 `https://<你的網域>/mcp`，並以 `Authorization: Bearer <金鑰>` 傳送金鑰。Claude Code 的指令：
+   ```sh
+   claude mcp add --transport http aliasflare https://alias.example.com/mcp --header "Authorization: Bearer af_…"
+   ```
+   其他能自訂請求標頭的用戶端也是同樣設定方式。只支援 OAuth 登入的用戶端目前無法使用。
+
+提供的工具：`list_domains`、`list_aliases`（搜尋、依啟用或停用篩選、分頁）、`create_alias`（隨機或指定名稱，可加備註）、`set_alias_mode`（全部、阻擋促銷信、不轉寄）與 `set_alias_note`。
+
+刻意不提供的功能：讀取信件、寄件者、聯絡人或活動紀錄（這些是陌生人寫的文字，可能被用來操控 AI 助理）、刪除任何東西、變更任何設定。如果 Worker 前面有 WAF，請像 `/api/` 一樣不要對 `/mcp` 加上驗證。
 
 ### 環境變數覆寫
 

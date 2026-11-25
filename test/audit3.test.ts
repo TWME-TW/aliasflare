@@ -83,7 +83,7 @@ describe("2. the sender's mailto unsubscribe without Mailflare", () => {
 		await deliver(inbound("shop@a.test", "news@store.test", `From: news@store.test\r\n${id()}\r\nList-Unsubscribe: <mailto:leave@store.test?subject=stop>`).msg);
 		const forward = (await db.prepare("SELECT * FROM forwards").first<ForwardRow>())!;
 		const config = await loadConfig(env);
-		const target: LinkTarget = { forward, contactEmail: "news@store.test", action: "preserve_original", kind: "unsubscribe", plan: { kind: "mail", to: "leave@store.test", subject: "stop" }, token: "t" };
+		const target: LinkTarget = { forward, contactEmail: "news@store.test", action: "preserve_original", kind: "unsubscribe", plan: { kind: "mail", to: "leave@store.test", subject: "stop" }, fallback: "block_contact", redirect: "", ownDomains: ["a.test"], token: "t" };
 		sent = [];
 		const { done } = await performAction(env, config, target);
 		expect(sent).toEqual([{ from: "shop@a.test", to: "leave@store.test", subject: "stop", text: "unsubscribe" }]);

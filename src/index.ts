@@ -14,6 +14,7 @@ import {
 } from "./auth";
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
+import { mcp } from "./mcp";
 import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api, apiThrottled } from "./compat/api";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias, forgetStatements } from "./compat/aliases";
@@ -107,7 +108,7 @@ const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immu
 app.use("*", async (c, next) => {
 	if (STATIC_PATHS.has(c.req.path)) return next();
 	// The client APIs are open to anyone with the URL: their limits come before any D1 read.
-	if (c.req.path.startsWith("/api/")) {
+	if (c.req.path.startsWith("/api/") || c.req.path === "/mcp") {
 		const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
 		if (throttled) return throttled;
 	}
@@ -227,6 +228,9 @@ app.post("/lang", async (c) => {
 
 // SimpleLogin and addy.io client APIs (off until enabled in Settings).
 app.route("/api", api);
+
+// MCP server for AI assistants (off until enabled in Settings; its own API keys).
+app.route("/mcp", mcp);
 
 // Mailflare webhook: message.inbound → forward to the alias's destination.
 app.post("/webhook", async (c) => {
@@ -512,9 +516,28 @@ app.post("/settings", async (c) => {
 	if (aliasDomains.length > MAX_ALIAS_DOMAINS) return reply("notice.tooManyDomains", false, { count: String(MAX_ALIAS_DOMAINS) });
 	if (destination && !extractEmail(destination)) return reply("notice.badDestination", false);
 	if (destination && isOwnAddress(extractEmail(destination)!, aliasDomains)) return reply("notice.destinationOnReverse", false);
+	// Unsubscribe: the general rule, then one per alias domain that has its own.
+	const field = (name: string) => (typeof form[name] === "string" ? (form[name] as string).trim() : "");
+	const unsubscribeDomains: Record<string, { behavior: string; fallback: string; redirect: string }> = {};
+	for (const domain of aliasDomains) {
+		const behavior = field(`unsubscribeBehavior:${domain}`);
+		if (behavior) unsubscribeDomains[domain] = { behavior, fallback: field(`unsubscribeFallback:${domain}`), redirect: field(`unsubscribeRedirect:${domain}`) };
+	}
+	const rules = [{ behavior: field("unsubscribeBehavior"), fallback: field("unsubscribeFallback"), redirect: field("unsubscribeRedirect") }, ...Object.values(unsubscribeDomains)];
+	for (const rule of rules) {
+		if (!rule.redirect) continue;
+		const address = extractEmail(rule.redirect);
+		if (!address) return reply("notice.badDestination", false);
+		if (isOwnAddress(address, aliasDomains)) return reply("notice.destinationOnReverse", false);
+	}
+	const generalRedirect = field("unsubscribeRedirect");
+	if (rules.some((rule) => (rule.behavior === "redirect_contact" || rule.fallback === "redirect_contact") && !rule.redirect && !generalRedirect)) {
+		return reply("notice.unsubRedirectMissing", false);
+	}
 	const settings = normalizeSettings({
 		simpleloginApi: form.simpleloginApi === "1",
 		addyApi: form.addyApi === "1",
+		mcpServer: form.mcpServer === "1",
 		aliasDomains,
 		randomAliasFormat: form.randomAliasFormat,
 		appSettings: form.appSettings === "1",
@@ -526,6 +549,9 @@ app.post("/settings", async (c) => {
 		removeTrackers: form.removeTrackers === "1",
 		showBanner: form.showBanner === "1",
 		unsubscribeBehavior: form.unsubscribeBehavior,
+		unsubscribeFallback: form.unsubscribeFallback,
+		unsubscribeRedirect: generalRedirect,
+		unsubscribeDomains,
 		language: form.language,
 		// The bare address, so "Owner <owner@example.com>" is stored as owner@example.com.
 		defaultDestination: destination ? (extractEmail(destination) ?? "") : "",
@@ -736,7 +762,7 @@ async function renderApiKeys(c: C, extra: { newKey?: string; notice?: string } =
 	return c.html(
 		apiKeysPage(c.get("t"), {
 			keys: await listApiKeys(c.env.DB),
-			enabled: { simplelogin: settings.simpleloginApi, addy: settings.addyApi },
+			enabled: { simplelogin: settings.simpleloginApi, addy: settings.addyApi, mcp: settings.mcpServer },
 			origin: publicOrigin(c),
 			notice: extra.notice ?? noticeFrom(c),
 			newKey: extra.newKey,
@@ -748,7 +774,7 @@ app.get("/api-keys", (c) => renderApiKeys(c));
 
 app.post("/api-keys", async (c) => {
 	const form = await c.req.parseBody();
-	const { key } = await createApiKey(c.env.DB, typeof form.name === "string" ? form.name : "");
+	const { key } = await createApiKey(c.env.DB, typeof form.name === "string" ? form.name : "", form.scope === "mcp" ? "mcp" : "apps");
 	// Shown once, straight in the response; it is never stored or put in a URL.
 	c.header("Cache-Control", "no-store");
 	return renderApiKeys(c, { newKey: key });
@@ -934,6 +960,21 @@ app.post("/aliases/:address/contacts", async (c) => {
 	if (!email || isOwnAddress(email, [...settings.aliasDomains, domainOf(alias.address)])) return redirectWithNotice(c, base, "notice.badContact");
 	const contact = await ensureContact(c.env.DB, alias.address, email, null, settings.includeSenderInReverseAlias);
 	return redirectWithNotice(c, base, "notice.contactCreated", { reverse: contactReverseAddress(contact), email });
+});
+
+// Where one sender's mail goes: another address, or (empty) the alias's own again.
+app.post("/aliases/:address/contacts/:id/destination", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	const base = `/aliases/${encodeURIComponent(address)}`;
+	const form = await c.req.parseBody();
+	const raw = typeof form.destination === "string" ? form.destination.trim() : "";
+	const destination = raw ? extractEmail(raw) : null;
+	if (raw && !destination) return redirectWithNotice(c, base, "notice.badDestination");
+	const settings = await loadSettings(c.env.DB);
+	if (destination && isOwnAddress(destination, [...settings.aliasDomains, domainOf(address)])) return redirectWithNotice(c, base, "notice.destinationOnReverse");
+	const result = await c.env.DB.prepare("UPDATE contacts SET destination = ? WHERE id = ? AND alias_address = ?").bind(destination?.toLowerCase() ?? null, c.req.param("id"), address).run();
+	if (!result.meta.changes) return redirectWithNotice(c, base, "notice.contactMissing");
+	return redirectWithNotice(c, base, "notice.contactDestinationSaved");
 });
 
 app.post("/aliases/:address/contacts/:id/block", async (c) => {

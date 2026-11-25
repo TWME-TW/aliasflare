@@ -98,7 +98,7 @@ api.use("*", async (c, next) => {
 	// The request limits ran before this (see apiThrottled); failed keys also count against the stricter one.
 	const ip = clientKey(c.req.header("CF-Connecting-IP"));
 	const cache = lockoutCache();
-	const valid = key ? await verifyApiKey(c.env.DB, key) : null;
+	const valid = key ? await verifyApiKey(c.env.DB, key, "apps") : null;
 	if (!valid) {
 		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
 			await cache?.put(lockoutUrl(ip), new Response("1", { headers: { "Cache-Control": "max-age=60" } }));

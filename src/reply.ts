@@ -208,7 +208,8 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	const settings = await loadSettings(db);
-	const destination = alias.destination || settings.defaultDestination;
+	// The owner writes from the alias's address, or from the one this sender's mail goes to.
+	const owners = [...new Set([alias.destination || settings.defaultDestination, contact.destination].filter((value): value is string => !!value))];
 
 	// A reply always has to be rewritten (it goes out as the alias), so on the Free plan, with
 	// 10 ms of CPU, a large one is refused with a clear reason rather than cut off midway.
@@ -235,6 +236,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	const headerFrom = headers === null ? null : singleSender(headers, email.from?.address);
 
 	// Only the alias owner may write through a reverse alias, or anyone could send as the alias.
+	const destination = owners.find((owner) => normalizeEmail(owner) === headerFrom) ?? owners[0] ?? "";
 	const dmarcPass = !!destination && dmarcPassedByCloudflare(authResults, domainOf(destination));
 	if (!destination || headerFrom !== normalizeEmail(destination) || !dmarcPass) {
 		await recordEvent(db, {
@@ -272,7 +274,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			{ from: reverseAddress(found.reverse_local, reverseDomain), to: found.email },
 			{ from: `${found.reverse_local}@${reverseDomain}`, to: found.email },
 		]);
-		replacements.push({ from: destination, to: contact.alias_address });
+		for (const owner of owners) replacements.push({ from: owner, to: contact.alias_address });
 		const all = withEncodedPlus(replacements);
 		if (html) html = replaceAddresses(html, all);
 		if (text) text = replaceAddresses(text, all);

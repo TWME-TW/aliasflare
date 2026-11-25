@@ -20,7 +20,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 - **Sender address format.** How the original sender appears on forwarded mail: `John Wick - john at wick.com`, `John Wick - john(a)wick.com`, `John Wick`, `john at wick.com`, or no name.
 - **Reverse alias replacement.** In your replies, reverse aliases in the body become the real address, and your real address becomes the alias.
 - **Include sender address in reverse alias.** New reverse aliases can read `john_at_wick_com_x7k2p9@…` instead of a random string.
-- **One-click unsubscribe** (RFC 8058). Your mail client's Unsubscribe button disables the alias, blocks that sender, or runs the sender's own unsubscribe on your behalf.
+- **One-click unsubscribe** (RFC 8058). Your mail client's Unsubscribe button disables the alias, blocks that sender, sends that sender's mail to another address (a mailbox for newsletters, say), or runs the sender's own unsubscribe on your behalf, with a fallback of your choice when that fails. Each alias domain can have its own setting, and any contact can be given its own forwarding address on the alias page.
 
 **Privacy and control** (ideas from addy.io, Firefox Relay, DuckDuckGo Email Protection and SimpleLogin)
 - **Tracker removal.** Drops tracking pixels and strips tracking parameters (`utm_*`, `fbclid`, `mc_eid`, …) from links.
@@ -31,6 +31,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 
 **Apps and browser extensions**
 - **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. Bitwarden's alias generator works too.
+- **MCP server** for AI assistants: list, create and switch aliases and edit their notes. It never sees mail, senders or activity.
 - **Import from SimpleLogin or addy.io**, with their API key or alias export (CSV), including SimpleLogin contacts.
 
 **Dashboard**
@@ -155,6 +156,7 @@ Who calls which paths decides what may be challenged:
 | `/unsubscribe/…` | mail providers' servers (one-click unsubscribe POST) and people | **no** |
 | `/action/…` | people clicking the banner in a forwarded message | no |
 | `/api/…` | the SimpleLogin and addy.io apps and extensions | **no** |
+| `/mcp` | AI assistants (MCP clients) | **no** |
 | `/webhook` | Mailflare | **no** |
 | `/assets/…`, `/favicon.svg` | every page above | no |
 
@@ -178,6 +180,7 @@ Suggested rules (all fit the Free plan: 5 custom rules, 1 rate limiting rule):
    and not starts_with(http.request.uri.path, "/unsubscribe/")
    and not starts_with(http.request.uri.path, "/action/")
    and not starts_with(http.request.uri.path, "/api/")
+   and not http.request.uri.path eq "/mcp"
    and not starts_with(http.request.uri.path, "/assets/")
    and not http.request.uri.path in {"/webhook" "/favicon.svg"}
    ```
@@ -185,6 +188,22 @@ Suggested rules (all fit the Free plan: 5 custom rules, 1 rate limiting rule):
 Keep the Cloudflare Free Managed Ruleset (on by default), **Always Use HTTPS** and a minimum TLS version of 1.2.
 
 **Do not turn on Bot Fight Mode or "I'm Under Attack" mode** for this zone. Bot Fight Mode cannot be skipped by any rule and may challenge non-browser traffic, which here means the apps, mail providers' one-click unsubscribe and the Mailflare webhook. Likewise, never put a challenge on `/unsubscribe/`, `/api/` or `/webhook`: those callers cannot solve one.
+
+### 10. Optional: MCP server for AI assistants
+
+An assistant that speaks MCP (Model Context Protocol) can manage aliases for you: "make me an alias for this shop", "turn off the alias I gave the airline".
+
+1. In **Settings → Apps and browser extensions**, turn on *MCP server for AI assistants*.
+2. On **API keys**, create a key with **For: MCP (AI assistants)**. App keys do not work for MCP, and an MCP key does not work for the apps, so you can revoke either alone.
+3. Add the server to your assistant as a remote (Streamable HTTP) server at `https://<your domain>/mcp`, sending the key as `Authorization: Bearer <key>`. For Claude Code:
+   ```sh
+   claude mcp add --transport http aliasflare https://alias.example.com/mcp --header "Authorization: Bearer af_…"
+   ```
+   Any client that lets you set a request header works the same way. Clients that only sign in with OAuth are not supported.
+
+Tools: `list_domains`, `list_aliases` (search, enabled or disabled, by page), `create_alias` (random or named, with a note), `set_alias_mode` (all, no promotions, none) and `set_alias_note`.
+
+What it cannot do, on purpose: read mail, senders, contacts or activity (text written by strangers, which could steer an assistant), delete anything, or change any setting. If a WAF is in front of the Worker, keep `/mcp` free of challenges like `/api/`.
 
 ### Environment overrides
 

@@ -1,9 +1,19 @@
-import { DOMAIN_PATTERN, isSenderFormat, type SenderFormat } from "./format";
+import { DOMAIN_PATTERN, extractEmail, isSenderFormat, type SenderFormat } from "./format";
 import { isLocale, type Locale } from "./i18n";
 
-export type UnsubscribeBehavior = "disable_alias" | "block_contact" | "preserve_original";
+export type UnsubscribeBehavior = "disable_alias" | "block_contact" | "redirect_contact" | "preserve_original";
 
-export const UNSUBSCRIBE_BEHAVIORS: UnsubscribeBehavior[] = ["disable_alias", "block_contact", "preserve_original"];
+export const UNSUBSCRIBE_BEHAVIORS: UnsubscribeBehavior[] = ["disable_alias", "block_contact", "redirect_contact", "preserve_original"];
+
+/**
+ * What happens when the sender's own unsubscribe cannot be used (there is none, or it
+ * failed): one of the other actions, or nothing, so the link reports the failure.
+ */
+export type UnsubscribeFallback = Exclude<UnsubscribeBehavior, "preserve_original"> | "none";
+export const UNSUBSCRIBE_FALLBACKS: UnsubscribeFallback[] = ["block_contact", "disable_alias", "redirect_contact", "none"];
+
+/** The unsubscribe settings, for all alias domains or one. An empty redirect uses the general one. */
+export type UnsubscribeRule = { behavior: UnsubscribeBehavior; fallback: UnsubscribeFallback; redirect: string };
 
 /** How new random aliases are named: two words and digits, random characters, or a UUID. */
 export type RandomAliasFormat = "random_words" | "random_characters" | "uuid";
@@ -24,6 +34,12 @@ export type Settings = {
 	reverseAliasReplacement: boolean;
 	includeSenderInReverseAlias: boolean;
 	unsubscribeBehavior: UnsubscribeBehavior;
+	/** When the sender's own unsubscribe cannot be used. */
+	unsubscribeFallback: UnsubscribeFallback;
+	/** Where an unsubscribed sender's mail goes with "redirect_contact" (a separate mailbox, say). */
+	unsubscribeRedirect: string;
+	/** Alias domains with unsubscribe settings of their own. */
+	unsubscribeDomains: Record<string, UnsubscribeRule>;
 	defaultDestination: string;
 	autoForwardNewAliases: boolean;
 	/**
@@ -39,6 +55,8 @@ export type Settings = {
 	simpleloginApi: boolean;
 	/** Serve the addy.io API for addy.io's apps and browser extension. */
 	addyApi: boolean;
+	/** Serve the MCP server at /mcp, so an AI assistant can list, create and switch aliases. */
+	mcpServer: boolean;
 	/** Domains new aliases can be created on. Mailflare must accept mail for any address there (a catch-all). */
 	aliasDomains: string[];
 	randomAliasFormat: RandomAliasFormat;
@@ -54,6 +72,9 @@ export const DEFAULT_SETTINGS: Settings = {
 	reverseAliasReplacement: true,
 	includeSenderInReverseAlias: false,
 	unsubscribeBehavior: "disable_alias",
+	unsubscribeFallback: "block_contact",
+	unsubscribeRedirect: "",
+	unsubscribeDomains: {},
 	defaultDestination: "",
 	autoForwardNewAliases: true,
 	createAliasesFromMail: true,
@@ -62,17 +83,54 @@ export const DEFAULT_SETTINGS: Settings = {
 	language: "en",
 	simpleloginApi: false,
 	addyApi: false,
+	mcpServer: false,
 	aliasDomains: [],
 	randomAliasFormat: "random_words",
 	appSettings: true,
 };
 
-function isUnsubscribeBehavior(value: unknown): value is UnsubscribeBehavior {
+export function isUnsubscribeBehavior(value: unknown): value is UnsubscribeBehavior {
 	return UNSUBSCRIBE_BEHAVIORS.includes(value as UnsubscribeBehavior);
+}
+
+export function isUnsubscribeFallback(value: unknown): value is UnsubscribeFallback {
+	return UNSUBSCRIBE_FALLBACKS.includes(value as UnsubscribeFallback);
+}
+
+/** A bare, lowercased address, or "" for anything that is not one. */
+function cleanAddress(value: unknown): string {
+	return typeof value === "string" ? (extractEmail(value.trim())?.toLowerCase() ?? "") : "";
+}
+
+function normalizeRules(raw: unknown, domains: string[]): Record<string, UnsubscribeRule> {
+	const rules: Record<string, UnsubscribeRule> = {};
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return rules;
+	for (const domain of domains) {
+		const rule: unknown = Object.hasOwn(raw, domain) ? (raw as Record<string, unknown>)[domain] : null;
+		if (!rule || typeof rule !== "object") continue;
+		const { behavior, fallback, redirect } = rule as Record<string, unknown>;
+		if (!isUnsubscribeBehavior(behavior)) continue;
+		rules[domain] = { behavior, fallback: isUnsubscribeFallback(fallback) ? fallback : DEFAULT_SETTINGS.unsubscribeFallback, redirect: cleanAddress(redirect) };
+	}
+	return rules;
+}
+
+/** The unsubscribe settings for an alias: its domain's own, or the general ones. */
+export function unsubscribeRuleFor(settings: Settings, aliasAddress: string): UnsubscribeRule {
+	const domain = aliasAddress.split("@").pop()?.toLowerCase() ?? "";
+	const own = Object.hasOwn(settings.unsubscribeDomains, domain) ? settings.unsubscribeDomains[domain] : undefined;
+	return {
+		behavior: own?.behavior ?? settings.unsubscribeBehavior,
+		fallback: own?.fallback ?? settings.unsubscribeFallback,
+		redirect: own?.redirect || settings.unsubscribeRedirect,
+	};
 }
 
 /** Keeps only known keys with valid values; anything else falls back to the default. */
 export function normalizeSettings(raw: Record<string, unknown>): Settings {
+	const aliasDomains = Array.isArray(raw.aliasDomains)
+		? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, MAX_ALIAS_DOMAINS)
+		: [];
 	return {
 		senderFormat: isSenderFormat(raw.senderFormat) ? raw.senderFormat : DEFAULT_SETTINGS.senderFormat,
 		reverseAliasReplacement:
@@ -82,6 +140,9 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 				? raw.includeSenderInReverseAlias
 				: DEFAULT_SETTINGS.includeSenderInReverseAlias,
 		unsubscribeBehavior: isUnsubscribeBehavior(raw.unsubscribeBehavior) ? raw.unsubscribeBehavior : DEFAULT_SETTINGS.unsubscribeBehavior,
+		unsubscribeFallback: isUnsubscribeFallback(raw.unsubscribeFallback) ? raw.unsubscribeFallback : DEFAULT_SETTINGS.unsubscribeFallback,
+		unsubscribeRedirect: cleanAddress(raw.unsubscribeRedirect),
+		unsubscribeDomains: normalizeRules(raw.unsubscribeDomains, aliasDomains),
 		defaultDestination: typeof raw.defaultDestination === "string" ? raw.defaultDestination.trim().toLowerCase() : "",
 		autoForwardNewAliases:
 			typeof raw.autoForwardNewAliases === "boolean" ? raw.autoForwardNewAliases : DEFAULT_SETTINGS.autoForwardNewAliases,
@@ -91,9 +152,8 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		language: isLocale(raw.language) ? raw.language : DEFAULT_SETTINGS.language,
 		simpleloginApi: raw.simpleloginApi === true,
 		addyApi: raw.addyApi === true,
-		aliasDomains: Array.isArray(raw.aliasDomains)
-			? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, MAX_ALIAS_DOMAINS)
-			: [],
+		mcpServer: raw.mcpServer === true,
+		aliasDomains,
 		randomAliasFormat: isRandomAliasFormat(raw.randomAliasFormat) ? raw.randomAliasFormat : DEFAULT_SETTINGS.randomAliasFormat,
 		appSettings: typeof raw.appSettings === "boolean" ? raw.appSettings : DEFAULT_SETTINGS.appSettings,
 	};

@@ -54,6 +54,8 @@ export type ContactRow = {
 	name: string | null;
 	reverse_local: string;
 	blocked: number;
+	/** Where this sender's mail goes instead of the alias's address (after an unsubscribe, say). */
+	destination: string | null;
 	forward_count: number;
 	reply_count: number;
 	last_forward_at: number | null;

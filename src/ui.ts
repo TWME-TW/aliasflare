@@ -9,7 +9,7 @@ import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
-import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, type Settings } from "./settings";
+import { RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, UNSUBSCRIBE_FALLBACKS, type Settings } from "./settings";
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { OUTBOUND_PROVIDERS, type OutboundProvider } from "./outbound";
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
@@ -600,6 +600,34 @@ ${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<option value="${behavior}" ${set
 </select>
 <p class="help">${t("settings.unsubscribeHelp")}<br />
 ${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<b>${t(`unsub.${behavior}`)}:</b> ${t(`unsub.${behavior}.help`)}<br />`)}</p>
+
+<label for="unsubscribeFallback">${t("settings.unsubFallback")}</label>
+<select id="unsubscribeFallback" name="unsubscribeFallback">
+${UNSUBSCRIBE_FALLBACKS.map((fallback) => html`<option value="${fallback}" ${settings.unsubscribeFallback === fallback ? "selected" : ""}>${t(`unsubFallback.${fallback}`)}</option>`)}
+</select>
+<p class="help">${t("settings.unsubFallbackHelp")}</p>
+
+<label for="unsubscribeRedirect">${t("settings.unsubRedirect")}</label>
+<input id="unsubscribeRedirect" name="unsubscribeRedirect" type="email" value="${settings.unsubscribeRedirect}" placeholder="newsletters@example.com" autocapitalize="none" spellcheck="false" />
+<p class="help">${t("settings.unsubRedirectHelp")}</p>
+
+${settings.aliasDomains.length
+	? html`<h3>${t("settings.unsubDomains")}</h3>
+<p class="help">${t("settings.unsubDomainsHelp")}</p>
+<table class="rt"><thead><tr><th>${t("settings.unsubColDomain")}</th><th>${t("settings.unsubscribe")}</th><th>${t("settings.unsubFallback")}</th><th>${t("settings.unsubRedirect")}</th></tr></thead><tbody>
+${settings.aliasDomains.map((domain) => {
+	const rule = Object.hasOwn(settings.unsubscribeDomains, domain) ? settings.unsubscribeDomains[domain] : undefined;
+	return html`<tr>
+<td data-label="${t("settings.unsubColDomain")}"><code>${domain}</code></td>
+<td data-label="${t("settings.unsubscribe")}"><select name="unsubscribeBehavior:${domain}" aria-label="${t("settings.unsubscribe")} (${domain})"><option value="">${t("settings.unsubUseGeneral")}</option>
+${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<option value="${behavior}" ${rule?.behavior === behavior ? "selected" : ""}>${t(`unsub.${behavior}`)}</option>`)}</select></td>
+<td data-label="${t("settings.unsubFallback")}"><select name="unsubscribeFallback:${domain}" aria-label="${t("settings.unsubFallback")} (${domain})">
+${UNSUBSCRIBE_FALLBACKS.map((fallback) => html`<option value="${fallback}" ${(rule?.fallback ?? settings.unsubscribeFallback) === fallback ? "selected" : ""}>${t(`unsubFallback.${fallback}`)}</option>`)}</select></td>
+<td data-label="${t("settings.unsubRedirect")}"><input name="unsubscribeRedirect:${domain}" type="email" value="${rule?.redirect ?? ""}" placeholder="${settings.unsubscribeRedirect || t("settings.unsubUseGeneral")}" aria-label="${t("settings.unsubRedirect")} (${domain})" autocapitalize="none" spellcheck="false" /></td>
+</tr>`;
+})}
+</tbody></table>`
+	: ""}
 </section>
 
 <section id="clients">
@@ -607,6 +635,7 @@ ${UNSUBSCRIBE_BEHAVIORS.map((behavior) => html`<b>${t(`unsub.${behavior}`)}:</b>
 <p class="help">${t("set.clientsHelp")} <a href="/api-keys">${t("nav.apiKeys")} →</a></p>
 ${checkbox("simpleloginApi", settings.simpleloginApi, t("set.simpleloginApi"), t("set.simpleloginApiHelp", { url: origin }))}
 ${checkbox("addyApi", settings.addyApi, t("set.addyApi"), t("set.addyApiHelp", { url: origin }))}
+${checkbox("mcpServer", settings.mcpServer, t("set.mcpServer"), t("set.mcpServerHelp", { url: `${origin}/mcp` }))}
 
 <label for="aliasDomains">${t("set.aliasDomains")}</label>
 <input id="aliasDomains" name="aliasDomains" type="text" value="${settings.aliasDomains.join(", ")}" placeholder="mail.example.com" autocapitalize="none" spellcheck="false" />
@@ -845,7 +874,8 @@ ${contacts.length === 0
 	: html`<table class="rt"><thead><tr><th>${t("alias.colContact")}</th><th>${t("alias.colReverse")}</th><th>${t("alias.colForwarded")}</th><th>${t("alias.colReplied")}</th><th></th></tr></thead><tbody>
 ${contacts.map(
 	(contact) => html`<tr>
-<td data-label="${t("alias.colContact")}"><span class="stack">${contact.name ? html`${contact.name}<br />` : ""}<code>${contact.email}</code></span></td>
+<td data-label="${t("alias.colContact")}"><span class="stack">${contact.name ? html`${contact.name}<br />` : ""}<code>${contact.email}</code>
+<form class="inline row" method="post" action="${base}/contacts/${contact.id}/destination"><input name="destination" type="email" value="${contact.destination ?? ""}" placeholder="${t("alias.contactDestinationDefault")}" aria-label="${t("alias.contactDestination", { email: contact.email })}" autocapitalize="none" spellcheck="false" /><button>${t("common.set")}</button></form></span></td>
 <td data-label="${t("alias.colReverse")}"><code>${contactReverseAddress(contact)}</code></td>
 <td data-label="${t("alias.colForwarded")}"><span class="stack">${contact.forward_count}<br /><span class="muted">${when(contact.last_forward_at, t.locale)}</span></span></td>
 <td data-label="${t("alias.colReplied")}"><span class="stack">${contact.reply_count}<br /><span class="muted">${when(contact.last_reply_at, t.locale)}</span></span></td>
@@ -868,7 +898,7 @@ export function messagePage(t: Translate, title: string, body: Html): Html {
 
 export function apiKeysPage(
 	t: Translate,
-	input: { keys: ApiKeyRow[]; enabled: { simplelogin: boolean; addy: boolean }; origin: string; newKey?: string; notice?: string },
+	input: { keys: ApiKeyRow[]; enabled: { simplelogin: boolean; addy: boolean; mcp: boolean }; origin: string; newKey?: string; notice?: string },
 ): Html {
 	const { keys, enabled, origin, newKey, notice } = input;
 	return page(
@@ -882,14 +912,15 @@ ${newKey
 <section>
 <h2>${t("keys.title")}</h2>
 <p class="help">${t("keys.help")}</p>
-${enabled.simplelogin || enabled.addy
-	? html`<p>${t("keys.serverUrl")}: <code>${origin}</code></p>
-<p class="muted">${enabled.simplelogin ? html`<span class="pill ok">SimpleLogin</span> ` : ""}${enabled.addy ? html`<span class="pill ok">addy.io</span>` : ""}</p>`
+${enabled.simplelogin || enabled.addy || enabled.mcp
+	? html`${enabled.simplelogin || enabled.addy ? html`<p>${t("keys.serverUrl")}: <code>${origin}</code></p>` : ""}
+${enabled.mcp ? html`<p>${t("keys.mcpUrl")}: <code>${origin}/mcp</code></p>` : ""}
+<p class="muted">${enabled.simplelogin ? html`<span class="pill ok">SimpleLogin</span> ` : ""}${enabled.addy ? html`<span class="pill ok">addy.io</span> ` : ""}${enabled.mcp ? html`<span class="pill ok">MCP</span>` : ""}</p>`
 	: html`<p class="notice">${t("keys.off")} <a href="/settings#clients">${t("nav.settings")} →</a></p>`}
 ${keys.length
-	? html`<table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colCreated")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
+	? html`<table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("keys.colScope")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colCreated")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
 ${keys.map(
-	(key) => html`<tr><td data-label="${t("keys.colName")}">${key.name}</td><td data-label="${t("keys.colKey")}"><code>${key.prefix}…</code></td>
+	(key) => html`<tr><td data-label="${t("keys.colName")}">${key.name}</td><td data-label="${t("keys.colScope")}">${t(key.scope === "mcp" ? "keys.scopeMcp" : "keys.scopeApps")}</td><td data-label="${t("keys.colKey")}"><code>${key.prefix}…</code></td>
 <td data-label="${t("keys.colCreated")}">${when(key.created_at, t.locale)}</td><td data-label="${t("keys.colUsed")}">${when(key.last_used_at, t.locale)}</td>
 <td><form class="inline" method="post" action="/api-keys/${key.id}/delete"><button class="danger">${t("keys.revoke")}</button></form></td></tr>`,
 )}
@@ -900,6 +931,7 @@ ${keys.map(
 <h2>${t("keys.add")}</h2>
 <form method="post" action="/api-keys" class="row">
 <input name="name" type="text" maxlength="60" placeholder="${t("keys.namePlaceholder")}" aria-label="${t("keys.name")}" required />
+<select name="scope" aria-label="${t("keys.colScope")}"><option value="apps">${t("keys.scopeApps")}</option><option value="mcp">${t("keys.scopeMcp")}</option></select>
 <button class="primary">${t("keys.create")}</button>
 </form>
 </section>

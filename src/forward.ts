@@ -253,15 +253,18 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				const blocked = await matchBlocklist(db, sender);
 				if (blocked) return await skip(`blocklist: ${blocked.value}`);
 			}
-			const blockedContact = await db
-				.prepare(`SELECT 1 AS hit FROM contacts WHERE alias_address = ? AND blocked = 1 AND email IN (${senders.map(() => "?").join(", ")}) LIMIT 1`)
+			const { results: known } = await db
+				.prepare(`SELECT email, blocked, destination FROM contacts WHERE alias_address = ? AND email IN (${senders.map(() => "?").join(", ")})`)
 				.bind(aliasAddress, ...senders)
-				.first<{ hit: number }>();
-			if (blockedContact) return await skip("sender is blocked");
+				.all<{ email: string; blocked: number; destination: string | null }>();
+			if (known.some((contact) => contact.blocked)) return await skip("sender is blocked");
+			// The From header's contact first: that is the sender the user sees.
+			const redirect = (known.find((contact) => contact.email === senders[1]) ?? known[0])?.destination;
+			const target = redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination;
 			if (alias.forward_mode === "no_promotions" && isPromotional([...headers].map(([key, value]) => ({ key, value })))) {
 				return await skip("promotional mail is blocked for this alias");
 			}
-			await passThrough(destination);
+			await passThrough(target);
 			const sentAt = now();
 			try {
 				await db.batch([
@@ -310,6 +313,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const contact = await ensureContact(db, aliasAddress, senderEmail, senderName, settings.includeSenderInReverseAlias);
 		await finish(db, forwardId, { contact_id: contact.id });
 		if (contact.blocked) return await skip("sender is blocked");
+		// A sender can have an address of its own (set by an unsubscribe, say).
+		const recipient = contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain]) ? contact.destination : destination;
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
 		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
@@ -355,7 +360,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
 			// Cloudflare will not take a To header of our own, so the alias goes in the display name:
 			// the message still reads as sent to the alias, and the real mailbox stays the recipient.
-			to: { name: aliasAddress, email: destination },
+			to: { name: aliasAddress, email: recipient },
 			replyTo: reverseAddress,
 			subject: spoofed ? `${translator(settings.language)("banner.spoofSubject")} ${subject}` : subject,
 			headers,
