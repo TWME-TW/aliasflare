@@ -62,9 +62,24 @@ describe("installing the dashboard as an app", () => {
 		};
 		walk(join(__dirname, "..", "public"));
 
-		const workerPaths = new Set(app.routes.map((route) => route.path));
-		const RESERVED = ["/assets/", "/api", "/mcp", "/webhook", "/unsubscribe/", "/action/", "/setup", "/login", "/logout", "/health"];
-		const clashes = files.filter((file) => workerPaths.has(file) || RESERVED.some((prefix) => file === prefix || file.startsWith(prefix)));
+		// Where Cloudflare serves each file. With the default html_handling ("auto-trailing-slash"),
+		// a.html is served at /a and a/index.html at /a/, so index.html takes "/" itself.
+		const served = (file: string) => {
+			const paths = [file];
+			if (file.endsWith("/index.html")) paths.push(file.slice(0, -"index.html".length), file.slice(0, -"/index.html".length) || "/");
+			else if (file.endsWith(".html")) paths.push(file.slice(0, -".html".length));
+			return paths;
+		};
+		// The Worker's routes as patterns, parameters (/aliases/:address) and wildcards included.
+		// Middleware (app.use) is listed too, as ALL /* or ALL /api/*: it is not a page, so it is left
+		// out; the prefixes it covers are in RESERVED below.
+		const routes = app.routes.filter((route) => !(route.method === "ALL" && route.path.endsWith("*"))).map(
+			(route) => new RegExp(`^${route.path.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\/:[^/]+/g, "/[^/]+").replace(/\*/g, ".*")}/?$`),
+		);
+		const RESERVED = ["/assets", "/api", "/mcp", "/webhook", "/unsubscribe", "/action", "/setup", "/login", "/logout", "/health"];
+		const clashes = files.filter((file) =>
+			served(file).some((path) => routes.some((route) => route.test(path)) || RESERVED.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))),
+		);
 		expect(clashes).toEqual([]);
 	});
 });
