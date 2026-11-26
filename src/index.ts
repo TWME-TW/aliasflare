@@ -1004,6 +1004,8 @@ const PGP_NOTICES: Record<PgpError["reason"], MessageKey> = {
 	noEncryption: "notice.pgpNoEncryption",
 	expired: "notice.pgpExpired",
 	tooLarge: "notice.pgpTooLarge",
+	// A key already published for an alias: the WKD page's rule, applied in the other order.
+	keyInUse: "notice.wkdKeyInUse",
 };
 
 app.get("/encryption", async (c) => {
