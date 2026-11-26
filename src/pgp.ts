@@ -99,16 +99,17 @@ export async function listPgpKeys(db: D1Database): Promise<PgpKeyRow[]> {
  * saved (see wkd.ts), so neither direction can pair an alias with a real mailbox.
  */
 export async function savePgpKey(db: D1Database, email: string, key: { armored: string; fingerprint: string }): Promise<void> {
-	const published = await db.prepare("SELECT alias_address FROM wkd_keys WHERE fingerprint = ?").bind(key.fingerprint).first<{ alias_address: string }>();
-	if (published) throw new PgpError("keyInUse");
 	const timestamp = now();
-	await db
+	const result = await db
 		.prepare(
-			`INSERT INTO pgp_keys (email, public_key, fingerprint, encrypt, hide_subject, created_at, updated_at) VALUES (?, ?, ?, 0, 0, ?, ?)
+			`INSERT INTO pgp_keys (email, public_key, fingerprint, encrypt, hide_subject, created_at, updated_at)
+			 SELECT ?, ?, ?, 0, 0, ?, ?
+			 WHERE NOT EXISTS (SELECT 1 FROM wkd_keys WHERE fingerprint = ?)
 			 ON CONFLICT (email) DO UPDATE SET public_key = excluded.public_key, fingerprint = excluded.fingerprint, updated_at = excluded.updated_at`,
 		)
-		.bind(normalizeEmail(email), key.armored, key.fingerprint, timestamp, timestamp)
+		.bind(normalizeEmail(email), key.armored, key.fingerprint, timestamp, timestamp, key.fingerprint)
 		.run();
+	if ((result.meta.changes ?? 0) === 0) throw new PgpError("keyInUse");
 }
 
 /** Encrypts a forwarded message and sends it as raw PGP/MIME through Email Sending. */

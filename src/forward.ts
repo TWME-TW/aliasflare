@@ -1,5 +1,5 @@
 import PostalMime, { addressParser, type Email } from "postal-mime";
-import type { AppConfig } from "./config";
+import { ownHosts, type AppConfig } from "./config";
 import { signToken } from "./crypto";
 import { CATCH_ALL_NOTE, ensureAlias, ensureContact, mapOriginalToForwarded, matchBlocklist, newId, now, type AliasRow, type ForwardRow } from "./db";
 import { cleanAttachment, domainOf, ensureAngle, extractEmail, cleanSubjectLine, formatSenderName, parseBareEmail, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
@@ -18,12 +18,49 @@ import { encryptionKeyFor, sendEncrypted, sendKept } from "./pgp";
 import { pgpKind, topEntity } from "./mime";
 
 /**
- * An inline PGP message (RFC 4880 armor) that is a plain-text body's entire content. The whole body
- * has to be the armor: a line that merely starts one is written by the sender, and treating a
- * message as "already encrypted" because of it would let any sender turn the owner's encryption
- * off and have the rest of the message delivered in the clear.
+ * RFC 4880 ASCII-armored OpenPGP message: optional standard armor headers, a blank line, strictly
+ * Base64 lines, an optional CRC24 checksum line, and the matching END marker. Its first decoded
+ * byte must also be a valid OpenPGP encrypted-message packet header (PKESK/SKESK/SED/SEIPD), so
+ * neither plain words nor two blocks sandwiching readable text can switch the owner's encryption off.
  */
-const INLINE_PGP = /^-----BEGIN PGP MESSAGE-----\r?\n[\s\S]*\r?\n-----END PGP MESSAGE-----$/;
+const INLINE_PGP_ARMOR =
+	/^-----BEGIN PGP MESSAGE-----\r?\n(?:(?:Version|Comment|Charset|MessageID|Hash):[ \t][^\r\n]{0,200}\r?\n){0,8}\r?\n([A-Za-z0-9+/]+={0,2}[ \t]*\r?\n(?:[A-Za-z0-9+/]+={0,2}[ \t]*\r?\n)*)(?:=[A-Za-z0-9+/]{4}[ \t]*\r?\n)?-----END PGP MESSAGE-----$/;
+
+/** OpenPGP leading packet header bytes for encrypted messages (tags 1, 3, 9, 18; old and new formats). */
+const ENCRYPTED_PACKET_TAGS = new Set([1, 3, 9, 18]);
+
+export function isInlinePgpArmor(text: string): boolean {
+	const match = INLINE_PGP_ARMOR.exec(text.trim());
+	if (!match) return false;
+	const b64 = match[1]!.replace(/\s+/g, "");
+	if (b64.length < 4) return false;
+	let firstByte: number;
+	try {
+		firstByte = atob(b64.slice(0, 4)).charCodeAt(0);
+	} catch {
+		return false;
+	}
+	if ((firstByte & 0x80) === 0) return false;
+	const tag = (firstByte & 0x40) !== 0 ? firstByte & 0x3f : (firstByte >> 2) & 0x0f;
+	return ENCRYPTED_PACKET_TAGS.has(tag);
+}
+
+/**
+ * True only when a parsed `multipart/encrypted` message actually holds an RFC 3156 PGP/MIME
+ * payload: no readable text/HTML parts, and strictly the version identification part plus an
+ * armored PGP message part. Prevents a spoofed `Content-Type: multipart/encrypted` header around
+ * plaintext from turning the owner's encryption off.
+ */
+function isValidPgpMimeEncrypted(email: Email): boolean {
+	if (email.html || email.text || email.attachments.length !== 2) return false;
+	const version = email.attachments.find((part) => part.mimeType?.trim().toLowerCase() === "application/pgp-encrypted");
+	const payload = email.attachments.find((part) => part !== version && part.mimeType?.trim().toLowerCase() === "application/octet-stream");
+	if (!version || !payload) return false;
+	const decode = (content: ArrayBuffer | string) =>
+		typeof content === "string" ? content : new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(new Uint8Array(content));
+	if (!/^version:\s*1$/i.test(decode(version.content as ArrayBuffer | string).trim())) return false;
+	return isInlinePgpArmor(decode(payload.content as ArrayBuffer | string));
+}
 import { listDestinations } from "./compat/aliases";
 import type { Settings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
@@ -114,7 +151,7 @@ export function isPromotional(headers: { key: string; value: string }[]): boolea
 	return headers.some(({ key, value }) => {
 		const name = key.toLowerCase();
 		if (name === "list-unsubscribe" || name === "list-id") return true;
-		return name === "precedence" && /^(bulk|list|junk)$/i.test(value.trim());
+		return name === "precedence" && value.split(",").some((part) => /^(bulk|list|junk)$/i.test(part.trim()));
 	});
 }
 
@@ -168,25 +205,24 @@ function rawHeaderSection(raw: ArrayBuffer): string | null {
 }
 
 /**
- * The Content-Type the message's own header section declares, for deciding whether mail is PGP/MIME.
- * Unlike rawHeaderSection this looks through the whole header section, however long it is, because
- * the answer decides whether the body may be rebuilt at all: "too long to look at" must not be read
- * as "not PGP", or a message with padded headers would be rebuilt and reach the owner undecryptable.
+ * The message's full header section, for deciding whether mail is PGP/MIME. Unlike rawHeaderSection
+ * this looks through the whole header section, however long it is, because the answer decides
+ * whether the body may be rebuilt at all — and passing the whole header block lets pgpKind reject
+ * duplicate Content-Type headers instead of looking only at the first.
  */
-function contentTypeOf(raw: ArrayBuffer): string | null {
+function fullHeaderSection(raw: ArrayBuffer): string | null {
 	const bytes = new Uint8Array(raw);
 	// Only the search for the blank line costs anything, and it stops at the header section's end.
 	let end = -1;
 	for (let i = 0; i < bytes.length - 1; i++) {
 		if (bytes[i] !== 10) continue;
 		if (bytes[i + 1] === 10 || (bytes[i + 1] === 13 && bytes[i + 2] === 10)) {
-			end = i;
+			end = i > 0 && bytes[i - 1] === 13 ? i - 1 : i;
 			break;
 		}
 	}
 	if (end < 0) return null;
-	const head = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(bytes.subarray(0, end));
-	return /^content-type:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/im.exec(head)?.[1]?.trim() ?? "";
+	return new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(bytes.subarray(0, end));
 }
 
 /** Forwards one message Mailflare received (its message.inbound webhook) to the alias's destination. */
@@ -389,7 +425,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				subject: ruleSubject,
 				alias: aliasAddress,
 			});
-			await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: primarySender, subject: ruleSubject });
+			await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: primarySender, subject: ruleSubject }, ownHosts(config));
 			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
@@ -428,8 +464,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// no longer decrypt in the owner's app, or its signature would fail. The kind is read from
 		// the whole header section rather than the 64 KiB rule check, so headers the rules decline
 		// to look at cannot make PGP mail look like an ordinary message.
-		const declaredType = contentTypeOf(stored!.raw);
-		const pgp = pgpKind(declaredType === null ? null : `Content-Type: ${declaredType}`);
+		const pgp = pgpKind(fullHeaderSection(stored!.raw));
 		const kept = pgp ? topEntity(stored!.raw) : null;
 		// Without the entity there is nothing to keep, and rebuilding PGP/MIME would hand the owner
 		// something their app cannot open. Refuse instead of sending a broken message.
@@ -487,7 +522,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// A sender can have an address of its own (set by an unsubscribe, say).
 		const ruleSenders = [senderEmail, ...(envelopeSender ? [envelopeSender] : [])];
 		const rules = await runRules(db, "forwards", { sender: senderEmail, senders: ruleSenders, envelopeSender, spoofed, subject: email.subject ?? "", alias: aliasAddress });
-		await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: senderEmail, subject: email.subject ?? "" });
+		await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: senderEmail, subject: email.subject ?? "" }, ownHosts(config));
 		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 		// A rule's Forward to comes first, then the sender's own address, then the alias's.
 		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
@@ -527,22 +562,24 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// mailbox. Each organizer becomes a reverse alias, so the answer comes back through here
 		// like a reply (which puts the alias in place of the owner's address).
 		const calendarReplacements: Replacement[] = [];
-		for (const [index, attachment] of email.attachments.entries()) {
-			const { filename, type } = cleanAttachment(attachment, index);
-			if (carriesAddresses(type, filename) !== "calendar") continue;
-			for (const organizer of calendarOrganizers(attachment.content as ArrayBuffer).slice(0, 3)) {
-				if (calendarReplacements.length >= 5 || calendarReplacements.some((r) => r.from === organizer)) continue;
-				if (
-					organizer === normalizeEmail(destination) ||
-					organizer === normalizeEmail(recipient) ||
-					isOwnAddress(organizer, [...settings.aliasDomains, aliasDomain]) ||
-					isReverseDomainOf(domainOf(organizer), settings.aliasDomains) ||
-					(await matchBlocklist(db, organizer))
-				) {
-					continue;
+		if (!kept) {
+			for (const [index, attachment] of email.attachments.entries()) {
+				const { filename, type } = cleanAttachment(attachment, index);
+				if (carriesAddresses(type, filename) !== "calendar") continue;
+				for (const organizer of calendarOrganizers(attachment.content as ArrayBuffer).slice(0, 3)) {
+					if (calendarReplacements.length >= 5 || calendarReplacements.some((r) => r.from === organizer)) continue;
+					if (
+						organizer === normalizeEmail(destination) ||
+						organizer === normalizeEmail(recipient) ||
+						isOwnAddress(organizer, [...settings.aliasDomains, aliasDomain]) ||
+						isReverseDomainOf(domainOf(organizer), settings.aliasDomains) ||
+						(await matchBlocklist(db, organizer))
+					) {
+						continue;
+					}
+					const organizerContact = organizer === contact.email ? contact : await ensureContact(db, aliasAddress, organizer, null, settings.includeSenderInReverseAlias);
+					calendarReplacements.push({ from: organizer, to: reverseAddressOf(organizerContact.reverse_local, reverseDomain) });
 				}
-				const organizerContact = organizer === contact.email ? contact : await ensureContact(db, aliasAddress, organizer, null, settings.includeSenderInReverseAlias);
-				calendarReplacements.push({ from: organizer, to: reverseAddressOf(organizerContact.reverse_local, reverseDomain) });
 			}
 		}
 		const displayName = rules.displayFrom ? sanitizeDisplayName(rules.displayFrom) : formatSenderName(settings.senderFormat, contact.name, contact.email);
@@ -589,8 +626,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// encrypted again: the owner's app would then have to decrypt twice. Only a message with
 		// nothing else in it counts: an HTML part or an attachment beside the armor is written by the
 		// sender too, and would otherwise go out readable.
-		const inlinePgp = !email.html && !email.attachments.length && INLINE_PGP.test((email.text ?? "").trim());
-		const encryptedAlready = (kept !== null && pgp === "encrypted") || inlinePgp;
+		const inlinePgp = !email.html && !email.attachments.length && isInlinePgpArmor(email.text ?? "");
+		const encryptedAlready = (kept !== null && pgp === "encrypted" && isValidPgpMimeEncrypted(email)) || inlinePgp;
 		const wantsEncryption = !encryptedAlready && settings.pgpRecipients.includes(normalizeEmail(recipient));
 		const pgpKey = wantsEncryption ? await encryptionKeyFor(db, recipient) : null;
 		// The settings list which addresses are encrypted, and the key table is what that list is

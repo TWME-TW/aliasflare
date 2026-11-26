@@ -144,6 +144,24 @@ function stubMessage(reason: string): ArrayBuffer {
 	return new TextEncoder().encode(rebuilt).buffer as ArrayBuffer;
 }
 
+/** Rewrites cid:<old> references in HTML when an inline attachment's Content-ID was scrubbed. */
+export function rewriteContentId(html: string, oldCid: string, newCid: string): string {
+	if (!oldCid || oldCid === newCid) return html;
+	const escaped = oldCid.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replaceAll("@", "(?:@|%40)");
+	return html.replace(new RegExp(`cid:${escaped}`, "gi"), () => `cid:${newCid}`);
+}
+
+/** Replaces a Content-ID that carries the owner's mail domain, address, reverse alias or signed link. */
+export function scrubContentId(contentId: string | undefined, ownSites: Set<string>, scrub: (value: string) => string): string | undefined {
+	if (!contentId) return undefined;
+	const scrubbed = scrub(contentId);
+	const cidDomain = scrubbed.split("@").pop() ?? "";
+	if (scrubbed !== contentId || (cidDomain.includes(".") && ownSites.has(siteOf(cidDomain)))) {
+		return `${crypto.randomUUID()}@invalid`;
+	}
+	return scrubbed;
+}
+
 export type ScrubMessageOptions = {
 	ownSites?: Set<string>;
 	removeBanner?: (html: string) => Promise<string>;
@@ -203,12 +221,9 @@ export async function scrubAttachedMessage(
 			const cleaned = cleanAttachment(attachment, index);
 			const nestedKind = carriesAddresses(cleaned.type, cleaned.filename);
 			const scrubbedFilename = cleanAttachment({ filename: scrub(cleaned.filename), mimeType: cleaned.type }, index).filename;
-			let scrubbedCid = cleaned.contentId ? scrub(cleaned.contentId) : undefined;
-			if (scrubbedCid) {
-				const cidDomain = scrubbedCid.split("@").pop() ?? "";
-				if (cidDomain.includes(".") && ownSites.has(siteOf(cidDomain))) {
-					scrubbedCid = `${crypto.randomUUID()}@invalid`;
-				}
+			const scrubbedCid = scrubContentId(cleaned.contentId, ownSites, scrub);
+			if (html && cleaned.contentId && scrubbedCid && scrubbedCid !== cleaned.contentId) {
+				html = rewriteContentId(html, cleaned.contentId, scrubbedCid);
 			}
 			const data =
 				nestedKind === "message"

@@ -14,7 +14,7 @@ import { readTextLimited } from "../streams";
 import type { AppEnv } from "../auth";
 import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
-import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
+import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, hostnameOf, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { ownHosts } from "../config";
 import { createsAliasesFromMail, loadSettings, normalizeSettings, saveSettingKeys, type Settings } from "../settings";
@@ -106,7 +106,7 @@ export async function apiThrottled(env: Env, ip: string | undefined): Promise<Re
 }
 
 api.use("*", async (c, next) => {
-	const settings = await loadSettings(c.env.DB);
+	const settings = c.get("settings") ?? (await loadSettings(c.env.DB));
 	if (!(isAddy(c) ? settings.addyApi : settings.simpleloginApi)) return c.json({ error: "Not found", message: "Not found" }, 404);
 	// The apps check the version before signing in.
 	if (c.req.path === "/api/v1/app-version") return c.json(VERSION);
@@ -1160,7 +1160,7 @@ const RULE_ERRORS: Record<RuleError["reason"], [number, string]> = {
 	missing: [404, "Not found"],
 	forwardTo: [422, "The Forward to recipient is not known."],
 	webhook: [422, "A webhook needs a public https address."],
-	unsupported: [422, "aliasflare cannot apply this rule as given: it supports no regular expressions, webhooks, encryption or description changes, and at most 10 conditions, 20 values in a condition and 200 characters in a value."],
+	unsupported: [422, "aliasflare cannot apply this rule as given: it supports no regular expressions, encryption or description changes, and at most 10 conditions, 20 values in a condition and 200 characters in a value."],
 };
 
 /** A rule from an app; its Forward to may stay the address it had, even if no alias uses it any more. */
@@ -1177,8 +1177,9 @@ async function ruleInput(c: C, existing: Rule | null = null) {
 		if (typeof value === "string" && kept.has(value.toLowerCase())) return { type: "forwardTo", value: value.toLowerCase() };
 		throw new ClientError(...RULE_ERRORS.forwardTo);
 	});
+	const reqHost = hostnameOf(c.req.url);
 	try {
-		return cleanRule({ ...input, actions }, ownHosts(c.get("config")));
+		return cleanRule({ ...input, actions }, [...ownHosts(c.get("config")), ...(reqHost ? [reqHost] : [])]);
 	} catch (error) {
 		if (error instanceof RuleError) throw new ClientError(...RULE_ERRORS[error.reason]);
 		throw error;

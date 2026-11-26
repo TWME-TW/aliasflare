@@ -170,14 +170,23 @@ export type Entity = { headers: string; body: Uint8Array };
 
 /** PGP/MIME (RFC 3156) from the top-level Content-Type: already encrypted, signed, or neither. */
 export function pgpKind(headerBlock: string | null): "encrypted" | "signed" | null {
-	if (!headerBlock) return null;
-	const type = /^content-type:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/im.exec(headerBlock)?.[1]?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
-	if (/^multipart\/encrypted\s*;/.test(type) && /protocol\s*=\s*"?application\/pgp-encrypted"?/.test(type)) return "encrypted";
-	if (/^multipart\/signed\s*;/.test(type) && /protocol\s*=\s*"?application\/pgp-signature"?/.test(type)) return "signed";
+	if (!headerBlock || /[\u0000\r](?!\n)/.test(headerBlock)) return null;
+	// Multiple Content-Type headers are ambiguous (clients disagree on which wins) and are refused.
+	const matches = [...headerBlock.matchAll(/^content-type:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/gim)];
+	if (matches.length !== 1) return null;
+	const type = matches[0]![1]!.replace(/\s+/g, " ").trim().toLowerCase();
+	// Fetch Headers.get() joins duplicate headers with ", "; an unquoted comma means multiple headers.
+	if (type.replace(/"(?:[^"\\]|\\.)*"/g, '""').includes(",")) return null;
+	if (/^multipart\/encrypted\s*;/.test(type) && /;\s*protocol\s*=\s*(?:"application\/pgp-encrypted"|application\/pgp-encrypted)(?:\s*;|\s*$)/.test(type)) {
+		return "encrypted";
+	}
+	if (/^multipart\/signed\s*;/.test(type) && /;\s*protocol\s*=\s*(?:"application\/pgp-signature"|application\/pgp-signature)(?:\s*;|\s*$)/.test(type)) {
+		return "signed";
+	}
 	return null;
 }
 
-/** The top-level entity of a raw message, or null when it has no header section. */
+/** The top-level entity of a raw message, or null when it has no valid header section. */
 export function topEntity(raw: ArrayBuffer): Entity | null {
 	const bytes = new Uint8Array(raw);
 	// The end of the header section: the first empty line (CRLF CRLF, or bare LF LF). No length cap:
@@ -197,15 +206,27 @@ export function topEntity(raw: ArrayBuffer): Entity | null {
 	const head = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(bytes.subarray(0, end)).replace(/\r?\n/g, CRLF);
 	const lines: string[] = [];
 	let keep = false;
+	let contentTypes = 0;
+	let transferEncodings = 0;
 	for (const line of head.split(CRLF)) {
 		if (/^[ \t]/.test(line)) {
-			if (keep) lines.push(line);
+			if (keep) {
+				if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(line)) return null;
+				lines.push(line);
+			}
 			continue;
 		}
-		keep = /^content-(type|transfer-encoding):/i.test(line);
-		if (keep) lines.push(line);
+		const isCt = /^content-type:/i.test(line);
+		const isCte = /^content-transfer-encoding:/i.test(line);
+		keep = isCt || isCte;
+		if (keep) {
+			if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(line)) return null;
+			if (isCt) contentTypes += 1;
+			if (isCte) transferEncodings += 1;
+			lines.push(line);
+		}
 	}
-	if (!lines.length) return null;
+	if (contentTypes !== 1 || transferEncodings > 1) return null;
 	return { headers: lines.join(CRLF), body: bytes.subarray(start) };
 }
 
@@ -250,6 +271,7 @@ function withProtectedHeaders(lines: string[]): string[] {
 	if (start < 0) return lines;
 	let last = start;
 	while (last + 1 < lines.length && /^[ \t]/.test(lines[last + 1]!)) last++;
+	if (/;\s*protected-headers\s*=/i.test(lines.slice(start, last + 1).join(" "))) return lines;
 	return lines.map((line, index) => (index === last ? `${line.replace(/;?\s*$/, "")}; protected-headers="v1"` : line));
 }
 

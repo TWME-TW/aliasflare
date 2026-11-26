@@ -45,6 +45,8 @@ class Conversation {
 	/** Switches to TLS after STARTTLS was accepted. */
 	upgrade() {
 		if (!this.socket.startTls) throw new OutboundError("This connection cannot start TLS");
+		// RFC 3207: nothing may follow the 220 STARTTLS reply in cleartext (pipelined MITM injection).
+		if (this.buffer.length > 0) throw new OutboundError("Unexpected data received before STARTTLS");
 		this.reader.releaseLock();
 		this.writer.releaseLock();
 		this.attach(this.socket.startTls());

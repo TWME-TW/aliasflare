@@ -23,7 +23,7 @@ import { loadSettings, type Settings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES, LOOP_HEADER } from "./forward";
 import { readLimited } from "./streams";
-import { attachmentSearchText, carriesAddresses, MAX_NESTED_EML_PARSES, rewriteAttachment, scrubAttachedMessage } from "./attachments";
+import { attachmentSearchText, carriesAddresses, MAX_NESTED_EML_PARSES, rewriteAttachment, rewriteContentId, scrubAttachedMessage, scrubContentId } from "./attachments";
 import { listDestinations } from "./compat/aliases";
 import { ruleForwardAddresses, runRules } from "./rules";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
@@ -370,7 +370,11 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		for (const [index, attachment] of email.attachments.entries()) {
 			partTexts.push(addressParts[index] ? await attachmentSearchText(attachment.content as ArrayBuffer, addressParts[index]!, 0, searchBudget) : "");
 		}
-		const body = [html ?? "", text ?? "", ...partTexts].join("\n");
+		const attachmentMeta = email.attachments.map((attachment, index) => {
+			const { filename, contentId } = cleanAttachment(attachment, index);
+			return `${filename}\n${contentId ?? ""}`;
+		});
+		const body = [rules.subject ?? email.subject ?? "", html ?? "", text ?? "", ...attachmentMeta, ...partTexts].join("\n");
 		// mailto: links and HTML bodies may encode "+" as %2B and "@" as %40 / &#64;.
 		const normalizedBody = body.replace(ENCODED_PLUS_PATTERN, "+").replace(ENCODED_AT_PATTERN, "@");
 		const reverseLocals = findAddressesOnDomain(normalizedBody, reverseDomain)
@@ -385,8 +389,14 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 			);
 		}
 	}
-	// Always scrub the owner's own address from quoted replies, even when reverse-alias replacement is off.
-	for (const owner of owners) replacements.push({ from: owner, to: contact.alias_address });
+	// Always scrub the owner's own forwarding addresses from quoted replies, even when reverse-alias replacement is off.
+	const ownerAddresses = [...new Set([...owners, ...knownDestinations].map(normalizeEmail))].filter((address) => address !== normalizeEmail(contact.email));
+	for (const owner of ownerAddresses) replacements.push({ from: owner, to: contact.alias_address });
+	const scrubText = (value: string) => {
+		let out = stripSignedLinks(value);
+		if (replacements.length) out = replaceAddresses(out, replacements, { encodedPlus: true });
+		return out;
+	};
 	if (replacements.length) {
 		if (html) html = replaceAddresses(html, replacements, { encodedPlus: true });
 		if (text) text = replaceAddresses(text, replacements, { encodedPlus: true });
@@ -397,15 +407,23 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	// Map recent references before dropping own-site IDs so surviving earlier IDs are never left unmapped.
 	const parentIds = [...rawInReplyTo, ...rawReferences.slice(-80)];
 	const toOriginal = await mapForwardedToOriginal(db, contact.alias_address, parentIds);
-	const inReplyTo = threadIds(rawInReplyTo, toOriginal, owners)[0];
-	const references = threadIds(rawReferences, toOriginal, owners).slice(-MAX_REFERENCES);
+	const inReplyTo = threadIds(rawInReplyTo, toOriginal, ownerAddresses)[0];
+	const references = threadIds(rawReferences, toOriginal, ownerAddresses).slice(-MAX_REFERENCES);
 
-	const ownSites = new Set(owners.map((owner) => siteOf(domainOf(owner))).filter(Boolean));
+	const ownSites = new Set(ownerAddresses.map((owner) => siteOf(domainOf(owner))).filter(Boolean));
 	const scrubBudget = { remaining: MAX_NESTED_EML_PARSES };
 	const files = [];
 	for (const [index, attachment] of email.attachments.entries()) {
+		const cleaned = cleanAttachment(attachment, index);
+		const scrubbedFilename = cleanAttachment({ filename: scrubText(cleaned.filename), mimeType: cleaned.type }, index).filename;
+		const scrubbedCid = scrubContentId(cleaned.contentId, ownSites, scrubText);
+		if (html && cleaned.contentId && scrubbedCid && scrubbedCid !== cleaned.contentId) {
+			html = rewriteContentId(html, cleaned.contentId, scrubbedCid);
+		}
 		files.push({
-			...cleanAttachment(attachment, index),
+			...cleaned,
+			filename: scrubbedFilename,
+			contentId: scrubbedCid,
 			inline: attachment.disposition === "inline" || !!attachment.related,
 			content:
 				addressParts[index] === "message"
@@ -421,7 +439,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(refused);
 		return;
 	}
-	const subject = cleanSubjectLine(rules.subject ?? email.subject) || "(no subject)";
+	const subject = cleanSubjectLine(scrubText(rules.subject ?? email.subject ?? "")) || "(no subject)";
 	const name = alias.name?.replace(/[\u0000-\u001f\u007f"\\<>]/g, "").trim() || "";
 
 	try {

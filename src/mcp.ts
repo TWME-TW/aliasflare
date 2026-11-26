@@ -225,7 +225,7 @@ mcp.post("/", async (c) => {
 		if (!allowed.includes(origin)) return c.text("Forbidden", 403);
 	}
 
-	const settings = await loadSettings(c.env.DB);
+	const settings = c.get("settings") ?? (await loadSettings(c.env.DB));
 	if (!settings.mcpServer) return c.json({ error: "The MCP server is off. Turn it on in the aliasflare settings." }, 404);
 
 	const key = presentedKey(c.req.raw.headers);
