@@ -36,4 +36,13 @@ describe("installing the dashboard as an app", () => {
 			expect(existsSync(publicFile(icon.slice(1))), icon).toBe(true);
 		}
 	});
+
+	it("gives the files Cloudflare serves itself the same baseline headers as the Worker", () => {
+		// These never pass through the Worker, so `_headers` is the only place they can get them.
+		const headers = readFileSync(publicFile("_headers"), "utf8");
+		expect(headers).toContain("X-Content-Type-Options: nosniff");
+		expect(headers).toContain("Referrer-Policy: same-origin");
+		expect(headers).toContain("Content-Security-Policy: default-src 'none'");
+		expect(headers).toContain("frame-ancestors 'none'");
+	});
 });

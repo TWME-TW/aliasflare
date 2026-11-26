@@ -208,6 +208,9 @@ Who calls which paths decides what may be challenged:
 | `/mcp` | AI assistants (MCP clients) | **no** |
 | `/webhook` | Mailflare | **no** |
 | `/assets/…`, `/favicon.svg` | every page above | no |
+| `/manifest.webmanifest`, `/icon-*.png`, `/apple-touch-icon.png` | the browser, installing the dashboard as an app | no |
+
+The last two rows are served by Cloudflare from `public/` without running the Worker, so they cost no Worker requests and the rules below cannot break them either way.
 
 Suggested rules (all fit the Free plan: 5 custom rules, 1 rate limiting rule):
 
