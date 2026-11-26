@@ -69,7 +69,7 @@ describe("2. a session is only as good as its passkey", () => {
  */
 const PUBLIC_ROUTES: [RegExp, string][] = [
 	[/^GET \/health$/, "uptime monitors"],
-	[/^GET /.well-known/openpgpkey/(?:[^/]+/)?(?:hu/[^/]+|policy)$/, "Web Key Directory: public keys of aliases that publish one"],
+	[/^GET \/\.well-known\/openpgpkey\/(?:[^/]+\/)?(?:hu\/[^/]+|policy)$/,"Web Key Directory: public keys of aliases that publish one"],
 	[/^GET \/(assets\/(?:app\.js|app\.css|passkey\.js)|favicon\.svg)$/, "static files"],
 	[/^POST \/(?:lang|theme)$/, "language and theme, same-origin only"],
 	[/^(?:GET|POST) \/(?:setup|login)(?:\/|$)/, "first-run setup and passkey sign-in"],
