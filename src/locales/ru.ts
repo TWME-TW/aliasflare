@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Этот сеанс уже был завершён.",
 	"notice.othersSignedOut": "Выход выполнен на других устройствах: {count}.",
 	"err.reauth": "Сначала подтвердите ключом доступа, затем повторите попытку.",
+	"bulk.allLabels": "Все метки",
 };
 
 export default dictionary;

@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "To urządzenie było już wylogowane.",
 	"notice.othersSignedOut": "Wylogowano {count} inne urządzenia.",
 	"err.reauth": "Najpierw potwierdź kluczem dostępu, potem spróbuj ponownie.",
+	"bulk.allLabels": "Wszystkie etykiety",
 };
 
 export default dictionary;

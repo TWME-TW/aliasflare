@@ -597,6 +597,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Esse dispositivo já estava desconectado.",
 	"notice.othersSignedOut": "Desconectados {count} outros dispositivos.",
 	"err.reauth": "Confirme primeiro com sua chave de acesso e tente novamente.",
+	"bulk.allLabels": "Todas as etiquetas",
 };
 
 export default dictionary;

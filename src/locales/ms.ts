@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Peranti itu telah pun log keluar.",
 	"notice.othersSignedOut": "Telah log keluar {count} peranti lain.",
 	"err.reauth": "Sahkan dengan passkey dahulu, kemudian cuba lagi.",
+	"bulk.allLabels": "Semua label",
 };
 
 export default dictionary;

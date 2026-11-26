@@ -597,6 +597,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "එම උපාංගය දැනටමත් ලොග් අවුට් වී තිබුණි.",
 	"notice.othersSignedOut": "අනෙකුත් උපාංග {count} ක් ලොග් අවුට් කරන ලදී.",
 	"err.reauth": "පළමුව පාස්කීය සමඟ තහවුරු කර, නැවත උත්සාහ කරන්න.",
+	"bulk.allLabels": "සියලුම ලේබල",
 };
 
 export default dictionary;

@@ -171,6 +171,19 @@ describe("UX, tactile feel, and visual polish", () => {
 		expect(dash.html).not.toMatch(/<style|style="/);
 	});
 
+	it("gives the batch label list a search box and an All labels choice, however few labels there are", async () => {
+		await createLabel(db, { name: "Only" });
+		await db
+			.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at) VALUES ('one@a.test', 1, 'u1', 'all', 1, 1, 1)")
+			.run();
+		const { html } = await getHtml("/");
+		const menu = html.slice(html.indexOf("data-bulk-labels"), html.indexOf("</details>", html.indexOf("data-bulk-labels")));
+		expect(menu).toContain("data-label-filter");
+		// The All labels box has no name, so it is never sent as a label of its own.
+		expect(menu).toMatch(/<input type="checkbox" data-label-all \/><span>All labels<\/span>/);
+		expect(menu.indexOf("data-label-all")).toBeLessThan(menu.indexOf('name="labels"'));
+	});
+
 	it("keeps language switcher on /unsubscribe/:token and hides dead-end CTA when fallback is none", async () => {
 		await saveSettings(db, {
 			...(await loadSettings(db)),

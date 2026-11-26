@@ -105,7 +105,7 @@ app.use("*", async (c, next) => {
 	if (NO_STORE.test(c.req.path)) c.header("Cache-Control", "no-store");
 	c.header(
 		"Content-Security-Policy",
-		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 	);
 });
 

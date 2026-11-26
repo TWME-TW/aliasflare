@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Das Gerät war bereits abgemeldet.",
 	"notice.othersSignedOut": "{count} andere Geräte wurden abgemeldet.",
 	"err.reauth": "Bestätigen Sie zuerst mit Ihrem Passkey und versuchen Sie es dann erneut.",
+	"bulk.allLabels": "Alle Labels",
 };
 
 export default dictionary;

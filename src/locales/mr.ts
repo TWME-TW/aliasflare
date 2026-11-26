@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "ते उपकरण आधीच साइन आउट होते.",
 	"notice.othersSignedOut": "इतर {count} उपकरणे साइन आउट केली.",
 	"err.reauth": "प्रथम पासकीने पुष्टी करा, मग पुन्हा प्रयत्न करा.",
+	"bulk.allLabels": "सर्व लेबल",
 };
 
 export default dictionary;

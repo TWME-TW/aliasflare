@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Dat apparaat was al afgemeld.",
 	"notice.othersSignedOut": "{count} andere apparaten afgemeld.",
 	"err.reauth": "Bevestig eerst met je passkey en probeer het daarna opnieuw.",
+	"bulk.allLabels": "Alle labels",
 };
 
 export default dictionary;

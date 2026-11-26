@@ -307,6 +307,8 @@ export const APP_SCRIPT = `(() => {
     };
     const labelMenu = bulk.querySelector("[data-bulk-labels]");
     const labelFilter = labelMenu && labelMenu.querySelector("[data-label-filter]");
+    // Straight into the search box with a mouse; on a touch screen that would pop up the keyboard.
+    const focusFilter = () => { if (labelFilter && matchMedia("(pointer: fine)").matches) labelFilter.focus(); };
     const showValue = (fromUser) => {
       const option = action && action.selectedOptions[0];
       if (value) {
@@ -323,24 +325,38 @@ export const APP_SCRIPT = `(() => {
         if (!needs) labelMenu.open = false;
         else if (fromUser) {
           labelMenu.open = true;
-          if (labelFilter) labelFilter.focus();
+          focusFilter();
         }
       }
     };
     if (labelMenu) {
       const summary = labelMenu.querySelector("summary");
       const boxes = [...labelMenu.querySelectorAll("input[name=labels]")];
+      // "All labels" ticks or clears every label the search leaves showing.
+      const allBox = labelMenu.querySelector("[data-label-all]");
+      const shown = () => boxes.filter((box) => !box.closest("label").hidden);
       const count = () => {
         const n = boxes.filter((box) => box.checked).length;
         summary.textContent = n ? summary.dataset.template.replace("{count}", String(n)) : summary.dataset.empty;
+        if (allBox) {
+          const visible = shown();
+          const ticked = visible.filter((box) => box.checked).length;
+          allBox.checked = ticked > 0 && ticked === visible.length;
+          allBox.indeterminate = ticked > 0 && ticked < visible.length;
+          allBox.disabled = visible.length === 0;
+        }
       };
       for (const box of boxes) box.addEventListener("change", count);
+      if (allBox) allBox.addEventListener("change", () => { for (const box of shown()) box.checked = allBox.checked; count(); });
       if (labelFilter) {
         labelFilter.addEventListener("input", () => {
           const q = labelFilter.value.trim().toLowerCase();
           for (const box of boxes) box.closest("label").hidden = !!q && !box.closest("label").dataset.name.includes(q);
+          count();
         });
-        labelMenu.addEventListener("toggle", () => { if (labelMenu.open) labelFilter.focus(); });
+        // Enter in the search box filters; it does not submit the batch form.
+        labelFilter.addEventListener("keydown", (event) => { if (event.key === "Enter") event.preventDefault(); });
+        labelMenu.addEventListener("toggle", () => { if (labelMenu.open) focusFilter(); });
       }
       // A click elsewhere or Escape closes the list, keeping what was ticked.
       document.addEventListener("click", (event) => { if (labelMenu.open && !labelMenu.contains(event.target)) labelMenu.open = false; });

@@ -1,0 +1,4 @@
+# Static files are served without running the Worker, so they get its plain headers here.
+/*
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=86400

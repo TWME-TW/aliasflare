@@ -576,6 +576,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "そのデバイスはすでにログアウトしていました。",
 	"notice.othersSignedOut": "他の {count} 台のデバイスをログアウトしました。",
 	"err.reauth": "先にパスキーで確認してから、もう一度お試しください。",
+	"bulk.allLabels": "すべてのラベル",
 };
 
 export default dictionary;

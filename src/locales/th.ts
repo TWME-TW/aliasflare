@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "อุปกรณ์นั้นออกจากระบบไปแล้ว",
 	"notice.othersSignedOut": "ออกจากระบบอุปกรณ์อื่น {count} เครื่องแล้ว",
 	"err.reauth": "ยืนยันด้วยพาสคีย์ก่อน แล้วลองอีกครั้ง",
+	"bulk.allLabels": "ป้ายกำกับทั้งหมด",
 };
 
 export default dictionary;

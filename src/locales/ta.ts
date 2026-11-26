@@ -591,6 +591,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "அந்தச் சாதனம் ஏற்கனவே வெளியேறியிருந்தது.",
 	"notice.othersSignedOut": "மற்ற {count} சாதனங்கள் வெளியேற்றப்பட்டன.",
 	"err.reauth": "முதலில் பாஸ்கீயால் உறுதிப்படுத்திவிட்டு மீண்டும் முயலவும்.",
+	"bulk.allLabels": "அனைத்து லேபிள்களும்",
 };
 
 export default dictionary;

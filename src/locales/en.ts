@@ -516,6 +516,7 @@ export const en = {
 	"bulk.chooseLabels": "Choose labels",
 	"bulk.labelsChosen": "{count} labels chosen",
 	"bulk.findLabel": "Find a label",
+	"bulk.allLabels": "All labels",
 	"bulk.noLabels": "Choose at least one label.",
 	"notice.labelSaved": "Label saved.",
 	"notice.labelDeleted": "Label deleted.",

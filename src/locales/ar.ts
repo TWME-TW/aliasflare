@@ -597,6 +597,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "تم تسجيل الخروج من ذلك الجهاز مسبقًا.",
 	"notice.othersSignedOut": "تم تسجيل الخروج من {count} أجهزة أخرى.",
 	"err.reauth": "أكّد بمفتاح المرور أولاً، ثم حاول مرة أخرى.",
+	"bulk.allLabels": "كل الوسوم",
 };
 
 export default dictionary;
