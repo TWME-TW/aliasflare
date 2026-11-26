@@ -38,19 +38,26 @@ export type InboundEvent = {
 export type ForwardOutcome = { status: number; result: string };
 
 /**
- * Claims a webhook delivery so that retries and concurrent deliveries forward a message
- * once. Returns the row id to work on, or an outcome to answer with right away.
+ * Claims a delivery so that retries and concurrent deliveries forward a message once, and reads
+ * the alias again in the same round trip. The alias is read at the start of the message too, but
+ * the owner may have turned it off, deleted it or changed its address since, and mail has to follow
+ * that: the row that comes back here is the one the rest of the forwarding uses.
  */
-async function claim(db: D1Database, messageId: string, aliasAddress: string): Promise<{ id: string } | ForwardOutcome> {
+async function claim(
+	db: D1Database,
+	messageId: string,
+	aliasAddress: string,
+): Promise<{ id: string; alias: AliasRow | null } | ForwardOutcome> {
 	const timestamp = now();
 	const id = newId("fw");
-	const inserted = await db
-		.prepare(
-			"INSERT INTO forwards (id, inbound_id, alias_address, status, attempts, created_at, updated_at) VALUES (?, ?, ?, 'processing', 1, ?, ?) ON CONFLICT (inbound_id) DO NOTHING",
-		)
-		.bind(id, messageId, aliasAddress, timestamp, timestamp)
-		.run();
-	if (inserted.meta.changes > 0) return { id };
+	const [inserted, current] = await db.batch([
+		db
+			.prepare("INSERT INTO forwards (id, inbound_id, alias_address, status, attempts, created_at, updated_at) VALUES (?, ?, ?, 'processing', 1, ?, ?) ON CONFLICT (inbound_id) DO NOTHING")
+			.bind(id, messageId, aliasAddress, timestamp, timestamp),
+		db.prepare("SELECT * FROM aliases WHERE address = ?").bind(aliasAddress),
+	]);
+	const alias = (current?.results?.[0] as AliasRow | undefined) ?? null;
+	if ((inserted?.meta.changes ?? 0) > 0) return { id, alias };
 
 	const existing = await db.prepare("SELECT * FROM forwards WHERE inbound_id = ?").bind(messageId).first<ForwardRow>();
 	if (!existing) return { status: 409, result: "busy" };
@@ -64,7 +71,7 @@ async function claim(db: D1Database, messageId: string, aliasAddress: string): P
 		)
 		.bind(timestamp, existing.id, timestamp - STALE_PROCESSING_SECONDS)
 		.run();
-	if (reclaimed.meta.changes > 0) return { id: existing.id };
+	if (reclaimed.meta.changes > 0) return { id: existing.id, alias };
 	// Another delivery is working on it; Mailflare retries later and finds it sent.
 	return { status: 409, result: "in progress" };
 }
@@ -276,6 +283,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	const claimed = await claim(db, input.key, aliasAddress);
 	if (!("id" in claimed)) return claimed;
 	const forwardId = claimed.id;
+	// What the alias is now, not what it was when the message arrived: the owner may have turned it
+	// off, deleted it or changed where it forwards in between, and the message follows the row.
+	const current = claimed.alias;
 	const skip = async (reason: string): Promise<ForwardOutcome> => {
 		await finish(db, forwardId, { status: "skipped", error: reason });
 		return { status: 200, result: `skipped: ${reason}` };
@@ -287,9 +297,12 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 
 	try {
 		if (isReverseDomainOf(aliasDomain, settings.aliasDomains)) return await skip("the recipient is a reverse alias");
+		// It was there when the message arrived and has been removed for good since (Forget): the
+		// owner wants it gone, so it is not made again from this message.
+		if (known && !current) return await skip("the alias was deleted");
 		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
-		if (known?.deleted_at) return await skip("the alias was deleted");
-		if (known?.forward_mode === "none") return await skip("forwarding is off for this alias");
+		if (current?.deleted_at) return await skip("the alias was deleted");
+		if (current?.forward_mode === "none") return await skip("forwarding is off for this alias");
 		// A copy this Worker sent itself is recognised from its headers, before it is read.
 		if (input.headers?.get(LOOP_HEADER)) return await skip("already forwarded by this Worker");
 		// Mail is passed through unchanged in receive-only mode, and on the Free plan when it is too
@@ -299,7 +312,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const passThrough = input.passThrough && (direct || tooLarge) ? input.passThrough : null;
 		let stored = passThrough ? null : await input.load();
 		// No address of its own: the alias follows the default, also when the default changes later.
-		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", { forwardEnabled: settings.autoForwardNewAliases }, known);
+		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", { forwardEnabled: settings.autoForwardNewAliases }, current);
 		const destination = alias.destination || settings.defaultDestination;
 		if (alias.deleted_at) return await skip("the alias was deleted");
 		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias");

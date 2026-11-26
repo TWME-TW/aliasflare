@@ -100,7 +100,7 @@ export const CATCH_ALL_NOTE = "Created by catchall option";
 
 /**
  * Returns the alias, creating it on its first message: an address nothing here manages yet.
- * `existing` is the alias when the caller has just read it, which saves a write and a read.
+ * `existing` is a fresh read of the row by this same request, which says it is there already.
  */
 export async function ensureAlias(
 	db: D1Database,

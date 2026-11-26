@@ -1,4 +1,8 @@
-# Static files are served without running the Worker, so they get its plain headers here.
+# Static files are served by Cloudflare without running the Worker, so they get its plain
+# headers here. Only the manifest and the icons are served from here: nothing in them runs
+# script, and they are never framed.
 /*
   X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin
+  Content-Security-Policy: default-src 'none'; img-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   Cache-Control: public, max-age=86400

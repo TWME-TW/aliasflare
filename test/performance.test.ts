@@ -47,16 +47,22 @@ describe("performance", () => {
 		expect(row?.last_used_at).toBeGreaterThan(0);
 	});
 
-	it("reads the configuration, the settings and the alias once per message, in one round trip", async () => {
+	it("reads what a message needs in one round trip, and reads the alias again only to claim it", async () => {
 		const real = testDb();
 		await saveSettings(real, { ...(await loadSettings(real)), aliasDomains: ["a.test"], defaultDestination: "owner@gmail.test", language: "ja" });
 		await real.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at) VALUES ('shop@a.test', 1, 'u1', 'all', 1, 1, 1)").run();
 		const statements: string[] = [];
-		let batches = 0;
+		const batches: string[][] = [];
 		const db = new Proxy(real, {
 			get(target, name) {
 				if (name === "prepare") return (sql: string) => (statements.push(sql), target.prepare(sql));
-				if (name === "batch") return (list: D1PreparedStatement[]) => (batches++, target.batch(list));
+				if (name === "batch") {
+					return (list: D1PreparedStatement[]) => {
+						// The statements of each batch, recorded from prepare() order: a batch is one round trip.
+						batches.push(statements.slice(-list.length));
+						return target.batch(list);
+					};
+				}
 				const value = Reflect.get(target, name);
 				return typeof value === "function" ? value.bind(target) : value;
 			},
@@ -70,12 +76,16 @@ describe("performance", () => {
 		const count = (pattern: RegExp) => statements.filter((sql) => pattern.test(sql)).length;
 		expect(count(/^SELECT key, value FROM settings$/)).toBe(1);
 		expect(count(/^SELECT key, value FROM config$/)).toBe(1);
-		expect(count(/^SELECT \* FROM aliases WHERE address = \?$/)).toBe(1);
+		// Once with the configuration, to know whether the alias exists, and once when claiming the
+		// delivery: the owner may have turned the alias off or deleted it while the message was being
+		// read, and the forwarding must follow the row as it is now, not as it was.
+		expect(count(/^SELECT \* FROM aliases WHERE address = \?$/)).toBe(2);
 		// The alias exists: nothing tries to create it again.
 		expect(count(/^INSERT INTO aliases/)).toBe(0);
-		// Those three go together as the first batch.
-		expect(statements.slice(0, 3)).toEqual(["SELECT key, value FROM config", "SELECT key, value FROM settings", "SELECT * FROM aliases WHERE address = ?"]);
-		expect(batches).toBeGreaterThanOrEqual(1);
+		// The first three go together as one round trip: the configuration, the settings, the alias.
+		expect(batches[0]).toEqual(["SELECT key, value FROM config", "SELECT key, value FROM settings", "SELECT * FROM aliases WHERE address = ?"]);
+		// Claiming the delivery carries the second alias read in the same round trip as the insert.
+		expect(batches.some((batch) => batch.length === 2 && batch[0]!.startsWith("INSERT INTO forwards") && batch[1]!.startsWith("SELECT * FROM aliases"))).toBe(true);
 	});
 });
 
