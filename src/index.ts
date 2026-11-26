@@ -24,7 +24,7 @@ import { mcp } from "./mcp";
 import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api, apiThrottled } from "./compat/api";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias, forgetStatements, listDestinations } from "./compat/aliases";
-import { ConfigError, DOMAIN_PATTERN, envOverrides, isWorkersPlan, loadConfig, mailflareReady, missingConnection, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
+import { ConfigError, DOMAIN_PATTERN, envOverrides, isWorkersPlan, loadConfig, mailflareReady, missingConnection, ownHosts, saveConfig, validOrigin, WORKER_NAME_PATTERN, type AppConfig } from "./config";
 import { customValues, fillTemplate, isOutboundProvider, normalizeOutboundOptions, parseHeaderLines, SES_REGION, type OutboundOptions } from "./outbound";
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
@@ -1110,7 +1110,7 @@ async function saveRule(c: C, id: string | null): Promise<Response> {
 	try {
 		const existing = id ? await getRule(c.env.DB, id) : null;
 		if (id && !existing) return redirectWithNotice(c, "/rules", "notice.ruleMissing");
-		const input = cleanRule(ruleFromForm(await c.req.parseBody(), existing));
+		const input = cleanRule(ruleFromForm(await c.req.parseBody(), existing), ownHosts(c.get("config")));
 		// Mail goes only to the owner's own forwarding addresses, as in the apps: it carries the
 		// banner's signed links, which should not reach anyone else. Check every forwardTo action.
 		const forwardTos = input.actions.filter((action) => action.type === "forwardTo");

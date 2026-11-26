@@ -163,6 +163,18 @@ describe("webhook rules", () => {
 		}
 	});
 
+	it("refuse this deployment's own host, which would call itself for every message", () => {
+		// Every other place an owner-entered address is called (SMTP, a custom sender, the importer's
+		// server, unsubscribe targets) blocks the deployment's own hosts; a webhook into aliasflare
+		// would fire on each matching message and loop back into the same Worker.
+		const self = ["mail.example.com"];
+		expect(() => cleanRule(rule("https://mail.example.com/webhook"), self)).toThrow(RuleError);
+		expect(() => cleanRule(rule("https://sub.mail.example.com/webhook"), self)).toThrow(RuleError);
+		// Another host is still fine, and the same address passes when it is not ours.
+		expect(cleanRule(rule("https://hooks.example.com/in"), self).actions).toEqual([{ type: "webhook", value: "https://hooks.example.com/in" }]);
+		expect(cleanRule(rule("https://mail.example.com/webhook")).actions).toEqual([{ type: "webhook", value: "https://mail.example.com/webhook" }]);
+	});
+
 	it("are called, signed, when a forwarded message matches, and the message still goes", async () => {
 		const calls: { url: string; init: RequestInit }[] = [];
 		vi.stubGlobal("fetch", async (url: string, init: RequestInit) => (calls.push({ url, init }), new Response("ok")));

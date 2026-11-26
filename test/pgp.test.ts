@@ -158,6 +158,22 @@ describe("forwarding", () => {
 		expect(notice(await post("/encryption/nobody%40home.test/encrypt", { on: "1" }))).toBe("notice.pgpMissing");
 	});
 
+	it("never sends in the clear when the address is marked encrypted but its key is gone", async () => {
+		// The settings name the addresses to encrypt; the key table is what that list is made from.
+		// If they disagree — the key deleted without the flag, a settings write from an app, a
+		// half-finished delete — the message must fail rather than go out readable. Before this was
+		// checked it fell through to the plain send, which is the one outcome turning encryption on
+		// promises never to have.
+		await post("/encryption/me%40home.test/encrypt", { on: "1" });
+		await db.prepare("DELETE FROM pgp_keys WHERE email = 'me@home.test'").run();
+		expect((await loadSettings(db)).pgpRecipients).toEqual(["me@home.test"]);
+		await deliver("shop@a.test");
+		expect(sent).toEqual([]);
+		const row = await db.prepare("SELECT status, error FROM forwards").first<{ status: string; error: string }>();
+		expect(row?.status).toBe("failed");
+		expect(row?.error).toContain("key is missing");
+	});
+
 	it("keeps the encrypted addresses when the settings are saved", async () => {
 		await post("/encryption/me%40home.test/encrypt", { on: "1" });
 		await post("/settings", { aliasDomains: "a.test", defaultDestination: "me@home.test" });
@@ -246,5 +262,57 @@ describe("mail that is PGP encrypted or signed already", () => {
 		await deliverRaw("shop@a.test", `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Inline\r\nMessage-ID: <i@x>\r\nContent-Type: text/plain\r\n\r\n${ENCRYPTED_PART}\r\n`);
 		expect(sent[0]).not.toBeInstanceOf(EmailMessage);
 		expect((sent[0] as { text: string }).text).toContain("-----BEGIN PGP MESSAGE-----");
+	});
+
+	it("cannot be made to skip encryption by an armor line the sender writes", async () => {
+		// "Already encrypted" is decided from the message, which the sender writes. If a line that
+		// merely begins an armor block counted, any sender could switch the owner's encryption off
+		// and have the rest of the message — an HTML part beside it included — delivered readable.
+		await post("/encryption", { email: "me@home.test", key: publicKey });
+		await post("/encryption/me%40home.test/encrypt", { on: "1" });
+		const alternative = [
+			"--b1",
+			"Content-Type: text/plain; charset=utf-8",
+			"",
+			"hello",
+			"-----BEGIN PGP MESSAGE-----",
+			"",
+			"--b1",
+			"Content-Type: text/html; charset=utf-8",
+			"",
+			"<p>CONFIDENTIAL</p>",
+			"--b1--",
+		].join("\r\n");
+		const raw = `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Your order\r\nMessage-ID: <u@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary="b1"\r\n\r\n${alternative}`;
+		await deliverRaw("shop@a.test", raw);
+		expect(sent[0]).toBeInstanceOf(EmailMessage);
+		expect(await rawOf(sent[0] as EmailMessage)).toContain("multipart/encrypted");
+
+		// A body that opens with armor but carries readable text after it counts the same way.
+		await deliverRaw("shop@a.test", `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Half\r\nMessage-ID: <h@x>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n-----BEGIN PGP MESSAGE-----\r\n\r\nreadable text after the marker\r\n`);
+		expect(sent[1]).toBeInstanceOf(EmailMessage);
+	});
+
+	it("keeps PGP/MIME whole even when its header section is longer than the rule check reads", async () => {
+		// The checks that read headers give up at 64 KiB, and "too long to look at" must not be read
+		// as "not PGP": a message with padded headers would then be rebuilt and reach the owner
+		// undecryptable. The kind is therefore read from the whole header section.
+		const padding = `X-Pad: ${"a".repeat(70_000)}`;
+		const raw = `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Encrypted\r\nMessage-ID: <big@x>\r\nContent-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="b1"\r\n${padding}\r\n\r\n${ENCRYPTED_PART}`;
+		await deliverRaw("shop@a.test", raw);
+		const message = sent[0] as EmailMessage;
+		expect(message).toBeInstanceOf(EmailMessage);
+		const out = await rawOf(message);
+		expect(out).toContain("multipart/encrypted");
+		expect(out).toContain("-----BEGIN PGP MESSAGE-----");
+	});
+
+	it("refuses PGP/MIME whose entity cannot be found at all, rather than rebuilding it", async () => {
+		// No blank line means no header section and no entity to keep. Rebuilding would produce parts
+		// the owner's app cannot decrypt — a recorded failure is better than a broken message.
+		const { topEntity, pgpKind } = await import("../src/mime");
+		const truncated = new TextEncoder().encode(`Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="b1"\r\n`).buffer as ArrayBuffer;
+		expect(pgpKind("Content-Type: multipart/encrypted; protocol=\"application/pgp-encrypted\"")).toBe("encrypted");
+		expect(topEntity(truncated)).toBeNull();
 	});
 });

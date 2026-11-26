@@ -16,6 +16,7 @@ import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
 import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
+import { ownHosts } from "../config";
 import { createsAliasesFromMail, loadSettings, normalizeSettings, saveSettingKeys, type Settings } from "../settings";
 import { createLabel, deleteLabel, getLabelWithCount, LabelError, labelsOf, listLabels, setAliasLabels, updateLabel, type LabelRow } from "../labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, reorderRules, RuleError, setRuleActive, updateRule, type Rule } from "../rules";
@@ -1177,7 +1178,7 @@ async function ruleInput(c: C, existing: Rule | null = null) {
 		throw new ClientError(...RULE_ERRORS.forwardTo);
 	});
 	try {
-		return cleanRule({ ...input, actions });
+		return cleanRule({ ...input, actions }, ownHosts(c.get("config")));
 	} catch (error) {
 		if (error instanceof RuleError) throw new ClientError(...RULE_ERRORS[error.reason]);
 		throw error;

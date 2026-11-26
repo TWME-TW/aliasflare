@@ -3,7 +3,7 @@
  * registered and kept in D1, so a deploy needs no secrets. An environment variable or
  * secret of the same name, when set, overrides the stored value.
  */
-import { randomToken } from "./format";
+import { hostnameOf, randomToken } from "./format";
 import type { MessageKey } from "./i18n";
 import { isOutboundProvider, normalizeOutboundOptions, type OutboundOptions, type OutboundProvider } from "./outbound";
 
@@ -38,6 +38,14 @@ export type AppConfig = {
 export const WORKERS_PLANS = ["free", "paid"] as const;
 export type WorkersPlan = (typeof WORKERS_PLANS)[number];
 export const isWorkersPlan = (value: unknown): value is WorkersPlan => WORKERS_PLANS.includes(value as WorkersPlan);
+
+/**
+ * The hosts this deployment answers on, for the checks that call an address the owner typed: a
+ * request from here to here would be a loop. Same list outbound.ts and unsubscribe.ts use.
+ */
+export function ownHosts(config: AppConfig): string[] {
+	return [config.publicUrl, config.siteOrigin, config.mailflareUrl].map(hostnameOf).filter((host): host is string => !!host);
+}
 
 type StoredKey =
 	| "mailflareUrl"
