@@ -45,7 +45,7 @@ import {
 	type ImportedAlias,
 	type Selection,
 } from "./importer";
-import { isErrorNoticeKey, isLocale, isNoticeKey, isTheme, LANG_COOKIE, negotiateLocale, THEME_COOKIE, translator, type MessageKey } from "./i18n";
+import { isErrorNoticeKey, isLocale, isNoticeKey, isTheme, LANG_COOKIE, loadLocale, negotiateLocale, THEME_COOKIE, translator, type MessageKey } from "./i18n";
 import {
 	authenticationOptions,
 	checkSetupCode,
@@ -124,13 +124,8 @@ app.use("*", async (c, next) => {
 	if ((c.req.method === "GET" || c.req.method === "HEAD") && STATIC_PATHS.has(c.req.path)) return next();
 	const chosen = getCookie(c, LANG_COOKIE);
 	const chosenTheme = getCookie(c, THEME_COOKIE);
-	c.set(
-		"t",
-		translator(
-			isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language")),
-			isTheme(chosenTheme) ? chosenTheme : "system",
-		),
-	);
+	const locale = await loadLocale(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language")));
+	c.set("t", translator(locale, isTheme(chosenTheme) ? chosenTheme : "system"));
 	// The client APIs and public endpoints are open to anyone with the URL: their limits come before any D1 read.
 	if (c.req.path === "/api" || c.req.path.startsWith("/api/") || c.req.path === "/mcp" || c.req.path.startsWith("/mcp/")) {
 		if (!(c.req.method === "OPTIONS" && (c.req.path === "/api" || c.req.path.startsWith("/api/")))) {
@@ -698,6 +693,7 @@ app.post("/settings", async (c) => {
 	// The language only changes once everything else is valid, so an error is not lost to a reload.
 	const uiLocale = form.uiLocale;
 	const localeChanged = isLocale(uiLocale) && uiLocale !== c.get("t").locale;
+	if (localeChanged) await loadLocale(uiLocale);
 	const uiTheme = form.uiTheme;
 	const themeChanged = isTheme(uiTheme) && uiTheme !== (c.get("t").theme ?? "system");
 	const reply = (key: MessageKey, ok: boolean, params?: Record<string, string>) => {
@@ -1540,24 +1536,35 @@ export default {
 		ctx.waitUntil(cleanUp(env.DB));
 	},
 	async email(message, env) {
-		const config = await loadConfig(env).catch((error) => {
-			console.error("Configuration error:", error instanceof Error ? error.message : error);
-			return null;
-		});
-		if (!config) {
+		// One D1 round trip for what every message needs: the configuration, the settings and the
+		// alias it was sent to (none for a reply, whose address is a reverse alias).
+		const address = normalizeEmail(message.to);
+		const db = env.DB;
+		const loaded = await db
+			.batch<Record<string, unknown>>([db.prepare("SELECT key, value FROM config"), db.prepare("SELECT key, value FROM settings"), db.prepare("SELECT * FROM aliases WHERE address = ?").bind(address)])
+			.then(async ([config, settings, alias]) => ({
+				config: await loadConfig(env, config!.results as { key: string; value: string }[]),
+				settings: settingsFromRows(settings!.results as { key: string; value: string }[]),
+				known: (alias!.results[0] as AliasRow | undefined) ?? null,
+			}))
+			.catch((error) => {
+				console.error("Configuration error:", error instanceof Error ? error.message : error);
+				return null;
+			});
+		if (!loaded) {
 			message.setReject("This address is temporarily unavailable");
 			return;
 		}
+		const { config, settings, known } = loaded;
 		// An alias domain may itself start with "r." (when its parent is not an alias domain),
 		// so alias domains are matched first.
-		const domain = domainOf(normalizeEmail(message.to));
-		const settings = await loadSettings(env.DB);
+		const domain = domainOf(address);
 		if (!settings.aliasDomains.includes(domain)) {
-			if (aliasDomainOfReverse(domain)) await handleReverseAliasMail(message, env, config);
+			if (aliasDomainOfReverse(domain)) await handleReverseAliasMail(message, env, config, settings);
 			else message.setReject("This address does not exist");
 			return;
 		}
-		const outcome = await handleDirectInbound(message, env, config);
+		const outcome = await handleDirectInbound(message, env, config, { settings, known });
 		if (outcome.status === 404) {
 			message.setReject("This address does not exist");
 			return;

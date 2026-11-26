@@ -19,7 +19,7 @@ import {
 import { mailflareReady } from "./config";
 import { aliasDomainOfReverse, isOwnAddress } from "./domains";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
-import { loadSettings } from "./settings";
+import { loadSettings, type Settings } from "./settings";
 import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES, LOOP_HEADER } from "./forward";
 import { readLimited } from "./streams";
@@ -238,7 +238,7 @@ function isAutoReply(headers: { key: string; value: string }[]): boolean {
  * It must come from the alias's destination address with a DMARC pass, and is sent
  * as the alias (through Mailflare or Email Sending) so the correspondent never sees the real address.
  */
-export async function handleReverseAliasMail(message: ForwardableEmailMessage, env: Env, config: AppConfig): Promise<void> {
+export async function handleReverseAliasMail(message: ForwardableEmailMessage, env: Env, config: AppConfig, preloaded?: Settings): Promise<void> {
 	const db = env.DB;
 	const recipient = normalizeEmail(message.to);
 	const reverseDomain = domainOf(recipient);
@@ -260,7 +260,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject("This address does not exist");
 		return;
 	}
-	const settings = await loadSettings(db);
+	const settings = preloaded ?? (await loadSettings(db));
 	// The owner writes from the alias's address, or from the one this sender's mail goes to.
 	// A rule may forward the alias's mail to another of the owner's known mailboxes, so those count too.
 	const knownDestinations = new Set((await listDestinations(db, settings)).map((d) => normalizeEmail(d.email)));

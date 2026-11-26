@@ -6,7 +6,7 @@ import type { AliasRow, BlocklistRow, ContactRow } from "./db";
 import { FORWARD_MODES } from "./db";
 import { contactReverseAddress, reverseDomainFor } from "./domains";
 import { MAX_NOTE_LENGTH, SENDER_FORMATS } from "./format";
-import { LOCALE_LIST, LOCALES, textDirection, THEMES, type MessageKey, type Theme, type Translate } from "./i18n";
+import { LOCALE_LIST, LOCALE_NAMES, textDirection, THEMES, type MessageKey, type Theme, type Translate } from "./i18n";
 import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
@@ -393,7 +393,7 @@ function languageMenu(t: Translate, path = "/", extraClass = ""): Html {
 <label for="lang-${extraClass || "main"}" class="lang-label">${icon("globe")}<span class="sr">${t("nav.language")}</span></label>
 <input type="hidden" name="next" value="${path}" />
 <select id="lang-${extraClass || "main"}" name="locale" data-autosubmit>
-${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${locale === t.locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${locale === t.locale ? "selected" : ""}>${LOCALE_NAMES[locale]}</option>`)}
 </select>
 <noscript><button type="submit">${t("lang.apply")}</button></noscript>
 </form>`;
@@ -831,13 +831,13 @@ ${THEMES.map((mode) => html`<option value="${mode}" ${(t.theme ?? "system") === 
 
 <label for="uiLocale">${t("set.uiLanguage")}</label>
 <select id="uiLocale" name="uiLocale">
-${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${t.locale === locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${t.locale === locale ? "selected" : ""}>${LOCALE_NAMES[locale]}</option>`)}
 </select>
 <p class="help">${t("set.uiLanguageHelp")}</p>
 
 <label for="language">${t("settings.mailLanguage")}</label>
 <select id="language" name="language">
-${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${settings.language === locale ? "selected" : ""}>${LOCALES[locale]["lang.name"]}</option>`)}
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${settings.language === locale ? "selected" : ""}>${LOCALE_NAMES[locale]}</option>`)}
 </select>
 </section>
 <section id="forwarding">
