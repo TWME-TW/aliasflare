@@ -3,86 +3,109 @@
  * key (the Dictionary type enforces it) and keeps the same {placeholders}. The list matches Mailflare's,
  * plus Traditional Chinese.
  *
- * To add a language: create src/locales/<code>.ts, then register it in LOCALES and LOCALE_INFO.
+ * To add a language: create src/locales/<code>.ts, then register it in LOCALE_NAMES and LOADERS.
  */
 import { en, type Dictionary, type MessageKey } from "./locales/en";
-import ar from "./locales/ar";
-import bn from "./locales/bn";
-import de from "./locales/de";
-import es from "./locales/es";
-import fa from "./locales/fa";
-import fr from "./locales/fr";
-import gu from "./locales/gu";
-import ha from "./locales/ha";
-import hi from "./locales/hi";
-import id from "./locales/id";
-import it from "./locales/it";
-import ja from "./locales/ja";
-import kn from "./locales/kn";
-import ko from "./locales/ko";
-import ml from "./locales/ml";
-import mr from "./locales/mr";
-import ms from "./locales/ms";
-import nl from "./locales/nl";
-import pa from "./locales/pa";
-import pl from "./locales/pl";
-import ptBR from "./locales/pt-BR";
-import ptPT from "./locales/pt-PT";
-import ru from "./locales/ru";
-import si from "./locales/si";
-import sw from "./locales/sw";
-import ta from "./locales/ta";
-import te from "./locales/te";
-import th from "./locales/th";
-import tr from "./locales/tr";
-import uk from "./locales/uk";
-import ur from "./locales/ur";
-import vi from "./locales/vi";
-import zhCN from "./locales/zh-CN";
-import zhTW from "./locales/zh-TW";
 
 export type { MessageKey } from "./locales/en";
 
-export const LOCALES = {
-	en,
-	"zh-TW": zhTW,
-	"zh-CN": zhCN,
-	ja,
-	ko,
-	"pt-BR": ptBR,
-	"pt-PT": ptPT,
-	es,
-	fr,
-	de,
-	it,
-	nl,
-	pl,
-	ru,
-	uk,
-	tr,
-	id,
-	ms,
-	vi,
-	th,
-	hi,
-	bn,
-	mr,
-	te,
-	ta,
-	gu,
-	kn,
-	ml,
-	pa,
-	si,
-	ur,
-	ar,
-	fa,
-	sw,
-	ha,
-} satisfies Record<string, Dictionary>;
+/**
+ * Every language, in menu order, with the name it calls itself. Only English is part of the
+ * Worker's start-up: another language is loaded the first time it is needed (see loadLocale), so a
+ * fresh Worker does not build 34 dictionaries it will never use.
+ */
+export const LOCALE_NAMES = {
+	en: "English",
+	"zh-TW": "繁體中文",
+	"zh-CN": "简体中文",
+	ja: "日本語",
+	ko: "한국어",
+	"pt-BR": "Português (Brasil)",
+	"pt-PT": "Português (Portugal)",
+	es: "Español",
+	fr: "Français",
+	de: "Deutsch",
+	it: "Italiano",
+	nl: "Nederlands",
+	pl: "Polski",
+	ru: "Русский",
+	uk: "Українська",
+	tr: "Türkçe",
+	id: "Bahasa Indonesia",
+	ms: "Bahasa Melayu",
+	vi: "Tiếng Việt",
+	th: "ไทย",
+	hi: "हिन्दी",
+	bn: "বাংলা",
+	mr: "मराठी",
+	te: "తెలుగు",
+	ta: "தமிழ்",
+	gu: "ગુજરાતી",
+	kn: "ಕನ್ನಡ",
+	ml: "മലയാളം",
+	pa: "ਪੰਜਾਬੀ",
+	si: "සිංහල",
+	ur: "اردو",
+	ar: "العربية",
+	fa: "فارسی",
+	sw: "Kiswahili",
+	ha: "Hausa",
+} as const;
 
-export type Locale = keyof typeof LOCALES;
-export const LOCALE_LIST = Object.keys(LOCALES) as Locale[];
+export type Locale = keyof typeof LOCALE_NAMES;
+export const LOCALE_LIST = Object.keys(LOCALE_NAMES) as Locale[];
+
+const LOADERS: Record<Exclude<Locale, "en">, () => Promise<{ default: Dictionary }>> = {
+	"zh-TW": () => import("./locales/zh-TW"),
+	"zh-CN": () => import("./locales/zh-CN"),
+	ja: () => import("./locales/ja"),
+	ko: () => import("./locales/ko"),
+	"pt-BR": () => import("./locales/pt-BR"),
+	"pt-PT": () => import("./locales/pt-PT"),
+	es: () => import("./locales/es"),
+	fr: () => import("./locales/fr"),
+	de: () => import("./locales/de"),
+	it: () => import("./locales/it"),
+	nl: () => import("./locales/nl"),
+	pl: () => import("./locales/pl"),
+	ru: () => import("./locales/ru"),
+	uk: () => import("./locales/uk"),
+	tr: () => import("./locales/tr"),
+	id: () => import("./locales/id"),
+	ms: () => import("./locales/ms"),
+	vi: () => import("./locales/vi"),
+	th: () => import("./locales/th"),
+	hi: () => import("./locales/hi"),
+	bn: () => import("./locales/bn"),
+	mr: () => import("./locales/mr"),
+	te: () => import("./locales/te"),
+	ta: () => import("./locales/ta"),
+	gu: () => import("./locales/gu"),
+	kn: () => import("./locales/kn"),
+	ml: () => import("./locales/ml"),
+	pa: () => import("./locales/pa"),
+	si: () => import("./locales/si"),
+	ur: () => import("./locales/ur"),
+	ar: () => import("./locales/ar"),
+	fa: () => import("./locales/fa"),
+	sw: () => import("./locales/sw"),
+	ha: () => import("./locales/ha"),
+};
+
+const loaded = new Map<Locale, Dictionary>([["en", en]]);
+
+/** Loads a language's dictionary, once per Worker. translator() needs it loaded first. */
+export async function loadLocale(locale: Locale): Promise<Locale> {
+	if (!loaded.has(locale)) loaded.set(locale, (await LOADERS[locale as Exclude<Locale, "en">]()).default);
+	return locale;
+}
+
+/** A language's whole dictionary (for tests and checks). */
+export async function dictionaryFor(locale: Locale): Promise<Dictionary> {
+	await loadLocale(locale);
+	return loaded.get(locale)!;
+}
+
 export const LANG_COOKIE = "af_lang";
 export const THEME_COOKIE = "af_theme";
 export const THEMES = ["system", "light", "dark"] as const;
@@ -100,7 +123,7 @@ export function textDirection(locale: Locale): "ltr" | "rtl" {
 }
 
 export function isLocale(value: unknown): value is Locale {
-	return typeof value === "string" && Object.hasOwn(LOCALES, value);
+	return typeof value === "string" && Object.hasOwn(LOCALE_NAMES, value);
 }
 
 const BY_LOWER = new Map(LOCALE_LIST.map((locale) => [locale.toLowerCase(), locale]));
@@ -192,7 +215,8 @@ export function isErrorNoticeKey(value: unknown): boolean {
 }
 
 export function translator(locale: Locale, theme: Theme = "system"): Translate {
-	const dictionary: Dictionary = LOCALES[locale];
+	// Not loaded (a caller that forgot loadLocale): English rather than a failed page or message.
+	const dictionary: Dictionary = loaded.get(locale) ?? (console.error(`Language ${locale} used before it was loaded`), en);
 	const t = ((key: MessageKey, params?: Record<string, string | number>) => {
 		// Own keys only, never inherited ones ("constructor"); an unknown key comes back as itself.
 		const template = Object.hasOwn(dictionary, key) ? dictionary[key] : Object.hasOwn(en, key) ? en[key] : key;

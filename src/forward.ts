@@ -1,15 +1,15 @@
 import PostalMime, { addressParser, type Email } from "postal-mime";
 import type { AppConfig } from "./config";
 import { signToken } from "./crypto";
-import { CATCH_ALL_NOTE, ensureAlias, ensureContact, getAlias, mapOriginalToForwarded, matchBlocklist, newId, now, type ForwardRow } from "./db";
+import { CATCH_ALL_NOTE, ensureAlias, ensureContact, mapOriginalToForwarded, matchBlocklist, newId, now, type AliasRow, type ForwardRow } from "./db";
 import { cleanAttachment, domainOf, ensureAngle, extractEmail, cleanSubjectLine, formatSenderName, parseBareEmail, normalizeEmail, parseMessageIds, reverseAddress as reverseAddressOf, sanitizeDisplayName } from "./format";
-import { translator } from "./i18n";
+import { loadLocale, translator } from "./i18n";
 import { getStoredMessage, mailflareConfig, MailflareError, MAX_MESSAGE_BYTES, type StoredMessage } from "./mailflare";
 import { sha256Hex } from "./apikeys";
 import { isOwnAddress, isReverseDomainOf, reverseDomainFor } from "./domains";
 import { LINK_TTL_SECONDS } from "./unsubscribe";
 import { authResultClauses, firstAuthenticationResults, hasSingleFromHeader } from "./reply";
-import { loadSettings } from "./settings";
+import { settingsFromRows } from "./settings";
 import { readLimited } from "./streams";
 import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
 import type { Replacement } from "./format";
@@ -185,7 +185,7 @@ async function readRaw(stream: ReadableStream<Uint8Array>, declared: number): Pr
  * alias domain). Email Routing does not redeliver an accepted message, so the key only has to
  * tell retries of a failed delivery apart: the Message-ID with the recipient.
  */
-export async function handleDirectInbound(message: ForwardableEmailMessage, env: Env, config: AppConfig): Promise<ForwardOutcome> {
+export async function handleDirectInbound(message: ForwardableEmailMessage, env: Env, config: AppConfig, preloaded?: Preloaded): Promise<ForwardOutcome> {
 	const aliasAddress = normalizeEmail(message.to);
 	const messageId = message.headers.get("Message-ID")?.trim();
 	const date = message.headers.get("Date")?.trim() ?? "";
@@ -206,6 +206,7 @@ export async function handleDirectInbound(message: ForwardableEmailMessage, env:
 		origin: config.siteOrigin,
 		load: async () => ({ mailboxId: "", raw: await readRaw(message.raw, message.rawSize) }),
 		size: message.rawSize,
+		preloaded,
 		headers: message.headers,
 		// Email Routing's own forward: no parsing, so no CPU, but the message goes as it is.
 		passThrough: async (destination) => {
@@ -219,6 +220,9 @@ export async function handleDirectInbound(message: ForwardableEmailMessage, env:
  * takes about 1 ms per 70 KB, so a larger message is passed through unchanged instead.
  */
 export const FREE_PLAN_REWRITE_BYTES = 512 * 1024;
+
+/** The settings and the alias, when the caller has read them already. */
+type Preloaded = { settings: Settings; known: AliasRow | null };
 
 type ForwardInput = {
 	/** Identifies the delivery, so the same message is forwarded once. */
@@ -236,6 +240,7 @@ type ForwardInput = {
 	headers?: Headers;
 	/** Delivers the message unchanged, when it is too large to rewrite on the Free plan. */
 	passThrough?: (destination: string) => Promise<void>;
+	preloaded?: Preloaded;
 };
 
 /** Aliases incoming mail may create in 24 hours; past that, mail to a new address is refused until the next day. */
@@ -244,6 +249,12 @@ export const MAX_NEW_ALIASES_FROM_MAIL_PER_DAY = 200;
 async function newAliasesFromMailToday(db: D1Database): Promise<number> {
 	const row = await db.prepare("SELECT COUNT(*) AS n FROM aliases WHERE note = ? AND created_at > ?").bind(CATCH_ALL_NOTE, now() - 86400).first<{ n: number }>();
 	return Number(row?.n ?? 0);
+}
+
+/** The settings and the alias in one D1 round trip. */
+async function loadSettingsAndAlias(db: D1Database, aliasAddress: string): Promise<Preloaded> {
+	const [settings, alias] = await db.batch<Record<string, unknown>>([db.prepare("SELECT key, value FROM settings"), db.prepare("SELECT * FROM aliases WHERE address = ?").bind(aliasAddress)]);
+	return { settings: settingsFromRows(settings!.results as { key: string; value: string }[]), known: (alias!.results[0] as AliasRow | undefined) ?? null };
 }
 
 async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput): Promise<ForwardOutcome> {
@@ -256,8 +267,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	// Mail to an address that is not an alias yet creates one only when that is turned on.
 	// Otherwise it is refused before anything is written, so mail to made-up addresses
 	// leaves no rows behind.
-	const settings = await loadSettings(db);
-	const known = await getAlias(db, aliasAddress);
+	const { settings, known } = input.preloaded ?? (await loadSettingsAndAlias(db, aliasAddress));
 	// Only on an alias domain (Mailflare may receive for others), and not without end: mail to
 	// thousands of made-up addresses would otherwise make thousands of aliases.
 	const unknown = !known && (!settings.createAliasesFromMail || !settings.aliasDomains.includes(aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
@@ -289,7 +299,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const passThrough = input.passThrough && (direct || tooLarge) ? input.passThrough : null;
 		let stored = passThrough ? null : await input.load();
 		// No address of its own: the alias follows the default, also when the default changes later.
-		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", { forwardEnabled: settings.autoForwardNewAliases });
+		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", { forwardEnabled: settings.autoForwardNewAliases }, known);
 		const destination = alias.destination || settings.defaultDestination;
 		if (alias.deleted_at) return await skip("the alias was deleted");
 		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias");
@@ -422,6 +432,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			.map((id) => toForwarded.get(id) ?? id)
 			.slice(-MAX_REFERENCES);
 
+		// The banner and the spoof warning are in the language set for forwarded mail.
+		await loadLocale(settings.language);
 		const sign = (purpose: string, payload: string) => signToken(config.signingSecret, purpose, payload, LINK_TTL_SECONDS);
 		// Without a known origin there is nowhere for the banner's links to point.
 		const banner: BannerInfo | null = settings.showBanner && origin && !(rules.hideBanner && !spoofed)

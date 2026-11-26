@@ -46,6 +46,37 @@ describe("performance", () => {
 		const row = await db.prepare("SELECT last_used_at FROM aliases WHERE address = 'shop@a.test'").first<{ last_used_at: number | null }>();
 		expect(row?.last_used_at).toBeGreaterThan(0);
 	});
+
+	it("reads the configuration, the settings and the alias once per message, in one round trip", async () => {
+		const real = testDb();
+		await saveSettings(real, { ...(await loadSettings(real)), aliasDomains: ["a.test"], defaultDestination: "owner@gmail.test", language: "ja" });
+		await real.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at) VALUES ('shop@a.test', 1, 'u1', 'all', 1, 1, 1)").run();
+		const statements: string[] = [];
+		let batches = 0;
+		const db = new Proxy(real, {
+			get(target, name) {
+				if (name === "prepare") return (sql: string) => (statements.push(sql), target.prepare(sql));
+				if (name === "batch") return (list: D1PreparedStatement[]) => (batches++, target.batch(list));
+				const value = Reflect.get(target, name);
+				return typeof value === "function" ? value.bind(target) : value;
+			},
+		});
+		const sent: unknown[] = [];
+		const env = { DB: db, SIGNING_SECRET: TEST_SECRET, EMAIL: { send: async (message: unknown) => (sent.push(message), { messageId: "<s@test>" }) } } as unknown as Env;
+		const raw = `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Hi\r\nMessage-ID: <m2@x>\r\n\r\nHello\r\n`;
+		const msg = { to: "shop@a.test", from: "bob@store.test", headers: new Headers({ "Message-ID": "<m2@x>" }), raw: new Response(raw).body, rawSize: raw.length, setReject: () => undefined };
+		await worker.email!(msg as never, env);
+		expect(sent).toHaveLength(1);
+		const count = (pattern: RegExp) => statements.filter((sql) => pattern.test(sql)).length;
+		expect(count(/^SELECT key, value FROM settings$/)).toBe(1);
+		expect(count(/^SELECT key, value FROM config$/)).toBe(1);
+		expect(count(/^SELECT \* FROM aliases WHERE address = \?$/)).toBe(1);
+		// The alias exists: nothing tries to create it again.
+		expect(count(/^INSERT INTO aliases/)).toBe(0);
+		// Those three go together as the first batch.
+		expect(statements.slice(0, 3)).toEqual(["SELECT key, value FROM config", "SELECT key, value FROM settings", "SELECT * FROM aliases WHERE address = ?"]);
+		expect(batches).toBeGreaterThanOrEqual(1);
+	});
 });
 
 describe("imported activity", () => {

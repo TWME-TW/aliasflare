@@ -98,18 +98,22 @@ export async function getAlias(db: D1Database, address: string): Promise<AliasRo
 /** Note on an alias that appeared because mail arrived for it (Mailflare catch-all), as SimpleLogin words it. */
 export const CATCH_ALL_NOTE = "Created by catchall option";
 
-/** Returns the alias, creating it on its first message: an address nothing here manages yet. */
+/**
+ * Returns the alias, creating it on its first message: an address nothing here manages yet.
+ * `existing` is the alias when the caller has just read it, which saves a write and a read.
+ */
 export async function ensureAlias(
 	db: D1Database,
 	address: string,
 	mailboxId: string,
 	defaults: { forwardEnabled: boolean },
+	existing: AliasRow | null = null,
 ): Promise<AliasRow> {
 	const timestamp = now();
 	// The number is taken inside the INSERT, and D1 runs one statement at a time, so two
 	// deliveries do not get the same one. Any conflict (the address, or should it ever happen
 	// the number or uid) does nothing, and the next attempt reads the row or tries again.
-	let row: AliasRow | null = null;
+	let row: AliasRow | null = existing;
 	for (let attempt = 0; attempt < 3 && !row; attempt += 1) {
 		await db
 			.prepare(
