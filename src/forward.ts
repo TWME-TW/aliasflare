@@ -14,7 +14,11 @@ import { readLimited } from "./streams";
 import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
 import type { Replacement } from "./format";
 import { callWebhooks, runRules } from "./rules";
-import { encryptionKeyFor, sendEncrypted } from "./pgp";
+import { encryptionKeyFor, sendEncrypted, sendKept } from "./pgp";
+import { pgpKind, topEntity } from "./mime";
+
+/** An inline PGP message (RFC 4880 armor) in a plain-text body. */
+const INLINE_PGP = /^-----BEGIN PGP MESSAGE-----\r?$/m;
 import { listDestinations } from "./compat/aliases";
 import type { Settings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
@@ -364,7 +368,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
 			// Mail to an address with encryption on is never passed on in the clear.
-			if (settings.pgpRecipients.includes(normalizeEmail(target))) {
+			// Mail that is PGP encrypted already can go as it is.
+			if (settings.pgpRecipients.includes(normalizeEmail(target)) && pgpKind(`Content-Type: ${headers.get("Content-Type") ?? ""}`) !== "encrypted") {
 				await finish(db, forwardId, {
 					status: "failed",
 					error: direct
@@ -392,6 +397,10 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		}
 
 		const headerBlock = rawHeaderSection(stored!.raw);
+		// PGP/MIME mail, encrypted or signed, keeps its own body: rebuilt from its parts it would
+		// no longer decrypt in the owner's app, or its signature would fail.
+		const pgp = pgpKind(headerBlock);
+		const kept = pgp ? topEntity(stored!.raw) : null;
 		let email: Email;
 		try {
 			email = await PostalMime.parse(stored!.raw, { attachmentEncoding: "arraybuffer" });
@@ -472,7 +481,10 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 					spoofWarning: spoofed,
 				}
 			: null;
-		const body = await transformForward(
+		// A kept body is sent as it came: no banner and no tracker removal can go into it.
+		const body: { html?: string; text?: string; trackersRemoved: number } = kept
+			? { trackersRemoved: 0 }
+			: await transformForward(
 			{ html: email.html ?? undefined, text: email.text ?? undefined },
 			{ removeTrackers: settings.removeTrackers, banner, t: translator(settings.language) },
 		);
@@ -540,8 +552,14 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// Encrypted to the forwarding address's PGP key when it has encryption on. That needs a
 		// message built here, so it goes as raw MIME. If it cannot be encrypted it is not sent in
 		// the clear: it fails, and shows under failed deliveries.
-		const pgpKey = settings.pgpRecipients.includes(normalizeEmail(recipient)) ? await encryptionKeyFor(db, recipient) : null;
-		const result = pgpKey ? await sendEncrypted(env, outgoing, pgpKey) : await env.EMAIL.send(outgoing);
+		// Mail encrypted already (PGP/MIME, or inline PGP in the text) is not encrypted again.
+		const encryptedAlready = (kept && pgp === "encrypted") || INLINE_PGP.test(email.text ?? "");
+		const pgpKey = !encryptedAlready && settings.pgpRecipients.includes(normalizeEmail(recipient)) ? await encryptionKeyFor(db, recipient) : null;
+		const result = pgpKey
+			? await sendEncrypted(env, outgoing, pgpKey, kept ?? undefined)
+			: kept
+				? await sendKept(env, outgoing, kept)
+				: await env.EMAIL.send(outgoing);
 
 		// The message is out. Record that in one batch, and never report a failure from here on:
 		// a retry would send it a second time.

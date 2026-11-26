@@ -6,7 +6,7 @@
  * openpgp is loaded only when a key is read or a message encrypted, so a Worker that never
  * encrypts never pays for it.
  */
-import { buildEncryptedMime, encryptedPayload, newMessageId, type EncryptedMessage } from "./mime";
+import { buildEncryptedMime, buildWithEntity, encryptedPayload, newMessageId, type EncryptedMessage, type Entity } from "./mime";
 import { now } from "./db";
 import { normalizeEmail } from "./format";
 import { saveSettingKeys } from "./settings";
@@ -66,11 +66,11 @@ export async function encryptionKeyFor(db: D1Database, email: string): Promise<P
 }
 
 /** The whole message, encrypted to the key, as raw PGP/MIME, with its Message-ID. */
-export async function encryptMessage(message: EncryptedMessage, key: Pick<PgpKeyRow, "public_key" | "hide_subject">): Promise<{ raw: string; messageId: string }> {
+export async function encryptMessage(message: EncryptedMessage, key: Pick<PgpKeyRow, "public_key" | "hide_subject">, entity?: Entity): Promise<{ raw: string; messageId: string }> {
 	const { createMessage, encrypt, readKey } = await openpgp();
 	const encryptionKeys = await readKey({ armoredKey: key.public_key });
 	const armored = await encrypt({
-		message: await createMessage({ binary: encryptedPayload(message, !!key.hide_subject) }),
+		message: await createMessage({ binary: encryptedPayload(message, !!key.hide_subject, entity) }),
 		encryptionKeys,
 		format: "armored",
 	});
@@ -105,8 +105,23 @@ export async function savePgpKey(db: D1Database, email: string, key: { armored: 
 }
 
 /** Encrypts a forwarded message and sends it as raw PGP/MIME through Email Sending. */
-export async function sendEncrypted(env: Env, message: EncryptedMessage & { to: { name: string; email: string } }, key: PgpKeyRow): Promise<{ messageId?: string }> {
-	const { raw, messageId } = await encryptMessage(message, key);
+export async function sendEncrypted(env: Env, message: Outgoing, key: PgpKeyRow, entity?: Entity): Promise<{ messageId?: string }> {
+	const { raw, messageId } = await encryptMessage(message, key, entity);
+	return await sendRaw(env, message, raw, messageId);
+}
+
+/**
+ * Sends mail that is PGP encrypted or signed already with its own body exactly as it came, under
+ * our headers: rebuilding it would break the encryption's structure or the signature.
+ */
+export async function sendKept(env: Env, message: Outgoing, entity: Entity): Promise<{ messageId?: string }> {
+	const messageId = newMessageId(message.from);
+	return await sendRaw(env, message, new Response(buildWithEntity(message, messageId, entity)).body!, messageId);
+}
+
+type Outgoing = EncryptedMessage & { to: { name: string; email: string } };
+
+async function sendRaw(env: Env, message: Outgoing, raw: string | ReadableStream, messageId: string): Promise<{ messageId?: string }> {
 	const { EmailMessage } = await import("cloudflare:email");
 	const from = typeof message.from === "string" ? message.from : message.from.email;
 	const result = (await env.EMAIL.send(new EmailMessage(from, message.to.email, raw))) as { messageId?: string } | undefined;

@@ -36,6 +36,9 @@ async function deliver(to: string, subject = "Your order") {
 	await worker.email!(message as never, env);
 }
 
+/** The whole message as text, however it was handed to Email Sending. */
+const rawOf = async (message: EmailMessage) => (typeof message.raw === "string" ? message.raw : await new Response(message.raw).text());
+
 /** The body of a PGP/MIME message, decrypted with the test's private key. */
 async function decrypt(raw: string): Promise<string> {
 	const armored = raw.slice(raw.indexOf("-----BEGIN PGP MESSAGE-----"), raw.indexOf("-----END PGP MESSAGE-----") + 25);
@@ -108,13 +111,14 @@ describe("forwarding", () => {
 		await deliver("shop@a.test");
 		expect(sent).toHaveLength(1);
 		const message = sent[0] as EmailMessage;
+		const raw = await rawOf(message);
 		expect(message).toBeInstanceOf(EmailMessage);
 		expect(message.to).toBe("me@home.test");
-		expect(message.raw).toContain('Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"');
-		expect(message.raw).toContain("Subject: Your order");
-		expect(message.raw).toMatch(/^Message-ID: <.+>$/m);
-		expect(message.raw).not.toContain("Hello there");
-		const inner = await decrypt(message.raw);
+		expect(raw).toContain('Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"');
+		expect(raw).toContain("Subject: Your order");
+		expect(raw).toMatch(/^Message-ID: <.+>$/m);
+		expect(raw).not.toContain("Hello there");
+		const inner = await decrypt(raw);
 		expect(inner).toContain("Content-Type: text/");
 		expect(atob(inner.split("\r\n\r\n")[1]!.replace(/\s+/g, ""))).toContain("Hello there");
 		const row = await db.prepare("SELECT status FROM forwards").first("status");
@@ -126,9 +130,10 @@ describe("forwarding", () => {
 		await post("/encryption/me%40home.test/subject", { on: "1" });
 		await deliver("shop@a.test", "Secret plans");
 		const message = sent[0] as EmailMessage;
-		expect(message.raw).toContain(`Subject: ${HIDDEN_SUBJECT}\r\n`);
-		expect(message.raw).not.toContain("Secret plans");
-		const inner = await decrypt(message.raw);
+		const raw = await rawOf(message);
+		expect(raw).toContain(`Subject: ${HIDDEN_SUBJECT}\r\n`);
+		expect(raw).not.toContain("Secret plans");
+		const inner = await decrypt(raw);
 		expect(inner).toContain('protected-headers="v1"');
 		expect(inner).toContain("Subject: Secret plans");
 	});
@@ -157,5 +162,89 @@ describe("forwarding", () => {
 		await post("/encryption/me%40home.test/encrypt", { on: "1" });
 		await post("/settings", { aliasDomains: "a.test", defaultDestination: "me@home.test" });
 		expect((await loadSettings(db)).pgpRecipients).toEqual(["me@home.test"]);
+	});
+});
+
+describe("mail that is PGP encrypted or signed already", () => {
+	const ENCRYPTED_PART = "-----BEGIN PGP MESSAGE-----\r\n\r\nwV4DAAAAAAAAAAASAQdAexample\r\n=abcd\r\n-----END PGP MESSAGE-----";
+	const encrypted = (to: string) =>
+		`From: Bob <bob@store.test>\r\nTo: ${to}\r\nSubject: Encrypted for you\r\nMessage-ID: <${crypto.randomUUID()}@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/encrypted;\r\n protocol="application/pgp-encrypted"; boundary="b1"\r\n\r\n` +
+		`--b1\r\nContent-Type: application/pgp-encrypted\r\n\r\nVersion: 1\r\n\r\n--b1\r\nContent-Type: application/octet-stream; name="encrypted.asc"\r\n\r\n${ENCRYPTED_PART}\r\n\r\n--b1--\r\n`;
+	const SIGNED_BODY =
+		`--s1\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\nSigned text, café https://x.test/?utm_source=a\r\n\r\n--s1\r\nContent-Type: application/pgp-signature; name="signature.asc"\r\n\r\n-----BEGIN PGP SIGNATURE-----\r\n\r\niHUEARYKAB0WIQexample\r\n=wxyz\r\n-----END PGP SIGNATURE-----\r\n\r\n--s1--\r\n`;
+	const signed = (to: string) =>
+		`From: bob@store.test\r\nTo: ${to}\r\nSubject: Signed\r\nMessage-ID: <${crypto.randomUUID()}@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/signed; micalg=pgp-sha256;\r\n protocol="application/pgp-signature"; boundary="s1"\r\n\r\n${SIGNED_BODY}`;
+
+	async function deliverRaw(to: string, raw: string) {
+		const contentType = /^Content-Type:([^\r\n]*(?:\r\n[ \t][^\r\n]*)*)/m.exec(raw)![1]!.replace(/\r\n[ \t]/g, " ").trim();
+		const message = {
+			to,
+			from: "bob@store.test",
+			headers: new Headers({ "Content-Type": contentType }),
+			raw: new Response(raw).body,
+			rawSize: raw.length,
+			setReject: () => undefined,
+			forward: async (destination: string) => void passed.push(destination),
+		};
+		await worker.email!(message as never, env);
+	}
+
+	it("forwards PGP/MIME with its encrypted body untouched, under the reverse alias", async () => {
+		await deliverRaw("shop@a.test", encrypted("shop@a.test"));
+		const message = sent[0] as EmailMessage;
+		expect(message).toBeInstanceOf(EmailMessage);
+		const raw = await rawOf(message);
+		expect(raw).toContain('Content-Type: multipart/encrypted;\r\n protocol="application/pgp-encrypted"; boundary="b1"');
+		expect(raw).toContain(ENCRYPTED_PART);
+		expect(raw).toContain("Subject: Encrypted for you");
+		expect(raw).not.toContain("bob@store.test>");
+		expect(raw).toMatch(/^Reply-To: <.+@.+>$/m);
+		expect(raw).toMatch(/^Message-ID: <.+>$/m);
+		expect(await db.prepare("SELECT status FROM forwards").first("status")).toBe("sent");
+	});
+
+	it("does not encrypt it a second time when encryption is on", async () => {
+		await post("/encryption", { email: "me@home.test", key: publicKey });
+		await post("/encryption/me%40home.test/encrypt", { on: "1" });
+		await deliverRaw("shop@a.test", encrypted("shop@a.test"));
+		const raw = await rawOf(sent[0] as EmailMessage);
+		expect(raw.match(/BEGIN PGP MESSAGE/g)).toHaveLength(1);
+		expect(raw).toContain(ENCRYPTED_PART);
+	});
+
+	it("passes it through in receive-only mode even when encryption is on", async () => {
+		await post("/encryption", { email: "me@home.test", key: publicKey });
+		await post("/encryption/me%40home.test/encrypt", { on: "1" });
+		await saveSettings(db, { ...(await loadSettings(db)), forwardMethod: "direct" });
+		await deliverRaw("shop@a.test", encrypted("shop@a.test"));
+		expect(passed).toEqual(["me@home.test"]);
+	});
+
+	it("keeps a signed message byte for byte, so its signature still holds", async () => {
+		await deliverRaw("shop@a.test", signed("shop@a.test"));
+		const raw = await rawOf(sent[0] as EmailMessage);
+		expect(JSON.stringify(raw.slice(raw.indexOf('protocol="application/pgp-signature"')))).toBe(JSON.stringify(`protocol="application/pgp-signature"; boundary="s1"\r\n\r\n${SIGNED_BODY}`));
+		expect(raw).toContain("utm_source=a");
+	});
+
+	it("encrypts a signed message whole when encryption is on", async () => {
+		await post("/encryption", { email: "me@home.test", key: publicKey });
+		await post("/encryption/me%40home.test/encrypt", { on: "1" });
+		await post("/encryption/me%40home.test/subject", { on: "1" });
+		await deliverRaw("shop@a.test", signed("shop@a.test"));
+		const raw = await rawOf(sent[0] as EmailMessage);
+		expect(raw).toContain("multipart/encrypted");
+		const inner = await decrypt(raw);
+		expect(inner).toContain('protocol="application/pgp-signature"; boundary="s1"; protected-headers="v1"');
+		expect(inner).toContain("Subject: Signed");
+		expect(inner.endsWith(SIGNED_BODY)).toBe(true);
+	});
+
+	it("does not encrypt inline PGP again", async () => {
+		await post("/encryption", { email: "me@home.test", key: publicKey });
+		await post("/encryption/me%40home.test/encrypt", { on: "1" });
+		await deliverRaw("shop@a.test", `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Inline\r\nMessage-ID: <i@x>\r\nContent-Type: text/plain\r\n\r\n${ENCRYPTED_PART}\r\n`);
+		expect(sent[0]).not.toBeInstanceOf(EmailMessage);
+		expect((sent[0] as { text: string }).text).toContain("-----BEGIN PGP MESSAGE-----");
 	});
 });
