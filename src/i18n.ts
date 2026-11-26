@@ -214,6 +214,8 @@ const ERROR_NOTICE_KEYS = new Set<MessageKey>([
 	"notice.pgpExpired",
 	"notice.pgpTooLarge",
 	"notice.pgpMissing",
+	"notice.wkdOtherAddress",
+	"notice.wkdKeyInUse",
 ]);
 
 /** True when a redirect notice reports a validation or action failure rather than success. */

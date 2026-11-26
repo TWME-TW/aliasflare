@@ -17,6 +17,7 @@ import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from "./outbound";
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
 import { formatFingerprint, type PgpKeyRow } from "./pgp";
+import type { WkdKeyRow } from "./wkd";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 export type Notice = string | { text: string; bad?: boolean };
@@ -1192,9 +1193,11 @@ ${entries.map(
 
 export function aliasPage(
 	t: Translate,
-	input: { alias: AliasRow; contacts: ContactRow[]; defaultDestination: string; labels?: LabelRow[]; aliasLabels?: string[]; notice?: Notice },
+	input: { alias: AliasRow; contacts: ContactRow[]; defaultDestination: string; labels?: LabelRow[]; aliasLabels?: string[]; wkd?: Pick<WkdKeyRow, "fingerprint"> | null; notice?: Notice },
 ): Html {
 	const { alias, contacts, defaultDestination, notice } = input;
+	const wkd = input.wkd ?? null;
+	const aliasDomain = alias.address.slice(alias.address.lastIndexOf("@") + 1);
 	const labels = input.labels ?? [];
 	const chosen = new Set(input.aliasLabels ?? []);
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
@@ -1280,6 +1283,25 @@ ${isDeleted
 })}
 </tbody></table></div>`}
 </section>
+${isDeleted
+	? ""
+	: html`<section>
+<h2>${t("wkd.title")} ${wkd ? html`<span class="pill ok">${t("pgp.on")}</span>` : html`<span class="pill">${t("pgp.off")}</span>`}</h2>
+<p class="help">${t("wkd.help")}</p>
+${wkd
+	? html`<p>${t("pgp.colFingerprint")} <code>${formatFingerprint(wkd.fingerprint)}</code></p>
+<form class="inline" method="post" action="${base}/wkd/delete"><button>${t("wkd.remove")}</button></form>`
+	: ""}
+<form class="mt12" method="post" action="${base}/wkd">
+<label for="wkdKey">${t(wkd ? "wkd.replace" : "pgp.key")}</label>
+<textarea id="wkdKey" name="key" rows="5" required spellcheck="false" autocapitalize="none" placeholder="${t("pgp.keyPlaceholder")}"></textarea>
+<button class="primary mt12">${t("wkd.publish")}</button>
+</form>
+<details class="mt12"><summary>${t("wkd.setupTitle")}</summary>
+<p class="help">${t("wkd.setup", { host: `openpgpkey.${aliasDomain}` })}</p>
+<ol class="help"><li>${t("wkd.setupDns", { host: `openpgpkey.${aliasDomain}` })}</li><li>${t("wkd.setupRoute", { route: `openpgpkey.${aliasDomain}/*` })}</li></ol>
+</details>
+</section>`}
 </main>`,
 		{ t, nav: true, current: "/", path: base },
 	);

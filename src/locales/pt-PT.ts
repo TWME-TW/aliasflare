@@ -639,6 +639,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Guardado.",
 	"notice.pgpDeleted": "Chave removida para {email}.",
 	"notice.pgpMissing": "Não existe chave para esse endereço.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Publique uma chave PGP pública para este alias, para que as aplicações dos remetentes (Thunderbird, GnuPG, Proton Mail, …) a encontrem e encriptem o correio para o alias. Crie uma chave nova apenas para este alias, com ele como único endereço: uma chave que também indique outro endereço, ou que use para outro alias ou para um endereço de reencaminhamento, é recusada, pois os ligaria. O nome na chave é público. O correio encriptado com ela é reencaminhado sem alterações, e desencripta-o na sua aplicação de correio com esta chave. Desativado até publicar uma chave.",
+	"wkd.publish": "Publicar chave",
+	"wkd.replace": "Substituir por outra chave pública",
+	"wkd.remove": "Deixar de publicar",
+	"wkd.setupTitle": "Configurar o WKD para este domínio",
+	"wkd.setup": "As aplicações dos remetentes procuram a chave em {host}. Esse anfitrião tem de chegar a este Worker; o site e os registos do domínio não são alterados. Faça isto uma vez por domínio de alias no painel da Cloudflare:",
+	"wkd.setupDns": "DNS: adicione um registo com proxy (nuvem laranja) para {host}, por exemplo AAAA 100::. Adicione-o apenas em conjunto com a rota abaixo: enquanto existir, as aplicações procuram chaves apenas aí.",
+	"wkd.setupRoute": "Workers Routes: adicione a rota {route} a este Worker.",
+	"notice.wkdSaved": "A chave de {alias} foi publicada.",
+	"notice.wkdDeleted": "A chave de {alias} já não está publicada.",
+	"notice.wkdOtherAddress": "Essa chave indica um endereço diferente de {alias}. Crie uma chave com este alias como único endereço.",
+	"notice.wkdKeyInUse": "Essa chave já está a ser usada para outro alias ou endereço de reencaminhamento. Crie uma nova chave para {alias}.",
 };
 
 export default dictionary;

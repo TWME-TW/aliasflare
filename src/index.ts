@@ -1,4 +1,5 @@
 import { listPgpKeys, PgpError, readPublicKey, savePgpKey, syncPgpRecipients } from "./pgp";
+import { lookupWkdKey, readWkdKey, saveWkdKey, WKD_SUBDOMAIN, WkdError, wkdKeyOf } from "./wkd";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { html } from "hono/html";
@@ -286,6 +287,38 @@ const jsonError = (c: C, key: MessageKey, status: 400 | 401 | 403 | 409 | 429) =
 
 // Public on purpose, for uptime monitors: it tells only whether setup is complete, nothing else.
 app.get("/health", async (c) => c.json({ ok: missingConnection(await loadSettings(c.env.DB)).length === 0 }));
+
+// ---------- Web Key Directory (public: senders' apps look keys up here) ----------
+
+/** The alias domain a WKD request is for, from its host: openpgpkey.<domain> (advanced) or <domain> (direct). */
+function wkdDomain(c: C, named?: string): string | null {
+	const host = new URL(c.req.url).hostname.toLowerCase();
+	const domains = c.get("settings")?.aliasDomains ?? [];
+	if (named !== undefined) {
+		const domain = named.toLowerCase();
+		return host === `${WKD_SUBDOMAIN}.${domain}` && domains.includes(domain) ? domain : null;
+	}
+	return domains.includes(host) ? host : null;
+}
+
+async function wkdKey(c: C, domain: string | null, hash: string): Promise<Response> {
+	c.header("Access-Control-Allow-Origin", "*");
+	if (!domain || !/^[ybndrfg8ejkmcpqxot1uwisza345h769]{32}$/.test(hash)) return c.text("Not found", 404);
+	const key = await lookupWkdKey(c.env.DB, domain, hash);
+	if (!key) return c.text("Not found", 404);
+	c.header("Cache-Control", "public, max-age=3600");
+	return c.body(key as Uint8Array<ArrayBuffer>, 200, { "Content-Type": "application/octet-stream" });
+}
+
+function wkdPolicy(c: C, domain: string | null): Response {
+	c.header("Access-Control-Allow-Origin", "*");
+	return domain ? c.body("", 200, { "Content-Type": "text/plain" }) : c.text("Not found", 404);
+}
+
+app.get("/.well-known/openpgpkey/:domain/hu/:hash", (c) => wkdKey(c, wkdDomain(c, c.req.param("domain")), c.req.param("hash")));
+app.get("/.well-known/openpgpkey/:domain/policy", (c) => wkdPolicy(c, wkdDomain(c, c.req.param("domain"))));
+app.get("/.well-known/openpgpkey/hu/:hash", (c) => wkdKey(c, wkdDomain(c), c.req.param("hash")));
+app.get("/.well-known/openpgpkey/policy", (c) => wkdPolicy(c, wkdDomain(c)));
 
 app.get("/assets/passkey.js", (c) => {
 	c.header("Cache-Control", assetCache(c));
@@ -1514,16 +1547,48 @@ app.get("/aliases/:address", async (c) => {
 	const db = c.env.DB;
 	const address = normalizeEmail(c.req.param("address"));
 	// Everything on the page at once: the alias, its contacts and labels, and all labels.
-	const [alias, { results: contacts }, labels, chosen, { defaultDestination }] = await Promise.all([
+	const [alias, { results: contacts }, labels, chosen, { defaultDestination }, wkd] = await Promise.all([
 		getAlias(db, address),
 		db.prepare("SELECT * FROM contacts WHERE alias_address = ? ORDER BY COALESCE(last_forward_at, created_at) DESC LIMIT 1000").bind(address).all<ContactRow>(),
 		listLabels(db),
 		labelsOf(db, [address]),
 		pageSettings(c),
+		wkdKeyOf(db, address),
 	]);
 	if (!alias) return c.notFound();
 	const aliasLabels = (chosen.get(address) ?? []).map((label) => label.id);
-	return c.html(aliasPage(c.get("t"), { alias, contacts, defaultDestination, labels, aliasLabels, notice: noticeFrom(c) }));
+	return c.html(aliasPage(c.get("t"), { alias, contacts, defaultDestination, labels, aliasLabels, wkd, notice: noticeFrom(c) }));
+});
+
+const WKD_NOTICES: Record<PgpError["reason"] | WkdError["reason"], MessageKey> = {
+	invalid: "notice.pgpInvalid",
+	private: "notice.pgpPrivate",
+	noEncryption: "notice.pgpNoEncryption",
+	expired: "notice.pgpExpired",
+	tooLarge: "notice.pgpTooLarge",
+	otherAddress: "notice.wkdOtherAddress",
+	keyInUse: "notice.wkdKeyInUse",
+};
+
+app.post("/aliases/:address/wkd", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	const back = `/aliases/${encodeURIComponent(address)}`;
+	const alias = await getAlias(c.env.DB, address);
+	if (!alias || alias.deleted_at) return c.notFound();
+	const form = await c.req.parseBody();
+	try {
+		await saveWkdKey(c.env.DB, address, await readWkdKey(typeof form.key === "string" ? form.key : "", address));
+	} catch (error) {
+		if (error instanceof PgpError || error instanceof WkdError) return redirectWithNotice(c, back, WKD_NOTICES[error.reason], { alias: address });
+		throw error;
+	}
+	return redirectWithNotice(c, back, "notice.wkdSaved", { alias: address });
+});
+
+app.post("/aliases/:address/wkd/delete", async (c) => {
+	const address = normalizeEmail(c.req.param("address"));
+	await c.env.DB.prepare("DELETE FROM wkd_keys WHERE alias_address = ?").bind(address).run();
+	return redirectWithNotice(c, `/aliases/${encodeURIComponent(address)}`, "notice.wkdDeleted", { alias: address });
 });
 
 app.post("/aliases/:address/labels", async (c) => {

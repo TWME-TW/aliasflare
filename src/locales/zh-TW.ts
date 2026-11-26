@@ -618,6 +618,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "已儲存。",
 	"notice.pgpDeleted": "已刪除 {email} 的金鑰。",
 	"notice.pgpMissing": "此地址沒有金鑰。",
+	"wkd.title": "Web Key Directory (WKD)（網頁金鑰目錄）",
+	"wkd.help": "為此別名發布公開的 PGP 金鑰，讓寄件者的應用程式（Thunderbird、GnuPG、Proton Mail 等）能找到它，並加密寄給該別名的郵件。請只為此別名建立一組新金鑰，並以此別名作為唯一地址：如果金鑰同時包含其他地址，或您將它用於其他別名或轉寄地址，就會被拒絕，因為這會把它們連結在一起。金鑰上的名稱是公開的。用它加密的郵件會原封不動地轉寄，您需以此金鑰在郵件應用程式中解密。發布金鑰前此功能為關閉狀態。",
+	"wkd.publish": "發布金鑰",
+	"wkd.replace": "替換為另一把公開金鑰",
+	"wkd.remove": "停止發布",
+	"wkd.setupTitle": "為此網域設定 WKD",
+	"wkd.setup": "寄件者的應用程式會在 {host} 查詢金鑰。該主機必須能連到此 Worker；網域本身的網站與紀錄不會被更動。請在 Cloudflare 控制台為每個別名網域完成一次以下設定：",
+	"wkd.setupDns": "DNS：為 {host} 新增一筆已代理（橘色雲朵）的紀錄，例如 AAAA 100::。請僅在新增下方路由的同時新增它：只要此紀錄存在，應用程式就只會在那裡查詢金鑰。",
+	"wkd.setupRoute": "Workers Routes：為此 Worker 新增路由 {route}。",
+	"notice.wkdSaved": "{alias} 的金鑰已發布。",
+	"notice.wkdDeleted": "{alias} 的金鑰已不再發布。",
+	"notice.wkdOtherAddress": "該金鑰包含的地址不是 {alias}。請建立一組以此別名為唯一地址的金鑰。",
+	"notice.wkdKeyInUse": "該金鑰已用於其他別名或轉寄地址。請為 {alias} 建立新金鑰。",
 };
 
 export default dictionary;

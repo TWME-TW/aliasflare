@@ -429,6 +429,7 @@ export function forgetStatements(db: D1Database, address: string): D1PreparedSta
 		db.prepare(`DELETE FROM forwards WHERE alias_address = ? AND ${ifDeleted}`).bind(address, address),
 		db.prepare(`DELETE FROM events WHERE alias_address = ? AND ${ifDeleted}`).bind(address, address),
 		db.prepare(`DELETE FROM contacts WHERE alias_address = ? AND ${ifDeleted}`).bind(address, address),
+		db.prepare(`DELETE FROM wkd_keys WHERE alias_address = ? AND ${ifDeleted}`).bind(address, address),
 		db.prepare("DELETE FROM aliases WHERE address = ? AND deleted_at IS NOT NULL").bind(address),
 	];
 }

@@ -639,6 +639,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "An ajiye.",
 	"notice.pgpDeleted": "An cire maɓallin {email}.",
 	"notice.pgpMissing": "Babu maɓalli ga wannan adireshi.",
+	"wkd.title": "Littafin Maɓallan Yanar Gizo (WKD)",
+	"wkd.help": "Buga maɓallin PGP na jama'a don wannan laƙabi, don aikace-aikacen masu aikawa (Thunderbird, GnuPG, Proton Mail, …) su same shi su ɓoye saƙonni zuwa laƙabin. Yi sabon maɓalli don wannan laƙabi kaɗai, tare da wannan laƙabi a matsayin adireshinsa kaɗai: maɓallin da ke ambaton wani adireshi, ko da kake amfani da shi don wani laƙabi ko adireshin tura saƙo, ba a karɓa ba, saboda hakan zai haɗa su. Sunan da ke kan maɓallin jama'a ne. Ana tura saƙon da aka ɓoye da shi ba tare da canji ba, kuma kana buɗe shi a aikace-aikacen imel ɗinka da wannan maɓallin. Yana kashe har sai ka buga maɓalli.",
+	"wkd.publish": "Buga maɓalli",
+	"wkd.replace": "Maye gurbi da wani maɓallin jama'a",
+	"wkd.remove": "Dakatar da bugawa",
+	"wkd.setupTitle": "Saita WKD don wannan yanki",
+	"wkd.setup": "Aikace-aikacen masu aikawa suna neman maɓallin a {host}. Dole ne wannan mai masaukin ya isa wannan Worker; shafin yanar gizon yankin da rikodinsa ba sa canzawa. Yi wannan sau ɗaya ga kowane yankin laƙabi a dashboard na Cloudflare:",
+	"wkd.setupDns": "DNS: ƙara rikodin proxied (girgije mai lemu) don {host}, misali AAAA 100::. Ƙara shi tare da hanyar da ke ƙasa kaɗai: muddin yana nan, aikace-aikace suna neman maɓalli a can kawai.",
+	"wkd.setupRoute": "Workers Routes: ƙara hanyar {route} zuwa wannan Worker.",
+	"notice.wkdSaved": "An buga maɓallin {alias}.",
+	"notice.wkdDeleted": "Ba a ƙara buga maɓallin {alias} ba.",
+	"notice.wkdOtherAddress": "Wannan maɓallin yana ambaton adireshi banda {alias}. Yi maɓalli wanda wannan laƙabi shi ne adireshinsa kaɗai.",
+	"notice.wkdKeyInUse": "Ana amfani da wannan maɓallin don wani laƙabi ko adireshin tura saƙo. Yi sabon maɓalli don {alias}.",
 };
 
 export default dictionary;

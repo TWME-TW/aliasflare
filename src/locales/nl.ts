@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Opgeslagen.",
 	"notice.pgpDeleted": "Sleutel verwijderd voor {email}.",
 	"notice.pgpMissing": "Er is geen sleutel voor dat adres.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Publiceer een openbare PGP-sleutel voor dit alias, zodat de apps van afzenders (Thunderbird, GnuPG, Proton Mail, …) hem vinden en mail naar het alias versleutelen. Maak een nieuwe sleutel alleen voor dit alias, met dit alias als enige adres: een sleutel die ook een ander adres noemt, of die je gebruikt voor een ander alias of een doorstuuradres, wordt geweigerd, omdat die ze aan elkaar zou koppelen. De naam op de sleutel is openbaar. Mail die ermee is versleuteld, wordt ongewijzigd doorgestuurd, en je ontsleutelt die in je mailapp met deze sleutel. Uit totdat je een sleutel publiceert.",
+	"wkd.publish": "Sleutel publiceren",
+	"wkd.replace": "Vervangen door een andere openbare sleutel",
+	"wkd.remove": "Publiceren stoppen",
+	"wkd.setupTitle": "WKD instellen voor dit domein",
+	"wkd.setup": "Apps van afzenders zoeken de sleutel op {host}. Die host moet deze Worker bereiken; de website en de records van het domein worden niet aangeraakt. Doe dit eenmaal per alias-domein in het Cloudflare-dashboard:",
+	"wkd.setupDns": "DNS: voeg een geproxied (oranje wolk) record toe voor {host}, bijvoorbeeld AAAA 100::. Voeg het alleen toe samen met de onderstaande route: zolang het bestaat, zoeken apps sleutels daar en nergens anders.",
+	"wkd.setupRoute": "Workers Routes: voeg de route {route} toe aan deze Worker.",
+	"notice.wkdSaved": "De sleutel voor {alias} is gepubliceerd.",
+	"notice.wkdDeleted": "De sleutel voor {alias} wordt niet meer gepubliceerd.",
+	"notice.wkdOtherAddress": "Die sleutel noemt een ander adres dan {alias}. Maak een sleutel met dit alias als enige adres.",
+	"notice.wkdKeyInUse": "Die sleutel wordt al gebruikt voor een ander alias of doorstuuradres. Maak een nieuwe sleutel voor {alias}.",
 };
 
 export default dictionary;

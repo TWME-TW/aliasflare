@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Salvato.",
 	"notice.pgpDeleted": "Chiave rimossa per {email}.",
 	"notice.pgpMissing": "Non esiste alcuna chiave per quell'indirizzo.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Pubblica una chiave PGP pubblica per questo alias, così le app dei mittenti (Thunderbird, GnuPG, Proton Mail, …) la trovano e cifrano la posta verso l'alias. Crea una nuova chiave solo per questo alias, con questo alias come unico indirizzo: una chiave che indica anche un altro indirizzo, o che usi per un altro alias o per un indirizzo di inoltro, viene rifiutata, perché li collegherebbe. Il nome sulla chiave è pubblico. La posta cifrata con essa viene inoltrata senza modifiche, e la decifri nella tua app di posta con questa chiave. Disattivato finché non pubblichi una chiave.",
+	"wkd.publish": "Pubblica chiave",
+	"wkd.replace": "Sostituisci con un'altra chiave pubblica",
+	"wkd.remove": "Interrompi la pubblicazione",
+	"wkd.setupTitle": "Configurazione di WKD per questo dominio",
+	"wkd.setup": "Le app dei mittenti cercano la chiave su {host}. Quell'host deve raggiungere questo Worker; il sito e i record del dominio non vengono modificati. Esegui questa operazione una volta per dominio di alias nella dashboard di Cloudflare:",
+	"wkd.setupDns": "DNS: aggiungi un record proxied (nuvola arancione) per {host}, ad esempio AAAA 100::. Aggiungilo solo insieme alla route sotto: finché esiste, le app cercano le chiavi solo lì.",
+	"wkd.setupRoute": "Workers Routes: aggiungi la route {route} a questo Worker.",
+	"notice.wkdSaved": "La chiave per {alias} è pubblicata.",
+	"notice.wkdDeleted": "La chiave per {alias} non è più pubblicata.",
+	"notice.wkdOtherAddress": "Quella chiave indica un indirizzo diverso da {alias}. Crea una chiave con questo alias come unico indirizzo.",
+	"notice.wkdKeyInUse": "Quella chiave è già usata per un altro alias o per un indirizzo di inoltro. Crea una nuova chiave per {alias}.",
 };
 
 export default dictionary;

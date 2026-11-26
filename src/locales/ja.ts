@@ -618,6 +618,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "保存しました。",
 	"notice.pgpDeleted": "{email} の鍵を削除しました。",
 	"notice.pgpMissing": "そのアドレスの鍵はありません。",
+	"wkd.title": "Web Key Directory (WKD)（ウェブ鍵ディレクトリ）",
+	"wkd.help": "このエイリアス用の公開 PGP 鍵を公開すると、送信者のアプリ（Thunderbird、GnuPG、Proton Mail など）がそれを見つけ、エイリアス宛てのメールを暗号化できます。このエイリアスだけの新しい鍵を作成し、このエイリアスを唯一のアドレスにしてください。ほかのアドレスも記載している鍵、または別のエイリアスや転送先アドレスに使っている鍵は、それらを結びつけてしまうため受け付けられません。鍵に含まれる名前は公開されます。この鍵で暗号化されたメールは内容を変えずに転送され、メールアプリでこの鍵を使って復号します。鍵を公開するまでは無効です。",
+	"wkd.publish": "鍵を公開",
+	"wkd.replace": "別の公開鍵に置き換える",
+	"wkd.remove": "公開を停止",
+	"wkd.setupTitle": "このドメインの WKD 設定",
+	"wkd.setup": "送信者のアプリは {host} で鍵を検索します。このホストは本 Worker に到達できる必要があります。ドメイン自体の Web サイトや DNS レコードには影響しません。エイリアスのドメインごとに一度、Cloudflare ダッシュボードで次を行ってください:",
+	"wkd.setupDns": "DNS: {host} 用に、プロキシ有効（オレンジ色の雲）のレコードを追加します（例: AAAA 100::）。下記のルートと一緒に追加してください。レコードが存在する間、アプリは鍵をそこだけで探します。",
+	"wkd.setupRoute": "Workers Routes: この Worker にルート {route} を追加します。",
+	"notice.wkdSaved": "{alias} の鍵を公開しました。",
+	"notice.wkdDeleted": "{alias} の鍵は公開されなくなりました。",
+	"notice.wkdOtherAddress": "その鍵は {alias} 以外のアドレスを含んでいます。このエイリアスを唯一のアドレスとする鍵を作成してください。",
+	"notice.wkdKeyInUse": "その鍵は既に別のエイリアスまたは転送先アドレスで使われています。{alias} 用の新しい鍵を作成してください。",
 };
 
 export default dictionary;

@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Đã lưu.",
 	"notice.pgpDeleted": "Đã xóa khóa của {email}.",
 	"notice.pgpMissing": "Không có khóa cho địa chỉ đó.",
+	"wkd.title": "Thư mục khóa web (WKD)",
+	"wkd.help": "Công bố khóa PGP công khai cho bí danh này để ứng dụng của người gửi (Thunderbird, GnuPG, Proton Mail, …) tìm thấy và mã hóa thư gửi đến bí danh. Hãy tạo một khóa mới chỉ dành cho bí danh này, với bí danh này là địa chỉ duy nhất: khóa cũng ghi địa chỉ khác, hoặc khóa bạn dùng cho bí danh khác hoặc địa chỉ chuyển tiếp, sẽ bị từ chối vì nó sẽ liên kết chúng với nhau. Tên trên khóa là công khai. Thư được mã hóa bằng khóa này sẽ được chuyển tiếp nguyên vẹn, và bạn giải mã trong ứng dụng thư của mình bằng khóa này. Tắt cho đến khi bạn công bố khóa.",
+	"wkd.publish": "Công bố khóa",
+	"wkd.replace": "Thay bằng khóa công khai khác",
+	"wkd.remove": "Ngừng công bố",
+	"wkd.setupTitle": "Thiết lập WKD cho tên miền này",
+	"wkd.setup": "Ứng dụng của người gửi tra cứu khóa tại {host}. Máy chủ đó phải truy cập được Worker này; trang web và bản ghi của tên miền không bị thay đổi. Thực hiện một lần cho mỗi tên miền bí danh trong bảng điều khiển Cloudflare:",
+	"wkd.setupDns": "DNS: thêm bản ghi có proxy (đám mây màu cam) cho {host}, ví dụ AAAA 100::. Chỉ thêm cùng với tuyến bên dưới: khi bản ghi này còn tồn tại, ứng dụng chỉ tra cứu khóa ở đó.",
+	"wkd.setupRoute": "Workers Routes: thêm tuyến {route} vào Worker này.",
+	"notice.wkdSaved": "Khóa cho {alias} đã được công bố.",
+	"notice.wkdDeleted": "Khóa cho {alias} không còn được công bố nữa.",
+	"notice.wkdOtherAddress": "Khóa đó ghi một địa chỉ khác {alias}. Hãy tạo khóa mà bí danh này là địa chỉ duy nhất.",
+	"notice.wkdKeyInUse": "Khóa đó đã được dùng cho bí danh khác hoặc địa chỉ chuyển tiếp. Hãy tạo khóa mới cho {alias}.",
 };
 
 export default dictionary;

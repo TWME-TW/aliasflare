@@ -639,6 +639,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Imehifadhiwa.",
 	"notice.pgpDeleted": "Ufunguo wa {email} umeondolewa.",
 	"notice.pgpMissing": "Hakuna ufunguo wa anwani hiyo.",
+	"wkd.title": "Saraka ya Funguo za Wavuti (WKD)",
+	"wkd.help": "Chapisha ufunguo wa umma wa PGP kwa lakabu hii, ili programu za watumaji (Thunderbird, GnuPG, Proton Mail, …) ziupate na kusimba barua kwa lakabu. Tengeneza ufunguo mpya kwa lakabu hii pekee, ukiwa na lakabu hii kama anwani yake pekee: ufunguo unaotaja anwani nyingine, au unaotumika kwa lakabu nyingine au anwani ya kutuma, unakataliwa kwa sababu ungezifunga pamoja. Jina lililo kwenye ufunguo ni la umma. Barua iliyosimbwa kwa ufunguo huo inatumwa bila kubadilishwa, nawe unaifumbua kwenye programu yako ya barua kwa ufunguo huu. Imezimwa hadi uchapishe ufunguo.",
+	"wkd.publish": "Chapisha ufunguo",
+	"wkd.replace": "Badilisha kwa ufunguo mwingine wa umma",
+	"wkd.remove": "Acha kuchapisha",
+	"wkd.setupTitle": "Kusanidi WKD kwa kikoa hiki",
+	"wkd.setup": "Programu za watumaji hutafuta ufunguo kwenye {host}. Mwenyeji huyo lazima afikie Worker hii; tovuti na rekodi za kikoa hazibadilishwi. Fanya hili mara moja kwa kila kikoa cha lakabu kwenye dashibodi ya Cloudflare:",
+	"wkd.setupDns": "DNS: ongeza rekodi iliyo proxied (wingu la chungwa) kwa {host}, kwa mfano AAAA 100::. Iongeze pamoja tu na njia iliyo hapa chini: maadamu ipo, programu hutafuta funguo hapo pekee.",
+	"wkd.setupRoute": "Workers Routes: ongeza njia {route} kwenye Worker hii.",
+	"notice.wkdSaved": "Ufunguo wa {alias} umechapishwa.",
+	"notice.wkdDeleted": "Ufunguo wa {alias} hauchapishwi tena.",
+	"notice.wkdOtherAddress": "Ufunguo huo unataja anwani tofauti na {alias}. Tengeneza ufunguo wenye lakabu hii kama anwani yake pekee.",
+	"notice.wkdKeyInUse": "Ufunguo huo tayari unatumika kwa lakabu nyingine au anwani ya kutuma. Tengeneza ufunguo mpya kwa {alias}.",
 };
 
 export default dictionary;

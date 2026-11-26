@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Disimpan.",
 	"notice.pgpDeleted": "Kunci untuk {email} dialih keluar.",
 	"notice.pgpMissing": "Tiada kunci untuk alamat itu.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Terbitkan kunci PGP awam untuk alias ini, supaya aplikasi pengirim (Thunderbird, GnuPG, Proton Mail, …) menemuinya dan menyulitkan mel ke alias. Buat kunci baharu untuk alias ini sahaja, dengan alias ini sebagai satu-satunya alamat: kunci yang turut menamakan alamat lain, atau yang anda gunakan untuk alias lain atau alamat pemajuan, ditolak kerana ia akan mengikat kedua-duanya. Nama pada kunci itu awam. Mel yang disulitkan dengannya dimajukan tanpa diubah, dan anda menyahsulitkannya dalam aplikasi mel anda dengan kunci ini. Dimatikan sehingga anda menerbitkan kunci.",
+	"wkd.publish": "Terbitkan kunci",
+	"wkd.replace": "Gantikan dengan kunci awam lain",
+	"wkd.remove": "Henti menerbitkan",
+	"wkd.setupTitle": "Menyediakan WKD untuk domain ini",
+	"wkd.setup": "Aplikasi pengirim mencari kunci di {host}. Hos itu mesti dapat dicapai oleh Worker ini; laman web dan rekod domain tidak diubah. Lakukan ini sekali bagi setiap domain alias dalam papan pemuka Cloudflare:",
+	"wkd.setupDns": "DNS: tambah rekod diproksi (awan oren) untuk {host}, contohnya AAAA 100::. Tambahkannya hanya bersama laluan di bawah: selagi rekod itu wujud, aplikasi hanya mencari kunci di situ.",
+	"wkd.setupRoute": "Workers Routes: tambahkan laluan {route} ke Worker ini.",
+	"notice.wkdSaved": "Kunci untuk {alias} telah diterbitkan.",
+	"notice.wkdDeleted": "Kunci untuk {alias} tidak lagi diterbitkan.",
+	"notice.wkdOtherAddress": "Kunci itu menamakan alamat selain {alias}. Buat kunci dengan alias ini sebagai satu-satunya alamat.",
+	"notice.wkdKeyInUse": "Kunci itu sudah digunakan untuk alias lain atau alamat pemajuan. Buat kunci baharu untuk {alias}.",
 };
 
 export default dictionary;
