@@ -12,6 +12,7 @@
  */
 import { Hono, type Context } from "hono";
 import { presentedKey, verifyApiKey } from "./apikeys";
+import { requestCountry } from "./sessions";
 import type { AppEnv } from "./auth";
 import { ClientError, cleanPrefix, createAlias, createRandomAlias, getAliasView, listAliasViews, updateAlias, type AliasView } from "./compat/aliases";
 import { recordApiLockout } from "./compat/api";
@@ -228,7 +229,7 @@ mcp.post("/", async (c) => {
 	if (!settings.mcpServer) return c.json({ error: "The MCP server is off. Turn it on in the aliasflare settings." }, 404);
 
 	const key = presentedKey(c.req.raw.headers);
-	const valid = key ? await verifyApiKey(c.env.DB, key, "mcp") : null;
+	const valid = key ? await verifyApiKey(c.env.DB, key, "mcp", requestCountry(c.req.raw)) : null;
 	if (!valid) {
 		const ip = clientKey(c.req.header("CF-Connecting-IP"));
 		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {

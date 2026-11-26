@@ -172,3 +172,33 @@ describe("signed-in devices", () => {
 		expect(deviceLabel(null)).toBeNull();
 	});
 });
+
+describe("where API keys were last used", () => {
+	it("records the country on use, at once when it changes, and shows it on the API keys page", async () => {
+		const { createApiKey, verifyApiKey } = await import("../src/apikeys");
+		const env = environment();
+		const { key, row } = await createApiKey(env.DB, "phone", "apps");
+		const country = async () => (await env.DB.prepare("SELECT last_used_country AS c FROM api_keys WHERE id = ?").bind(row.id).first<{ c: string | null }>())?.c;
+
+		expect(await verifyApiKey(env.DB, key, "apps", "TW")).not.toBeNull();
+		expect(await country()).toBe("TW");
+		// Within the minute, but from somewhere else: written straight away.
+		await verifyApiKey(env.DB, key, "apps", "JP");
+		expect(await country()).toBe("JP");
+		// No country (local development): the last one stays.
+		await env.DB.prepare("UPDATE api_keys SET last_used_at = 1 WHERE id = ?").bind(row.id).run();
+		await verifyApiKey(env.DB, key, "apps", null);
+		expect(await country()).toBe("JP");
+
+		const page = await (await request(env, await signIn(env.DB), "/api-keys")).text();
+		expect(page).toContain("Japan");
+	});
+
+	it("reads the country Cloudflare puts on the request", async () => {
+		const { requestCountry } = await import("../src/sessions");
+		const withCf = (cf: unknown) => Object.assign(new Request(ORIGIN), { cf }) as Request;
+		expect(requestCountry(withCf({ country: "TW" }))).toBe("TW");
+		expect(requestCountry(withCf({ country: "T1" }))).toBeNull();
+		expect(requestCountry(withCf(undefined))).toBeNull();
+	});
+});

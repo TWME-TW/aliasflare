@@ -4,6 +4,7 @@ import type { AppConfig } from "./config";
 import { signToken, verifyToken } from "./crypto";
 import { now } from "./db";
 import { randomToken } from "./format";
+import { requestCountry } from "./sessions";
 import type { Translate } from "./i18n";
 import type { Settings } from "./settings";
 
@@ -37,12 +38,11 @@ export async function startSession(c: Context<AppEnv>, passkeyId: string): Promi
 	const timestamp = now();
 	// The browser and country are kept only to tell the owner's devices apart on the Passkeys page.
 	const userAgent = c.req.header("User-Agent")?.slice(0, 300) || null;
-	const country = (c.req.raw as { cf?: { country?: unknown } }).cf?.country;
 	await db.batch([
 		db.prepare("DELETE FROM sessions WHERE expires_at < ?").bind(timestamp),
 		db
 			.prepare("INSERT INTO sessions (id, passkey_id, created_at, expires_at, user_agent, country, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
-			.bind(id, passkeyId, timestamp, timestamp + SESSION_TTL_SECONDS, userAgent, typeof country === "string" && /^[A-Z]{2}$/.test(country) ? country : null, timestamp),
+			.bind(id, passkeyId, timestamp, timestamp + SESSION_TTL_SECONDS, userAgent, requestCountry(c.req.raw), timestamp),
 	]);
 	const token = await signToken(c.get("config").signingSecret, "session", id, SESSION_TTL_SECONDS);
 	setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "Strict", path: "/", maxAge: SESSION_TTL_SECONDS, prefix: COOKIE_PREFIX });

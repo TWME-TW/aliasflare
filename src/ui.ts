@@ -1297,10 +1297,11 @@ ${enabled.mcp ? html`<p>${t("keys.mcpUrl")}: <span class="alias-cell"><code>${or
 <p class="muted">${enabled.simplelogin ? html`<span class="pill ok">SimpleLogin</span> ` : ""}${enabled.addy ? html`<span class="pill ok">addy.io</span> ` : ""}${enabled.mcp ? html`<span class="pill ok">MCP</span>` : ""}</p>`
 	: html`<p class="notice">${t("keys.off")} <a href="/settings#clients">${t("nav.settings")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
 ${keys.length
-	? html`<div class="table-wrap"><table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("keys.colScope")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colCreated")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
+	? html`<div class="table-wrap"><table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("keys.colScope")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colCreated")}</th><th>${t("keys.colUsed")}</th><th>${t("pk.colWhere")}</th><th></th></tr></thead><tbody>
 ${keys.map(
 	(key) => html`<tr><td data-label="${t("keys.colName")}">${key.name}</td><td data-label="${t("keys.colScope")}">${t(key.scope === "mcp" ? "keys.scopeMcp" : "keys.scopeApps")}</td><td data-label="${t("keys.colKey")}"><code>${key.prefix}…</code></td>
 <td data-label="${t("keys.colCreated")}">${timeTag(key.created_at, t.locale)}</td><td data-label="${t("keys.colUsed")}">${timeTag(key.last_used_at, t.locale)}</td>
+<td data-label="${t("pk.colWhere")}">${key.last_used_country ? regionName(key.last_used_country, t.locale) : html`<span class="muted">—</span>`}</td>
 <td><form class="inline" method="post" action="/api-keys/${key.id}/delete"><button class="danger" aria-label="${t("keys.revoke")}: ${key.name}">${t("keys.revoke")}</button></form></td></tr>`,
 )}
 </tbody></table></div>`
