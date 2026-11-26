@@ -206,6 +206,14 @@ describe("5. a message follows the alias, even when it changed while the message
 		expect(sent[0]?.to?.email).toBe("new@home.test");
 	});
 
+	it("is not forwarded, nor the alias made again, when it is removed for good mid-flight", async () => {
+		const { db, env, sent, preloaded, config } = await setup();
+		await db.prepare("DELETE FROM aliases WHERE address = 'shop@a.test'").run();
+		const outcome = await handleDirectInbound(delivery("<m5@x>"), env, config, preloaded);
+		expect({ result: outcome.result, sent: sent.length }).toEqual({ result: "skipped: the alias was deleted", sent: 0 });
+		expect(Number((await db.prepare("SELECT COUNT(*) AS n FROM aliases").first<{ n: number }>())?.n)).toBe(0);
+	});
+
 	it("still creates the alias when it was not there at the start", async () => {
 		const { db, env, sent, preloaded, config } = await setup();
 		await db.prepare("DELETE FROM aliases WHERE address = 'shop@a.test'").run();

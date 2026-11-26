@@ -285,7 +285,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	const forwardId = claimed.id;
 	// What the alias is now, not what it was when the message arrived: the owner may have turned it
 	// off, deleted it or changed where it forwards in between, and the message follows the row.
-	const current = claimed.alias ?? known;
+	const current = claimed.alias;
 	const skip = async (reason: string): Promise<ForwardOutcome> => {
 		await finish(db, forwardId, { status: "skipped", error: reason });
 		return { status: 200, result: `skipped: ${reason}` };
@@ -297,6 +297,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 
 	try {
 		if (isReverseDomainOf(aliasDomain, settings.aliasDomains)) return await skip("the recipient is a reverse alias");
+		// It was there when the message arrived and has been removed for good since (Forget): the
+		// owner wants it gone, so it is not made again from this message.
+		if (known && !current) return await skip("the alias was deleted");
 		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
 		if (current?.deleted_at) return await skip("the alias was deleted");
 		if (current?.forward_mode === "none") return await skip("forwarding is off for this alias");

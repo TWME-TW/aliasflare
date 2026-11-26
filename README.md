@@ -210,7 +210,7 @@ Who calls which paths decides what may be challenged:
 | `/assets/…`, `/favicon.svg` | every page above | no |
 | `/manifest.webmanifest`, `/icon-*.png`, `/apple-touch-icon.png` | the browser, installing the dashboard as an app | no |
 
-The last two rows are served by Cloudflare from `public/` without running the Worker, so they cost no Worker requests and the rules below cannot break them either way.
+The last row is served by Cloudflare from `public/` without running the Worker, so it costs no Worker requests. Your WAF rules still apply to it on a custom domain, so leave it unchallenged like the assets.
 
 Suggested rules (all fit the Free plan: 5 custom rules, 1 rate limiting rule):
 
