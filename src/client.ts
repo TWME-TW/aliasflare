@@ -594,7 +594,28 @@ export const APP_SCRIPT = `(() => {
   });
 
   // A label's colour: picking one shows it on the closed button and folds the palette away.
+  // The palette is placed against the window, not the table: the table's scroll box would cut
+  // off a palette opened near its bottom. It opens upwards when there is no room below.
+  const placePalette = (pick) => {
+    const list = pick.querySelector(".swatches");
+    const button = pick.querySelector("summary");
+    if (!list || !button) return;
+    list.classList.add("floating");
+    const box = button.getBoundingClientRect();
+    const width = list.offsetWidth;
+    const height = list.offsetHeight;
+    const rtl = getComputedStyle(pick).direction === "rtl";
+    const left = Math.max(8, Math.min(rtl ? box.right - width : box.left, innerWidth - width - 8));
+    const below = box.bottom + 6;
+    const top = below + height > innerHeight - 8 && box.top - 6 - height >= 8 ? box.top - 6 - height : below;
+    list.style.left = left + "px";
+    list.style.top = top + "px";
+  };
+  const placeOpenPalettes = () => { for (const pick of document.querySelectorAll("details.colour-pick[open]")) placePalette(pick); };
+  addEventListener("scroll", placeOpenPalettes, { capture: true, passive: true });
+  addEventListener("resize", placeOpenPalettes, { passive: true });
   for (const pick of document.querySelectorAll("details.colour-pick")) {
+    pick.addEventListener("toggle", () => { if (pick.open) placePalette(pick); });
     const dot = pick.querySelector("summary .dot");
     pick.addEventListener("change", (event) => {
       const swatch = event.target instanceof HTMLInputElement ? event.target.nextElementSibling : null;

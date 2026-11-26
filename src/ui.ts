@@ -134,6 +134,8 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 .colour-pick .dot { width:20px; height:20px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); }
 .colour-pick > .swatches { position:absolute; z-index:20; inset-inline-start:0; top:calc(100% + 6px); display:grid; grid-template-columns:repeat(6, auto); gap:2px; width:max-content; padding:6px; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:0 12px 32px rgb(0 0 0 / .18); }
 .colour-pick[open] > summary::after { content:"▴"; }
+/* With script, the palette is placed against the window (see client.ts), so no scroll box cuts it off. */
+.colour-pick > .swatches.floating { position:fixed; inset:auto; }
 .swatch { position:relative; display:inline-flex; margin:0; padding:3px; cursor:pointer; }
 .swatch input { position:absolute; opacity:0; width:1px; height:1px; }
 .swatch span { width:24px; height:24px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); transition:transform .1s; }
