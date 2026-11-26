@@ -639,6 +639,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Enregistré.",
 	"notice.pgpDeleted": "Clé supprimée pour {email}.",
 	"notice.pgpMissing": "Il n'existe aucune clé pour cette adresse.",
+	"wkd.title": "Répertoire de clés web (WKD)",
+	"wkd.help": "Publiez une clé PGP publique pour cet alias, afin que les applications des expéditeurs (Thunderbird, GnuPG, Proton Mail, …) la trouvent et chiffrent les courriels envoyés à l'alias. Créez une nouvelle clé pour cet alias seul, avec cet alias comme unique adresse : une clé qui nomme aussi une autre adresse, ou que vous utilisez pour un autre alias ou une adresse de transfert, est refusée, car elle les relierait. Le nom de la clé est public. Le courriel chiffré avec elle est transféré sans modification, et vous le déchiffrez dans votre application de messagerie avec cette clé. Désactivé tant que vous n'avez pas publié de clé.",
+	"wkd.publish": "Publier la clé",
+	"wkd.replace": "Remplacer par une autre clé publique",
+	"wkd.remove": "Arrêter la publication",
+	"wkd.setupTitle": "Configurer WKD pour ce domaine",
+	"wkd.setup": "Les applications des expéditeurs recherchent la clé à {host}. Cet hôte doit atteindre ce Worker ; le site web et les enregistrements du domaine ne sont pas modifiés. Faites-le une fois par domaine d'alias dans le tableau de bord Cloudflare :",
+	"wkd.setupDns": "DNS : ajoutez un enregistrement proxifié (nuage orange) pour {host}, par exemple AAAA 100::. Ajoutez-le uniquement avec la route ci-dessous : tant qu'il existe, les applications cherchent les clés là et nulle part ailleurs.",
+	"wkd.setupRoute": "Workers Routes : ajoutez la route {route} à ce Worker.",
+	"notice.wkdSaved": "La clé pour {alias} est publiée.",
+	"notice.wkdDeleted": "La clé pour {alias} n'est plus publiée.",
+	"notice.wkdOtherAddress": "Cette clé nomme une adresse autre que {alias}. Créez une clé dont cet alias est la seule adresse.",
+	"notice.wkdKeyInUse": "Cette clé est déjà utilisée pour un autre alias ou une adresse de transfert. Créez une nouvelle clé pour {alias}.",
 };
 
 export default dictionary;

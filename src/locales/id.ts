@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Disimpan.",
 	"notice.pgpDeleted": "Kunci untuk {email} dihapus.",
 	"notice.pgpMissing": "Tidak ada kunci untuk alamat itu.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Publikasikan kunci PGP publik untuk alias ini, agar aplikasi pengirim (Thunderbird, GnuPG, Proton Mail, …) menemukannya dan mengenkripsi surel ke alias. Buat kunci baru khusus untuk alias ini saja, dengan alias ini sebagai satu-satunya alamat: kunci yang juga mencantumkan alamat lain, atau yang Anda pakai untuk alias lain atau alamat penerusan, ditolak, karena akan menghubungkannya. Nama pada kunci bersifat publik. Surel yang dienkripsi dengannya diteruskan apa adanya, dan Anda mendekripsinya di aplikasi surel dengan kunci ini. Nonaktif sampai Anda mempublikasikan kunci.",
+	"wkd.publish": "Publikasikan kunci",
+	"wkd.replace": "Ganti dengan kunci publik lain",
+	"wkd.remove": "Berhenti mempublikasikan",
+	"wkd.setupTitle": "Menyiapkan WKD untuk domain ini",
+	"wkd.setup": "Aplikasi pengirim mencari kunci di {host}. Host itu harus dapat menjangkau Worker ini; situs dan catatan DNS domain tidak diubah. Lakukan ini sekali per domain alias di dasbor Cloudflare:",
+	"wkd.setupDns": "DNS: tambahkan catatan proxied (awan oranye) untuk {host}, misalnya AAAA 100::. Tambahkan hanya bersama rute di bawah: selama catatan ini ada, aplikasi hanya mencari kunci di sana.",
+	"wkd.setupRoute": "Workers Routes: tambahkan rute {route} ke Worker ini.",
+	"notice.wkdSaved": "Kunci untuk {alias} sudah dipublikasikan.",
+	"notice.wkdDeleted": "Kunci untuk {alias} tidak lagi dipublikasikan.",
+	"notice.wkdOtherAddress": "Kunci itu mencantumkan alamat selain {alias}. Buat kunci dengan alias ini sebagai satu-satunya alamat.",
+	"notice.wkdKeyInUse": "Kunci itu sudah dipakai untuk alias lain atau alamat penerusan. Buat kunci baru untuk {alias}.",
 };
 
 export default dictionary;

@@ -618,6 +618,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "已保存。",
 	"notice.pgpDeleted": "已删除 {email} 的密钥。",
 	"notice.pgpMissing": "该地址没有密钥。",
+	"wkd.title": "Web Key Directory (WKD)（网页密钥目录）",
+	"wkd.help": "为此别名发布公开的 PGP 密钥，让发件人的应用（Thunderbird、GnuPG、Proton Mail 等）能找到它，并加密发往该别名的邮件。请只为此别名新建一个密钥，并将此别名作为唯一地址：如果密钥同时包含其他地址，或您将其用于其他别名或转发地址，则会被拒绝，因为这会把它们关联起来。密钥上的名称是公开的。用它加密的邮件会原样转发，您需用此密钥在邮件应用中解密。发布密钥前此功能处于关闭状态。",
+	"wkd.publish": "发布密钥",
+	"wkd.replace": "替换为另一个公钥",
+	"wkd.remove": "停止发布",
+	"wkd.setupTitle": "为此域名设置 WKD",
+	"wkd.setup": "发件人的应用会在 {host} 查找密钥。该主机必须能访问此 Worker；域名本身的网站和记录不会被改动。请在 Cloudflare 控制台中为每个别名域名完成一次以下设置：",
+	"wkd.setupDns": "DNS：为 {host} 添加一条已代理（橙色云朵）的记录，例如 AAAA 100::。请仅在添加下方路由的同时添加它：只要该记录存在，应用就只会在那里查找密钥。",
+	"wkd.setupRoute": "Workers Routes：为此 Worker 添加路由 {route}。",
+	"notice.wkdSaved": "{alias} 的密钥已发布。",
+	"notice.wkdDeleted": "{alias} 的密钥已不再发布。",
+	"notice.wkdOtherAddress": "该密钥包含了 {alias} 以外的地址。请创建一个以此别名为唯一地址的密钥。",
+	"notice.wkdKeyInUse": "该密钥已用于其他别名或转发地址。请为 {alias} 创建新密钥。",
 };
 
 export default dictionary;

@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Gespeichert.",
 	"notice.pgpDeleted": "Schlüssel für {email} entfernt.",
 	"notice.pgpMissing": "Für diese Adresse gibt es keinen Schlüssel.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Veröffentliche einen öffentlichen PGP-Schlüssel für diesen Alias, damit die Apps der Absender (Thunderbird, GnuPG, Proton Mail, …) ihn finden und Mails an den Alias verschlüsseln. Erstelle einen neuen Schlüssel nur für diesen Alias, mit diesem Alias als einziger Adresse: Ein Schlüssel, der zusätzlich eine andere Adresse nennt oder für einen anderen Alias oder eine Weiterleitungsadresse verwendet wird, wird abgelehnt, weil er sie miteinander verbinden würde. Der Name auf dem Schlüssel ist öffentlich. Mails, die damit verschlüsselt sind, werden unverändert weitergeleitet, und du entschlüsselst sie mit diesem Schlüssel in deiner Mail-App. Aus, bis du einen Schlüssel veröffentlichst.",
+	"wkd.publish": "Schlüssel veröffentlichen",
+	"wkd.replace": "Durch einen anderen öffentlichen Schlüssel ersetzen",
+	"wkd.remove": "Veröffentlichung beenden",
+	"wkd.setupTitle": "WKD für diese Domain einrichten",
+	"wkd.setup": "Die Apps der Absender suchen den Schlüssel unter {host}. Dieser Host muss diesen Worker erreichen; die Website und die Einträge der Domain bleiben unberührt. Führe dies einmal pro Alias-Domain im Cloudflare-Dashboard aus:",
+	"wkd.setupDns": "DNS: Füge einen proxied (orangefarbene Wolke) Eintrag für {host} hinzu, zum Beispiel AAAA 100::. Füge ihn nur zusammen mit der unten genannten Route hinzu: Solange er existiert, suchen Apps Schlüssel nur dort.",
+	"wkd.setupRoute": "Workers Routes: Füge die Route {route} zu diesem Worker hinzu.",
+	"notice.wkdSaved": "Der Schlüssel für {alias} ist veröffentlicht.",
+	"notice.wkdDeleted": "Der Schlüssel für {alias} wird nicht mehr veröffentlicht.",
+	"notice.wkdOtherAddress": "Dieser Schlüssel nennt eine andere Adresse als {alias}. Erstelle einen Schlüssel, bei dem dieser Alias die einzige Adresse ist.",
+	"notice.wkdKeyInUse": "Dieser Schlüssel wird bereits für einen anderen Alias oder eine Weiterleitungsadresse verwendet. Erstelle einen neuen Schlüssel für {alias}.",
 };
 
 export default dictionary;

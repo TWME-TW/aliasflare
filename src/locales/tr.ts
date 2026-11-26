@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Kaydedildi.",
 	"notice.pgpDeleted": "{email} için anahtar kaldırıldı.",
 	"notice.pgpMissing": "Bu adres için anahtar yok.",
+	"wkd.title": "Web Anahtar Dizini (WKD)",
+	"wkd.help": "Bu takma ad için herkese açık bir PGP anahtarı yayımlayın, böylece gönderenlerin uygulamaları (Thunderbird, GnuPG, Proton Mail, …) onu bulup takma ada gelen postayı şifreleyebilir. Yalnızca bu takma ad için yeni bir anahtar oluşturun ve bu takma adı tek adresi olarak kullanın: başka bir adresi de belirten, ya da başka bir takma ad veya yönlendirme adresi için kullandığınız anahtar, ikisini birbirine bağlayacağı için reddedilir. Anahtardaki ad herkese açıktır. Bununla şifrelenmiş posta değiştirilmeden iletilir ve bu anahtarla posta uygulamanızda şifresini çözersiniz. Bir anahtar yayımlayana kadar kapalıdır.",
+	"wkd.publish": "Anahtarı yayımla",
+	"wkd.replace": "Başka bir herkese açık anahtarla değiştir",
+	"wkd.remove": "Yayımlamayı durdur",
+	"wkd.setupTitle": "Bu alan adı için WKD kurulumu",
+	"wkd.setup": "Gönderenlerin uygulamaları anahtarı {host} adresinde arar. Bu ana bilgisayar bu Worker'a ulaşabilmelidir; alan adının kendi web sitesi ve kayıtları değiştirilmez. Her takma ad alan adı için bir kez Cloudflare panelinde şunu yapın:",
+	"wkd.setupDns": "DNS: {host} için proxy'li (turuncu bulut) bir kayıt ekleyin, örneğin AAAA 100::. Bunu yalnızca aşağıdaki rotayla birlikte ekleyin: kayıt var olduğu sürece uygulamalar anahtarları yalnızca orada arar.",
+	"wkd.setupRoute": "Workers Routes: bu Worker'a {route} rotasını ekleyin.",
+	"notice.wkdSaved": "{alias} için anahtar yayımlandı.",
+	"notice.wkdDeleted": "{alias} için anahtar artık yayımlanmıyor.",
+	"notice.wkdOtherAddress": "Bu anahtar {alias} dışında bir adres belirtiyor. Yalnızca bu takma adın adres olduğu bir anahtar oluşturun.",
+	"notice.wkdKeyInUse": "Bu anahtar zaten başka bir takma ad veya yönlendirme adresi için kullanılıyor. {alias} için yeni bir anahtar oluşturun.",
 };
 
 export default dictionary;

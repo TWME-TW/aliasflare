@@ -639,6 +639,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "저장했습니다.",
 	"notice.pgpDeleted": "{email}의 키를 삭제했습니다.",
 	"notice.pgpMissing": "해당 주소의 키가 없습니다.",
+	"wkd.title": "웹 키 디렉터리 (WKD)",
+	"wkd.help": "이 별칭의 공개 PGP 키를 게시하면, 발신자의 앱(Thunderbird, GnuPG, Proton Mail 등)이 이 키를 찾아 별칭으로 보내는 메일을 암호화합니다. 이 별칭만을 위한 새 키를 만들고, 이 별칭을 유일한 주소로 지정하세요. 다른 주소도 함께 지정된 키, 또는 다른 별칭이나 전달 주소에 사용 중인 키는 두 항목을 연결하게 되므로 거부됩니다. 키에 적힌 이름은 공개됩니다. 이 키로 암호화된 메일은 내용 변경 없이 전달되며, 메일 앱에서 이 키로 복호화합니다. 키를 게시하기 전까지는 꺼져 있습니다.",
+	"wkd.publish": "키 게시",
+	"wkd.replace": "다른 공개 키로 교체",
+	"wkd.remove": "게시 중지",
+	"wkd.setupTitle": "이 도메인의 WKD 설정",
+	"wkd.setup": "발신자의 앱은 {host}에서 키를 찾습니다. 이 호스트가 이 Worker에 도달할 수 있어야 하며, 도메인의 웹사이트와 DNS 레코드는 변경되지 않습니다. 별칭 도메인마다 한 번씩 Cloudflare 대시보드에서 다음을 설정하세요:",
+	"wkd.setupDns": "DNS: {host}에 대해 프록시 적용(주황색 구름) 레코드를 추가하세요. 예: AAAA 100::. 아래의 라우트와 함께만 추가하세요. 이 레코드가 있는 동안 앱은 키를 그곳에서만 찾습니다.",
+	"wkd.setupRoute": "Workers Routes: 이 Worker에 라우트 {route}를 추가하세요.",
+	"notice.wkdSaved": "{alias}의 키가 게시되었습니다.",
+	"notice.wkdDeleted": "{alias}의 키가 더 이상 게시되지 않습니다.",
+	"notice.wkdOtherAddress": "이 키에는 {alias} 이외의 주소가 지정되어 있습니다. 이 별칭만을 주소로 지정한 키를 만드세요.",
+	"notice.wkdKeyInUse": "이 키는 이미 다른 별칭이나 전달 주소에 사용 중입니다. {alias}를 위한 새 키를 만드세요.",
 };
 
 export default dictionary;

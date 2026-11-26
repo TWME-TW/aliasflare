@@ -624,6 +624,19 @@ const dictionary: Dictionary = {
 	"notice.pgpSubject": "Zapisano.",
 	"notice.pgpDeleted": "Usunięto klucz dla {email}.",
 	"notice.pgpMissing": "Brak klucza dla tego adresu.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Opublikuj publiczny klucz PGP dla tego aliasu, aby aplikacje nadawców (Thunderbird, GnuPG, Proton Mail, …) mogły go znaleźć i szyfrować pocztę do aliasu. Utwórz nowy klucz wyłącznie dla tego aliasu, z tym aliasem jako jedynym adresem: klucz, który wymienia także inny adres albo jest używany dla innego aliasu lub adresu przekazywania, zostanie odrzucony, ponieważ połączyłby je ze sobą. Nazwa na kluczu jest publiczna. Poczta zaszyfrowana tym kluczem jest przekazywana bez zmian, a odszyfrowujesz ją w aplikacji pocztowej tym kluczem. Wyłączone, dopóki nie opublikujesz klucza.",
+	"wkd.publish": "Opublikuj klucz",
+	"wkd.replace": "Zastąp innym kluczem publicznym",
+	"wkd.remove": "Przestań publikować",
+	"wkd.setupTitle": "Konfiguracja WKD dla tej domeny",
+	"wkd.setup": "Aplikacje nadawców szukają klucza pod adresem {host}. Ten host musi być osiągalny dla tego Workera; strona i rekordy samej domeny nie są zmieniane. Wykonaj to raz dla każdej domeny aliasów w panelu Cloudflare:",
+	"wkd.setupDns": "DNS: dodaj rekord z proxy (pomarańczowa chmurka) dla {host}, na przykład AAAA 100::. Dodaj go tylko razem z poniższą trasą: dopóki istnieje, aplikacje szukają kluczy wyłącznie tam.",
+	"wkd.setupRoute": "Workers Routes: dodaj trasę {route} do tego Workera.",
+	"notice.wkdSaved": "Klucz dla {alias} został opublikowany.",
+	"notice.wkdDeleted": "Klucz dla {alias} nie jest już publikowany.",
+	"notice.wkdOtherAddress": "Ten klucz wymienia adres inny niż {alias}. Utwórz klucz, w którym ten alias jest jedynym adresem.",
+	"notice.wkdKeyInUse": "Ten klucz jest już używany dla innego aliasu lub adresu przekazywania. Utwórz nowy klucz dla {alias}.",
 };
 
 export default dictionary;

@@ -641,6 +641,19 @@ export const en = {
 	"notice.pgpSubject": "Saved.",
 	"notice.pgpDeleted": "Key removed for {email}.",
 	"notice.pgpMissing": "There is no key for that address.",
+	"wkd.title": "Web Key Directory (WKD)",
+	"wkd.help": "Publish a public PGP key for this alias, so senders' apps (Thunderbird, GnuPG, Proton Mail, …) find it and encrypt mail to the alias. Make a new key for this alias alone, with this alias as its only address: a key that also names another address, or that you use for another alias or a forwarding address, is refused, since it would tie them together. The name on the key is public. Mail encrypted to it is forwarded untouched, and you decrypt it in your mail app with this key. Off until you publish a key.",
+	"wkd.publish": "Publish key",
+	"wkd.replace": "Replace with another public key",
+	"wkd.remove": "Stop publishing",
+	"wkd.setupTitle": "Setting up WKD for this domain",
+	"wkd.setup": "Senders' apps look the key up at {host}. That host must reach this Worker; the domain's own website and records are not touched. Do this once per alias domain in the Cloudflare dashboard:",
+	"wkd.setupDns": "DNS: add a proxied (orange cloud) record for {host}, for example AAAA 100::. Add it only together with the route below: while it exists, apps look for keys there and nowhere else.",
+	"wkd.setupRoute": "Workers Routes: add the route {route} to this Worker.",
+	"notice.wkdSaved": "The key for {alias} is published.",
+	"notice.wkdDeleted": "The key for {alias} is no longer published.",
+	"notice.wkdOtherAddress": "That key names an address other than {alias}. Make a key with this alias as its only address.",
+	"notice.wkdKeyInUse": "That key is already used for another alias or a forwarding address. Make a new key for {alias}.",
 };
 
 export type MessageKey = keyof typeof en;
