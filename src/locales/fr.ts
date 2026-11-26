@@ -598,6 +598,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "{count} autres appareils ont été déconnectés.",
 	"err.reauth": "Confirmez d'abord avec votre clé d'accès, puis réessayez.",
 	"bulk.allLabels": "Toutes les étiquettes",
+	"settings.createFromMailDomains": "Sur ces domaines d'alias (décochez-en un pour refuser les courriels adressés à des adresses qui ne sont pas encore des alias) :",
+	"exp.title": "Exporter les alias",
+	"exp.help": "Chaque alias en fichier CSV, y compris les supprimés : adresse, note, nom de l'expéditeur, transfert, épingle, adresse de transfert, libellés et dates. Réimportez-le ci-dessus, ici ou dans un autre aliasflare.",
+	"exp.button": "Télécharger le CSV",
+	"notice.ruleWebhook": "Un webhook nécessite une adresse https publique.",
+	"rules.action.webhook": "Envoyer un webhook",
+	"rules.webhookKey": "Clé de signature du webhook",
+	"rules.webhookKeyHelp": "Chaque webhook est un POST JSON concernant le message (l'alias, l'expéditeur et l'objet, jamais son contenu). Son en-tête X-Aliasflare-Signature est le HMAC-SHA256 du corps avec cette clé, en hexadécimal : vérifiez-le pour savoir que la requête vient d'ici.",
 };
 
 export default dictionary;

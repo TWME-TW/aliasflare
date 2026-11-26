@@ -29,6 +29,7 @@ import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
 import { domainOf, extractEmail, hostnameOf, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
 import { handleDirectInbound, handleInbound, type InboundEvent } from "./forward";
+import { exportAliases } from "./export";
 import {
 	addSimpleLoginContacts,
 	newFetchBudget,
@@ -60,7 +61,7 @@ import {
 import { deviceLabel, listSessions, sessionHandle } from "./sessions";
 import { handleReverseAliasMail } from "./reply";
 import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabels, updateLabel } from "./labels";
-import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, type Rule } from "./rules";
+import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, webhookKey, type Rule } from "./rules";
 import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings, settingsFromRows, type Settings } from "./settings";
 import {
 	aliasPage,
@@ -765,6 +766,9 @@ app.post("/settings", async (c) => {
 		includeSenderInReverseAlias: form.includeSenderInReverseAlias === "1",
 		autoForwardNewAliases: form.autoForwardNewAliases === "1",
 		createAliasesFromMail: form.createAliasesFromMail === "1",
+		// Off: a domain whose box was shown and left unticked. A domain added in this same save had
+		// no box yet, so it starts on.
+		aliasesFromMailOff: aliasDomains.filter((domain) => form[`fromMailShown:${domain}`] === "1" && form[`fromMail:${domain}`] !== "1"),
 		removeTrackers: form.removeTrackers === "1",
 		showBanner: form.showBanner === "1",
 		unsubscribeBehavior: form.unsubscribeBehavior,
@@ -1015,6 +1019,7 @@ const RULE_NOTICES: Record<RuleError["reason"], MessageKey> = {
 	limit: "notice.ruleLimit",
 	missing: "notice.ruleMissing",
 	forwardTo: "notice.ruleForwardTo",
+	webhook: "notice.ruleWebhook",
 	unsupported: "notice.ruleUnsupported",
 };
 
@@ -1047,7 +1052,7 @@ async function saveRule(c: C, id: string | null): Promise<Response> {
 	return redirectWithNotice(c, "/rules", "notice.ruleSaved");
 }
 
-app.get("/rules", async (c) => c.html(rulesPage(c.get("t"), { rules: await listRules(c.env.DB), notice: noticeFrom(c) })));
+app.get("/rules", async (c) => c.html(rulesPage(c.get("t"), { rules: await listRules(c.env.DB), notice: noticeFrom(c), webhookKey: await webhookKey(c.get("config").signingSecret) })));
 /** The addresses a rule may forward to: the owner's forwarding addresses. */
 async function ruleDestinations(c: C): Promise<string[]> {
 	return (await listDestinations(c.env.DB, await loadSettings(c.env.DB))).map((destination) => destination.email);
@@ -1083,6 +1088,16 @@ const IMPORT_SOURCES = {
 	addy: { label: "addy.io", server: "https://app.addy.io", fetch: fetchAddy },
 	csv: { label: "CSV", server: "", fetch: null },
 } as const;
+
+// Every alias as CSV, for a backup or to move elsewhere; the import below reads it back.
+app.get("/export/aliases.csv", async (c) => {
+	const day = new Date().toISOString().slice(0, 10);
+	return c.body(await exportAliases(c.env.DB), 200, {
+		"Content-Type": "text/csv; charset=utf-8",
+		"Content-Disposition": `attachment; filename="aliasflare-aliases-${day}.csv"`,
+		"Cache-Control": "no-store",
+	});
+});
 
 app.get("/import", async (c) => {
 	const settings = await loadSettings(c.env.DB);
@@ -1154,6 +1169,8 @@ app.post("/import/:source", async (c) => {
 			if (file.size > 5_000_000) return render({ error: t("imp.err.format") });
 			aliases = parseAliasCsv(await file.text());
 			selection = selectByDomain(aliases, domains, settings.aliasDomains);
+			// A labels column (aliasflare's own export) brings its labels, made by name as needed.
+			if (selection.chosen.some((alias) => alias.labels?.length)) extras = { labels: [], rules: [], blocklist: [], unread: [] };
 		}
 	} catch (error) {
 		if (!(error instanceof ImportError)) throw error;

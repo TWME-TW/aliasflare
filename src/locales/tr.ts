@@ -583,6 +583,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "{count} diğer cihazın oturumu kapatıldı.",
 	"err.reauth": "Önce geçiş anahtarınızla onaylayın, sonra tekrar deneyin.",
 	"bulk.allLabels": "Tüm etiketler",
+	"settings.createFromMailDomains": "Bu takma ad alan adlarında (henüz takma ad olmayan adreslere gelen postayı reddetmek için birinin işaretini kaldırın):",
+	"exp.title": "Takma adları dışa aktar",
+	"exp.help": "Silinenler dahil her takma ad CSV dosyası olarak: adres, not, gönderen adı, yönlendirme, sabitleme, yönlendirme adresi, etiketler ve tarihler. Yukarıda, burada veya başka bir aliasflare'de yeniden içe aktarın.",
+	"exp.button": "CSV indir",
+	"notice.ruleWebhook": "Webhook için herkese açık bir https adresi gerekir.",
+	"rules.action.webhook": "Webhook gönder",
+	"rules.webhookKey": "Webhook imzalama anahtarı",
+	"rules.webhookKeyHelp": "Her webhook, ileti hakkında bir JSON POST'tur (takma ad, gönderen ve konu; içerik asla yoktur). X-Aliasflare-Signature başlığı, gövdenin bu anahtarla HMAC-SHA256 değeridir (onaltılık): isteğin buradan geldiğini bilmek için doğrulayın.",
 };
 
 export default dictionary;

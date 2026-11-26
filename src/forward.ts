@@ -9,11 +9,11 @@ import { sha256Hex } from "./apikeys";
 import { isOwnAddress, isReverseDomainOf, reverseDomainFor } from "./domains";
 import { LINK_TTL_SECONDS } from "./unsubscribe";
 import { authResultClauses, firstAuthenticationResults, hasSingleFromHeader } from "./reply";
-import { settingsFromRows } from "./settings";
+import { createsAliasesFromMail, settingsFromRows } from "./settings";
 import { readLimited } from "./streams";
 import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
 import type { Replacement } from "./format";
-import { runRules } from "./rules";
+import { callWebhooks, runRules } from "./rules";
 import { listDestinations } from "./compat/aliases";
 import type { Settings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
@@ -277,7 +277,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	const { settings, known } = input.preloaded ?? (await loadSettingsAndAlias(db, aliasAddress));
 	// Only on an alias domain (Mailflare may receive for others), and not without end: mail to
 	// thousands of made-up addresses would otherwise make thousands of aliases.
-	const unknown = !known && (!settings.createAliasesFromMail || !settings.aliasDomains.includes(aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
+	const unknown = !known && (!createsAliasesFromMail(settings, aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
 	if (unknown && !input.claimUnknown) return { status: 404, result: "no such alias" };
 
 	const claimed = await claim(db, input.key, aliasAddress);
@@ -348,14 +348,16 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			}
 			// The message is passed on unchanged, so of a rule's actions only Block and Forward to act on it.
 			const passSpoofed = rawFromEntries.length !== 1 || parsedFrom.length !== 1 || dmarcFailedAtCloudflare(headers.get("Authentication-Results"));
+			const ruleSubject = await decodedSubject(headers.get("Subject"));
 			const rules = await runRules(db, "forwards", {
 				sender: primarySender,
 				senders,
 				envelopeSender,
 				spoofed: passSpoofed,
-				subject: await decodedSubject(headers.get("Subject")),
+				subject: ruleSubject,
 				alias: aliasAddress,
 			});
+			await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: primarySender, subject: ruleSubject });
 			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
@@ -432,6 +434,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// A sender can have an address of its own (set by an unsubscribe, say).
 		const ruleSenders = [senderEmail, ...(envelopeSender ? [envelopeSender] : [])];
 		const rules = await runRules(db, "forwards", { sender: senderEmail, senders: ruleSenders, envelopeSender, spoofed, subject: email.subject ?? "", alias: aliasAddress });
+		await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: senderEmail, subject: email.subject ?? "" });
 		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
 		// A rule's Forward to comes first, then the sender's own address, then the alias's.
 		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);

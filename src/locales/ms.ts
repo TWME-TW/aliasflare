@@ -583,6 +583,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "Telah log keluar {count} peranti lain.",
 	"err.reauth": "Sahkan dengan passkey dahulu, kemudian cuba lagi.",
 	"bulk.allLabels": "Semua label",
+	"settings.createFromMailDomains": "Pada domain alias ini (nyahtanda satu untuk menolak e-mel ke alamat di situ yang belum menjadi alias):",
+	"exp.title": "Eksport alias",
+	"exp.help": "Setiap alias sebagai fail CSV, termasuk yang dipadam: alamat, nota, nama pengirim, pemajuan, pin, alamat pemajuan, label dan tarikh. Import semula di atas, di sini atau di aliasflare lain.",
+	"exp.button": "Muat turun CSV",
+	"notice.ruleWebhook": "Webhook memerlukan alamat https awam.",
+	"rules.action.webhook": "Hantar webhook",
+	"rules.webhookKey": "Kunci tandatangan webhook",
+	"rules.webhookKeyHelp": "Setiap webhook ialah POST JSON mengenai mesej (alias, pengirim dan subjek, tidak sekali-kali kandungannya). Pengepala X-Aliasflare-Signature ialah HMAC-SHA256 badan dengan kunci ini, dalam heks: semak untuk pastikan permintaan datang dari sini.",
 };
 
 export default dictionary;

@@ -869,6 +869,11 @@ ${checkbox("sendAutoReplies", settings.sendAutoReplies, t("settings.autoReplies"
 ${checkbox("removeTrackers", settings.removeTrackers, t("settings.trackers"), t("settings.trackersHelp"))}
 ${checkbox("showBanner", settings.showBanner, t("settings.banner"), t("settings.bannerHelp"))}
 ${checkbox("createAliasesFromMail", settings.createAliasesFromMail, t("settings.createFromMail"), t("settings.createFromMailHelp"))}
+${settings.aliasDomains.length > 1
+	? html`<fieldset class="domain-list"><legend class="help">${t("settings.createFromMailDomains")}</legend>
+${settings.aliasDomains.map((domain) => html`<label class="check"><input type="hidden" name="fromMailShown:${domain}" value="1" /><input type="checkbox" name="fromMail:${domain}" value="1" ${settings.aliasesFromMailOff.includes(domain) ? "" : "checked"} /><span><code>${domain}</code></span></label>`)}
+</fieldset>`
+	: ""}
 ${checkbox("autoForwardNewAliases", settings.autoForwardNewAliases, t("settings.autoForward"), t("settings.autoForwardHelp"))}
 </section>
 
@@ -1397,6 +1402,11 @@ ${keyField("addy", "imp.addyKeyHelp")}${serverField("addy", "https://app.addy.io
 <p><button class="primary">${t("imp.button")}</button></p>
 </form>
 </section>
+<section id="export">
+<h2>${t("exp.title")}</h2>
+<p class="help">${t("exp.help")}</p>
+<form method="get" action="/export/aliases.csv"><p><button>${t("exp.button")}</button></p></form>
+</section>
 </main>`,
 		{ t, nav: true, current: "/import", path: "/import" },
 	);
@@ -1519,11 +1529,15 @@ function conditionText(t: Translate, condition: Condition): string {
 }
 
 function actionText(t: Translate, action: Action): string {
-	return action.type === "block" || action.type === "removeAttachments" || action.type === "banner" ? t(`rules.action.${action.type}`) : `${t(`rules.action.${action.type}`)} “${action.value}”`;
+	if (action.type === "block" || action.type === "removeAttachments" || action.type === "banner") return t(`rules.action.${action.type}`);
+	// Only the host: a webhook address often carries a token of its own.
+	if (action.type === "webhook") return `${t("rules.action.webhook")} (${URL.canParse(action.value) ? new URL(action.value).host : "?"})`;
+	return `${t(`rules.action.${action.type}`)} “${action.value}”`;
 }
 
-export function rulesPage(t: Translate, input: { rules: Rule[]; notice?: Notice }): Html {
-	const { rules, notice } = input;
+export function rulesPage(t: Translate, input: { rules: Rule[]; notice?: Notice; webhookKey?: string }): Html {
+	const { rules, notice, webhookKey } = input;
+	const hasWebhook = rules.some((rule) => rule.actions.some((action) => action.type === "webhook"));
 	return page(
 		t("rules.title"),
 		html`<main>
@@ -1532,6 +1546,11 @@ ${noticeBox(notice)}
 <h2>${t("rules.title")}</h2>
 <p class="help">${t("rules.help")}</p>
 <form method="get" action="/rules/new"><button class="primary">${t("rules.new")}</button></form>
+${hasWebhook && webhookKey
+	? html`<details class="mt12"><summary>${t("rules.webhookKey")}</summary>
+<p class="help">${t("rules.webhookKeyHelp")}</p>
+<input type="text" readonly value="${webhookKey}" aria-label="${t("rules.webhookKey")}" spellcheck="false" /></details>`
+	: ""}
 ${rules.length === 0
 	? html`<p class="muted">${t("rules.empty")}</p>`
 	: html`<div class="table-wrap"><table class="rt mt12"><thead><tr><th>${t("rules.name")}</th><th>${t("rules.conditions")}</th><th>${t("rules.actions")}</th><th>${t("rules.colApplied")}</th><th></th></tr></thead><tbody>

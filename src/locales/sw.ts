@@ -598,6 +598,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "Vifaa {count} vingine vimetoka.",
 	"err.reauth": "Thibitisha kwa passkey kwanza, kisha ujaribu tena.",
 	"bulk.allLabels": "Lebo zote",
+	"settings.createFromMailDomains": "Kwenye vikoa hivi vya majina bandia (ondoa tiki moja ili kukataa barua kwa anwani ambazo bado si majina bandia):",
+	"exp.title": "Hamisha majina bandia",
+	"exp.help": "Kila jina bandia kama faili ya CSV, pamoja na yaliyofutwa: anwani, dokezo, jina la mtumaji, usambazaji, bandika, anwani ya usambazaji, lebo na tarehe. Ingiza tena hapo juu, hapa au kwenye aliasflare nyingine.",
+	"exp.button": "Pakua CSV",
+	"notice.ruleWebhook": "Webhook inahitaji anwani ya umma ya https.",
+	"rules.action.webhook": "Tuma webhook",
+	"rules.webhookKey": "Ufunguo wa sahihi ya webhook",
+	"rules.webhookKeyHelp": "Kila webhook ni JSON POST kuhusu ujumbe (jina bandia, mtumaji na mada, si maudhui yake kamwe). Kichwa chake cha X-Aliasflare-Signature ni HMAC-SHA256 ya mwili kwa ufunguo huu, kwa hex: kikague ili ujue ombi lilitoka hapa.",
 };
 
 export default dictionary;

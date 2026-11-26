@@ -577,6 +577,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "他の {count} 台のデバイスをログアウトしました。",
 	"err.reauth": "先にパスキーで確認してから、もう一度お試しください。",
 	"bulk.allLabels": "すべてのラベル",
+	"settings.createFromMailDomains": "これらのエイリアスドメインで（エイリアスではないアドレス宛てのメールを拒否する場合はチェックを外してください）:",
+	"exp.title": "エイリアスをエクスポート",
+	"exp.help": "削除済みを含むすべてのエイリアスをCSVファイルとして出力します：アドレス、メモ、送信者名、転送、ピン留め、転送先アドレス、ラベル、日付。上記、ここ、または別のaliasflareで再度インポートできます。",
+	"exp.button": "CSVをダウンロード",
+	"notice.ruleWebhook": "Webhookには公開されたhttpsアドレスが必要です。",
+	"rules.action.webhook": "Webhookを送信",
+	"rules.webhookKey": "Webhook署名キー",
+	"rules.webhookKeyHelp": "各Webhookは、メッセージに関するJSONのPOSTです（エイリアス、送信者、件名のみで、本文は含みません）。X-Aliasflare-Signatureヘッダーは、このキーでボディをHMAC-SHA256した16進数の値です。リクエストがここから送られたものかを確認するために検証してください。",
 };
 
 export default dictionary;

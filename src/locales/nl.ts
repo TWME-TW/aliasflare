@@ -583,6 +583,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "{count} andere apparaten afgemeld.",
 	"err.reauth": "Bevestig eerst met je passkey en probeer het daarna opnieuw.",
 	"bulk.allLabels": "Alle labels",
+	"settings.createFromMailDomains": "Op deze aliasdomeinen (haal een vinkje weg om e-mail te weigeren naar adressen die nog geen alias zijn):",
+	"exp.title": "Aliassen exporteren",
+	"exp.help": "Elke alias als CSV-bestand, ook verwijderde: adres, notitie, naam afzender, doorsturen, vastgezet, doorstuuradres, labels en datums. Importeer het opnieuw hierboven, hier of in een andere aliasflare.",
+	"exp.button": "CSV downloaden",
+	"notice.ruleWebhook": "Een webhook heeft een openbaar https-adres nodig.",
+	"rules.action.webhook": "Webhook versturen",
+	"rules.webhookKey": "Ondertekeningssleutel webhook",
+	"rules.webhookKeyHelp": "Elke webhook is een JSON-POST over het bericht (de alias, afzender en onderwerp, nooit de inhoud). De header X-Aliasflare-Signature is de HMAC-SHA256 van de body met deze sleutel, in hex: controleer die om zeker te weten dat het verzoek van hier komt.",
 };
 
 export default dictionary;

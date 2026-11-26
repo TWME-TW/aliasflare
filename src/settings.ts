@@ -60,6 +60,8 @@ export type Settings = {
 	 * address that is not an alias yet is refused, so made-up addresses do not fill the list.
 	 */
 	createAliasesFromMail: boolean;
+	/** Alias domains where mail does not create aliases even so (addy.io's catch-all off for a domain). */
+	aliasesFromMailOff: string[];
 	removeTrackers: boolean;
 	showBanner: boolean;
 	/** Language of the banner and link pages in forwarded mail. */
@@ -93,6 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	defaultDestination: "",
 	autoForwardNewAliases: true,
 	createAliasesFromMail: true,
+	aliasesFromMailOff: [],
 	removeTrackers: true,
 	showBanner: false,
 	language: "en",
@@ -149,6 +152,11 @@ export function unsubscribeRuleFor(settings: Settings, aliasAddress: string): Un
 	};
 }
 
+/** Whether mail to an address on this domain that is not an alias yet creates it. */
+export function createsAliasesFromMail(settings: Settings, domain: string): boolean {
+	return settings.createAliasesFromMail && settings.aliasDomains.includes(domain) && !settings.aliasesFromMailOff.includes(domain);
+}
+
 /** Keeps only known keys with valid values; anything else falls back to the default. */
 export function normalizeSettings(raw: Record<string, unknown>): Settings {
 	const aliasDomains = Array.isArray(raw.aliasDomains)
@@ -172,6 +180,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		autoForwardNewAliases:
 			typeof raw.autoForwardNewAliases === "boolean" ? raw.autoForwardNewAliases : DEFAULT_SETTINGS.autoForwardNewAliases,
 		createAliasesFromMail: typeof raw.createAliasesFromMail === "boolean" ? raw.createAliasesFromMail : DEFAULT_SETTINGS.createAliasesFromMail,
+		aliasesFromMailOff: Array.isArray(raw.aliasesFromMailOff) ? aliasDomains.filter((domain) => (raw.aliasesFromMailOff as unknown[]).includes(domain)) : [],
 		removeTrackers: typeof raw.removeTrackers === "boolean" ? raw.removeTrackers : DEFAULT_SETTINGS.removeTrackers,
 		showBanner: typeof raw.showBanner === "boolean" ? raw.showBanner : DEFAULT_SETTINGS.showBanner,
 		language: isLocale(raw.language) ? raw.language : DEFAULT_SETTINGS.language,

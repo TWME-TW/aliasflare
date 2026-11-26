@@ -598,6 +598,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "{count} دیگر آلات سے سائن آؤٹ کر دیا گیا۔",
 	"err.reauth": "پہلے پاس کی سے تصدیق کریں، پھر دوبارہ کوشش کریں۔",
 	"bulk.allLabels": "تمام لیبلز",
+	"settings.createFromMailDomains": "ان عرفی ڈومینز پر (ابھی تک عرفی نہ بنے پتوں پر آنے والی ای میلز مسترد کرنے کے لیے کسی ایک کا نشان ہٹائیں):",
+	"exp.title": "عرفی نام برآمد کریں",
+	"exp.help": "ہر عرفی نام CSV فائل کے طور پر، حذف شدہ سمیت: پتا، نوٹ، بھیجنے والے کا نام، فارورڈنگ، پن، فارورڈ پتا، لیبل اور تاریخیں۔ اوپر، یہاں یا کسی اور aliasflare میں دوبارہ درآمد کریں۔",
+	"exp.button": "CSV ڈاؤن لوڈ کریں",
+	"notice.ruleWebhook": "ویب ہک کے لیے عوامی https پتا درکار ہے۔",
+	"rules.action.webhook": "ویب ہک بھیجیں",
+	"rules.webhookKey": "ویب ہک دستخطی کلید",
+	"rules.webhookKeyHelp": "ہر ویب ہک پیغام کے بارے میں JSON POST ہے (عرفی نام، بھیجنے والا اور موضوع، مواد کبھی نہیں)۔ اس کا X-Aliasflare-Signature ہیڈر اس کلید کے ساتھ متن کا HMAC-SHA256 ہے، ہیکس میں: جانچیں کہ درخواست یہیں سے آئی ہے۔",
 };
 
 export default dictionary;

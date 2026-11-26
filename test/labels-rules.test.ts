@@ -121,7 +121,7 @@ describe("rules", () => {
 		expect(() => cleanRule({ name: "x", operator: "AND", conditions: [sender, { type: "subject", match: "matches regex", values: ["^invoice"] }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
 		expect(() => cleanRule({ name: "x", conditions: [{ type: "sender", match: "is not", values: Array.from({ length: 21 }, (_, i) => `a${i}@x.test`) }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
 		expect(() => cleanRule({ name: "x", conditions: [{ type: "subject", match: "contains", values: ["x".repeat(201)] }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
-		expect(() => cleanRule({ name: "x", conditions: [sender], actions: [{ type: "block" }, { type: "webhook", value: "https://x.test" }] })).toThrow(/unsupported/);
+		expect(() => cleanRule({ name: "x", conditions: [sender], actions: [{ type: "block" }, { type: "encryption", value: "false" }] })).toThrow(/unsupported/);
 		expect(() => cleanRule({ name: "x", conditions: Array.from({ length: 11 }, () => sender), actions: [{ type: "block" }] })).toThrow(/unsupported/);
 		// A value with a comma stays one value.
 		expect(cleanRule({ name: "x", conditions: [{ type: "subject", match: "contains", values: ["hello, world"] }], actions: [{ type: "block" }] }).conditions[0]!.values).toEqual(["hello, world"]);

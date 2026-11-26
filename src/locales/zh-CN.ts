@@ -577,6 +577,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "已退出其他 {count} 个设备。",
 	"err.reauth": "请先用通行密钥确认，然后重试。",
 	"bulk.allLabels": "所有标签",
+	"settings.createFromMailDomains": "在这些别名域名上（取消勾选某个域名可拒绝发往尚未成为别名的地址的邮件）：",
+	"exp.title": "导出别名",
+	"exp.help": "将每个别名导出为 CSV 文件，包括已删除的：地址、备注、发件人名称、转发、置顶、转发地址、标签和日期。可在上方、此处或其他 aliasflare 中重新导入。",
+	"exp.button": "下载 CSV",
+	"notice.ruleWebhook": "Webhook 需要一个公共的 https 地址。",
+	"rules.action.webhook": "发送 Webhook",
+	"rules.webhookKey": "Webhook 签名密钥",
+	"rules.webhookKeyHelp": "每个 Webhook 都是关于邮件的 JSON POST 请求（仅包含别名、发件人和主题，从不包含正文内容）。其 X-Aliasflare-Signature 请求头是使用此密钥对请求体计算的 HMAC-SHA256 值（十六进制）：请校验它以确认请求来自此处。",
 };
 
 export default dictionary;

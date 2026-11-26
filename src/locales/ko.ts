@@ -598,6 +598,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "다른 기기 {count}대가 로그아웃되었습니다.",
 	"err.reauth": "먼저 패스키로 확인한 후 다시 시도하세요.",
 	"bulk.allLabels": "모든 라벨",
+	"settings.createFromMailDomains": "이 별칭 도메인에서 (아직 별칭이 아닌 주소로 오는 메일을 거부하려면 하나의 선택을 해제하세요):",
+	"exp.title": "별칭 내보내기",
+	"exp.help": "삭제된 항목을 포함해 모든 별칭을 CSV 파일로: 주소, 메모, 보낸 사람 이름, 전달, 고정, 전달 주소, 라벨, 날짜. 위, 여기 또는 다른 aliasflare에서 다시 가져올 수 있습니다.",
+	"exp.button": "CSV 다운로드",
+	"notice.ruleWebhook": "웹훅에는 공개 https 주소가 필요합니다.",
+	"rules.action.webhook": "웹훅 보내기",
+	"rules.webhookKey": "웹훅 서명 키",
+	"rules.webhookKeyHelp": "각 웹훅은 메시지에 대한 JSON POST입니다(별칭, 보낸 사람, 제목만 포함하며 내용은 절대 포함하지 않음). X-Aliasflare-Signature 헤더는 이 키로 본문을 HMAC-SHA256한 16진수 값입니다. 요청이 여기서 왔는지 확인하려면 검증하세요.",
 };
 
 export default dictionary;

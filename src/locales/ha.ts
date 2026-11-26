@@ -598,6 +598,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "An fita daga wasu na'urori {count}.",
 	"err.reauth": "Fara tabbatarwa da passkey, sannan ka sake gwadawa.",
 	"bulk.allLabels": "Duk lakabi",
+	"settings.createFromMailDomains": "A kan waɗannan yankunan sunayen laƙabi (cire alamar ɗaya don ƙin wasiku zuwa adiresoshi a can waɗanda ba su zama laƙabi ba tukuna):",
+	"exp.title": "Fitar da laƙabai",
+	"exp.help": "Kowane laƙabi a matsayin fayil ɗin CSV, har da waɗanda aka goge: adireshi, bayani, sunan mai aika, turawa, fil, adireshin turawa, lakabi da kwanaki. Sake shigo da shi a sama, nan ko a wani aliasflare.",
+	"exp.button": "Zazzage CSV",
+	"notice.ruleWebhook": "Webhook yana buƙatar adireshin https na jama'a.",
+	"rules.action.webhook": "Aika webhook",
+	"rules.webhookKey": "Maɓallin sa hannu na webhook",
+	"rules.webhookKeyHelp": "Kowane webhook JSON POST ne game da saƙon (laƙabi, mai aika da batu, ba abun cikinsa ba). Headar X-Aliasflare-Signature ɗinsa HMAC-SHA256 ne na jiki tare da wannan maɓalli, a cikin hex: duba shi don sanin buƙatar daga nan ta zo.",
 };
 
 export default dictionary;
