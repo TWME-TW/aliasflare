@@ -291,6 +291,14 @@ describe("mail that is PGP encrypted or signed already", () => {
 		// A body that opens with armor but carries readable text after it counts the same way.
 		await deliverRaw("shop@a.test", `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Half\r\nMessage-ID: <h@x>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n-----BEGIN PGP MESSAGE-----\r\n\r\nreadable text after the marker\r\n`);
 		expect(sent[1]).toBeInstanceOf(EmailMessage);
+
+		// A text part that is nothing but armor does not excuse a readable HTML part beside it.
+		const beside = ["--b2", "Content-Type: text/plain", "", ENCRYPTED_PART, "--b2", "Content-Type: text/html; charset=utf-8", "", "<p>CONFIDENTIAL</p>", "--b2--"].join("\r\n");
+		await deliverRaw("shop@a.test", `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Both\r\nMessage-ID: <b@x>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary="b2"\r\n\r\n${beside}`);
+		expect(sent[2]).toBeInstanceOf(EmailMessage);
+		const both = await rawOf(sent[2] as EmailMessage);
+		expect(both).toContain("multipart/encrypted");
+		expect(both).not.toContain("CONFIDENTIAL");
 	});
 
 	it("keeps PGP/MIME whole even when its header section is longer than the rule check reads", async () => {

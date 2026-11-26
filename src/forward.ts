@@ -586,8 +586,10 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// message built here, so it goes as raw MIME. If it cannot be encrypted it is not sent in
 		// the clear: it fails, and shows under failed deliveries.
 		// Mail encrypted already (PGP/MIME, or a body that is nothing but inline PGP) is not
-		// encrypted again: the owner's app would then have to decrypt twice.
-		const inlinePgp = INLINE_PGP.test((email.text ?? "").trim());
+		// encrypted again: the owner's app would then have to decrypt twice. Only a message with
+		// nothing else in it counts: an HTML part or an attachment beside the armor is written by the
+		// sender too, and would otherwise go out readable.
+		const inlinePgp = !email.html && !email.attachments.length && INLINE_PGP.test((email.text ?? "").trim());
 		const encryptedAlready = (kept !== null && pgp === "encrypted") || inlinePgp;
 		const wantsEncryption = !encryptedAlready && settings.pgpRecipients.includes(normalizeEmail(recipient));
 		const pgpKey = wantsEncryption ? await encryptionKeyFor(db, recipient) : null;
