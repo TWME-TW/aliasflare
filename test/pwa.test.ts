@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { app } from "../src/index";
 import { testDb } from "./helpers/d1";
@@ -44,5 +44,42 @@ describe("installing the dashboard as an app", () => {
 		expect(headers).toContain("Referrer-Policy: same-origin");
 		expect(headers).toContain("Content-Security-Policy: default-src 'none'");
 		expect(headers).toContain("frame-ancestors 'none'");
+	});
+
+	it("takes no path from the Worker: an asset would be served in its place", () => {
+		// `assets` in wrangler.jsonc hands public/ to Cloudflare, which answers those paths itself,
+		// without running the Worker. A file named like a route (or under /assets/, /api or /mcp)
+		// would silently replace it, dashboard session and its headers included, so adding one has
+		// to fail here first.
+		const files: string[] = [];
+		const walk = (dir: string) => {
+			for (const entry of readdirSync(dir, { withFileTypes: true })) {
+				const full = join(dir, entry.name);
+				if (entry.isDirectory()) walk(full);
+				// `_headers` is read by Cloudflare and never served, so it is not a path of its own.
+				else if (relative(join(__dirname, "..", "public"), full) !== "_headers") files.push(`/${relative(join(__dirname, "..", "public"), full).split("\\").join("/")}`);
+			}
+		};
+		walk(join(__dirname, "..", "public"));
+
+		// Where Cloudflare serves each file. With the default html_handling ("auto-trailing-slash"),
+		// a.html is served at /a and a/index.html at /a/, so index.html takes "/" itself.
+		const served = (file: string) => {
+			const paths = [file];
+			if (file.endsWith("/index.html")) paths.push(file.slice(0, -"index.html".length), file.slice(0, -"/index.html".length) || "/");
+			else if (file.endsWith(".html")) paths.push(file.slice(0, -".html".length));
+			return paths;
+		};
+		// The Worker's routes as patterns, parameters (/aliases/:address) and wildcards included.
+		// Middleware (app.use) is listed too, as ALL /* or ALL /api/*: it is not a page, so it is left
+		// out; the prefixes it covers are in RESERVED below.
+		const routes = app.routes.filter((route) => !(route.method === "ALL" && route.path.endsWith("*"))).map(
+			(route) => new RegExp(`^${route.path.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\/:[^/]+/g, "/[^/]+").replace(/\*/g, ".*")}/?$`),
+		);
+		const RESERVED = ["/assets", "/api", "/mcp", "/webhook", "/unsubscribe", "/action", "/setup", "/login", "/logout", "/health"];
+		const clashes = files.filter((file) =>
+			served(file).some((path) => routes.some((route) => route.test(path)) || RESERVED.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))),
+		);
+		expect(clashes).toEqual([]);
 	});
 });
