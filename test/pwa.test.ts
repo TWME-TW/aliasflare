@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { app } from "../src/index";
 import { testDb } from "./helpers/d1";
@@ -44,5 +44,27 @@ describe("installing the dashboard as an app", () => {
 		expect(headers).toContain("Referrer-Policy: same-origin");
 		expect(headers).toContain("Content-Security-Policy: default-src 'none'");
 		expect(headers).toContain("frame-ancestors 'none'");
+	});
+
+	it("takes no path from the Worker: an asset would be served in its place", () => {
+		// `assets` in wrangler.jsonc hands public/ to Cloudflare, which answers those paths itself,
+		// without running the Worker. A file named like a route (or under /assets/, /api or /mcp)
+		// would silently replace it, dashboard session and its headers included, so adding one has
+		// to fail here first.
+		const files: string[] = [];
+		const walk = (dir: string) => {
+			for (const entry of readdirSync(dir, { withFileTypes: true })) {
+				const full = join(dir, entry.name);
+				if (entry.isDirectory()) walk(full);
+				// `_headers` is read by Cloudflare and never served, so it is not a path of its own.
+				else if (relative(join(__dirname, "..", "public"), full) !== "_headers") files.push(`/${relative(join(__dirname, "..", "public"), full).split("\\").join("/")}`);
+			}
+		};
+		walk(join(__dirname, "..", "public"));
+
+		const workerPaths = new Set(app.routes.map((route) => route.path));
+		const RESERVED = ["/assets/", "/api", "/mcp", "/webhook", "/unsubscribe/", "/action/", "/setup", "/login", "/logout", "/health"];
+		const clashes = files.filter((file) => workerPaths.has(file) || RESERVED.some((prefix) => file === prefix || file.startsWith(prefix)));
+		expect(clashes).toEqual([]);
 	});
 });
