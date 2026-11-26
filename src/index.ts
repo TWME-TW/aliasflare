@@ -1,3 +1,4 @@
+import { listPgpKeys, PgpError, readPublicKey, savePgpKey, syncPgpRecipients } from "./pgp";
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { html } from "hono/html";
@@ -62,11 +63,12 @@ import { deviceLabel, listSessions, sessionHandle } from "./sessions";
 import { handleReverseAliasMail } from "./reply";
 import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabels, updateLabel } from "./labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, webhookKey, type Rule } from "./rules";
-import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettings, settingsFromRows, type Settings } from "./settings";
+import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettingKeys, saveSettings, settingsFromRows, type Settings } from "./settings";
 import {
 	aliasPage,
 	apiKeysPage,
 	blocklistPage,
+	encryptionPage,
 	labelsPage,
 	ruleEditPage,
 	rulesPage,
@@ -779,7 +781,9 @@ app.post("/settings", async (c) => {
 		// The bare address, so "Owner <owner@example.com>" is stored as owner@example.com.
 		defaultDestination: destination ? (extractEmail(destination) ?? "") : "",
 	});
-	await saveSettings(c.env.DB, settings);
+	// Which addresses get encrypted mail is set on the Encryption page, not here.
+	const { pgpRecipients: _kept, ...changed } = settings;
+	await saveSettingKeys(c.env.DB, changed);
 	return reply("notice.settingsSaved", true);
 });
 
@@ -957,6 +961,51 @@ app.post("/blocklist", async (c) => {
 app.post("/blocklist/:id/delete", async (c) => {
 	await c.env.DB.prepare("DELETE FROM blocklist WHERE id = ?").bind(c.req.param("id")).run();
 	return redirectWithNotice(c, "/blocklist", "notice.unblocked");
+});
+
+// ---------- PGP encryption ----------
+
+const PGP_NOTICES: Record<PgpError["reason"], MessageKey> = {
+	invalid: "notice.pgpInvalid",
+	private: "notice.pgpPrivate",
+	noEncryption: "notice.pgpNoEncryption",
+	expired: "notice.pgpExpired",
+	tooLarge: "notice.pgpTooLarge",
+};
+
+app.get("/encryption", async (c) => {
+	const keys = await listPgpKeys(c.env.DB);
+	return c.html(encryptionPage(c.get("t"), { keys, freePlan: c.get("config").workersPlan === "free", notice: noticeFrom(c) }));
+});
+
+app.post("/encryption", async (c) => {
+	const form = await c.req.parseBody();
+	const email = extractEmail(typeof form.email === "string" ? form.email.trim() : "");
+	if (!email) return redirectWithNotice(c, "/encryption", "notice.pgpBadEmail");
+	try {
+		const key = await readPublicKey(typeof form.key === "string" ? form.key : "");
+		await savePgpKey(c.env.DB, email, key);
+	} catch (error) {
+		if (error instanceof PgpError) return redirectWithNotice(c, "/encryption", PGP_NOTICES[error.reason]);
+		throw error;
+	}
+	await syncPgpRecipients(c.env.DB);
+	return redirectWithNotice(c, "/encryption", "notice.pgpSaved", { email });
+});
+
+app.post("/encryption/:email/:field{encrypt|subject|delete}", async (c) => {
+	const email = normalizeEmail(c.req.param("email"));
+	const field = c.req.param("field");
+	const on = (await c.req.parseBody()).on === "1" ? 1 : 0;
+	const statement =
+		field === "delete"
+			? c.env.DB.prepare("DELETE FROM pgp_keys WHERE email = ?").bind(email)
+			: c.env.DB.prepare(`UPDATE pgp_keys SET ${field === "encrypt" ? "encrypt" : "hide_subject"} = ?, updated_at = ? WHERE email = ?`).bind(on, now(), email);
+	const result = await statement.run();
+	if (!result.meta.changes) return redirectWithNotice(c, "/encryption", "notice.pgpMissing");
+	await syncPgpRecipients(c.env.DB);
+	const done: MessageKey = field === "delete" ? "notice.pgpDeleted" : field === "subject" ? "notice.pgpSubject" : on ? "notice.pgpOn" : "notice.pgpOff";
+	return redirectWithNotice(c, "/encryption", done, { email });
 });
 
 // ---------- labels ----------

@@ -14,6 +14,7 @@ import { readLimited } from "./streams";
 import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
 import type { Replacement } from "./format";
 import { callWebhooks, runRules } from "./rules";
+import { encryptionKeyFor, sendEncrypted } from "./pgp";
 import { listDestinations } from "./compat/aliases";
 import type { Settings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
@@ -362,6 +363,16 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
+			// Mail to an address with encryption on is never passed on in the clear.
+			if (settings.pgpRecipients.includes(normalizeEmail(target))) {
+				await finish(db, forwardId, {
+					status: "failed",
+					error: direct
+						? "not sent: this forwarding address has PGP encryption on, and receive-only mode cannot encrypt"
+						: `not sent: this forwarding address has PGP encryption on, and a message larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB cannot be encrypted on the Workers Free plan`,
+				});
+				return { status: 200, result: "not sent: cannot encrypt" };
+			}
 			const contact = await ensureContact(db, aliasAddress, primarySender, null, settings.includeSenderInReverseAlias);
 			await passThrough(target);
 			const sentAt = now();
@@ -505,7 +516,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// The banner can be hidden by the message's own CSS; a subject prefix cannot.
 		const rawSubject = cleanSubjectLine(rules.subject ?? email.subject) || "(no subject)";
 		const finalSubject = spoofed ? cleanSubjectLine(`${translator(settings.language)("banner.spoofSubject")} ${rawSubject}`) : rawSubject;
-		const result = await env.EMAIL.send({
+		const outgoing = {
 			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
 			// Cloudflare will not take a To header of our own, so the alias goes in the display name:
 			// the message still reads as sent to the alias, and the real mailbox stays the recipient.
@@ -525,7 +536,12 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 					? { disposition: "inline" as const, contentId, filename, type, content }
 					: { disposition: "attachment" as const, filename, type, content };
 			}),
-		});
+		};
+		// Encrypted to the forwarding address's PGP key when it has encryption on. That needs a
+		// message built here, so it goes as raw MIME. If it cannot be encrypted it is not sent in
+		// the clear: it fails, and shows under failed deliveries.
+		const pgpKey = settings.pgpRecipients.includes(normalizeEmail(recipient)) ? await encryptionKeyFor(db, recipient) : null;
+		const result = pgpKey ? await sendEncrypted(env, outgoing, pgpKey) : await env.EMAIL.send(outgoing);
 
 		// The message is out. Record that in one batch, and never report a failure from here on:
 		// a retry would send it a second time.

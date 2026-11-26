@@ -207,6 +207,13 @@ const ERROR_NOTICE_KEYS = new Set<MessageKey>([
 	"notice.ruleMissing",
 	"notice.ruleForwardTo",
 	"notice.ruleUnsupported",
+	"notice.pgpBadEmail",
+	"notice.pgpInvalid",
+	"notice.pgpPrivate",
+	"notice.pgpNoEncryption",
+	"notice.pgpExpired",
+	"notice.pgpTooLarge",
+	"notice.pgpMissing",
 ]);
 
 /** True when a redirect notice reports a validation or action failure rather than success. */

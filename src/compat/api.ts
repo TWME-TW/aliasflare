@@ -556,7 +556,7 @@ async function addyRecipient(email: string, aliasCount: number, settings: Settin
 		email,
 		description: email === settings.defaultDestination ? "Default" : null,
 		can_reply_send: true,
-		should_encrypt: false,
+		should_encrypt: settings.pgpRecipients.includes(email),
 		inline_encryption: false,
 		protected_headers: false,
 		remove_pgp_keys: false,
