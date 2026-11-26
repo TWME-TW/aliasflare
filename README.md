@@ -64,6 +64,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 - **Passkey sign-in**, with no password.
 - **Cloudflare set up from the dashboard.** With an API token, one button sets up every alias domain: catch-all, reverse-alias domain, routing rule and Email Sending.
 - **35 languages**, right to left where needed, in light and dark mode, on phones and desktops.
+- **Installs as an app** from the browser (Chrome, Edge, Safari's Add to Home Screen or Dock), with its own window and icon.
 
 **Optional: Mailflare.** If you run [Mailflare](https://github.com/hieunc229/mailflare), it can receive some domains instead and keep a copy of every message; aliasflare then forwards from its webhook and sends replies through Mailflare, so they appear in its Sent folder.
 

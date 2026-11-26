@@ -597,6 +597,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Kifaa hicho tayari kilikuwa kimetoka.",
 	"notice.othersSignedOut": "Vifaa {count} vingine vimetoka.",
 	"err.reauth": "Thibitisha kwa passkey kwanza, kisha ujaribu tena.",
+	"bulk.allLabels": "Lebo zote",
 };
 
 export default dictionary;

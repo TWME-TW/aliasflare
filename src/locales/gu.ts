@@ -591,6 +591,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "તે ડિવાઇસ પહેલેથી સાઇન આઉટ હતું.",
 	"notice.othersSignedOut": "બીજાં {count} ડિવાઇસ સાઇન આઉટ કરવામાં આવ્યાં.",
 	"err.reauth": "પહેલાં તમારી પાસકીથી પુષ્ટિ કરો, પછી ફરી પ્રયાસ કરો.",
+	"bulk.allLabels": "બધા લેબલ",
 };
 
 export default dictionary;

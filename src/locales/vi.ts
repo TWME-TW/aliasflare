@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Thiết bị đó đã đăng xuất trước đó.",
 	"notice.othersSignedOut": "Đã đăng xuất {count} thiết bị khác.",
 	"err.reauth": "Xác nhận bằng passkey trước, rồi thử lại.",
+	"bulk.allLabels": "Tất cả nhãn",
 };
 
 export default dictionary;

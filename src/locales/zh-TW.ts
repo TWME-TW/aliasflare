@@ -576,6 +576,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "該裝置已經登出了。",
 	"notice.othersSignedOut": "已登出其他 {count} 個裝置。",
 	"err.reauth": "請先用通行金鑰確認，再試一次。",
+	"bulk.allLabels": "所有標籤",
 };
 
 export default dictionary;

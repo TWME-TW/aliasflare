@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Perangkat tersebut sudah keluar sebelumnya.",
 	"notice.othersSignedOut": "Mengeluarkan {count} perangkat lain.",
 	"err.reauth": "Konfirmasi dengan passkey terlebih dahulu, lalu coba lagi.",
+	"bulk.allLabels": "Semua label",
 };
 
 export default dictionary;

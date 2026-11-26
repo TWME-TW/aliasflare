@@ -591,6 +591,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "ആ ഉപകരണം നേരത്തെ തന്നെ സൈൻ ഔട്ട് ആയിരുന്നു.",
 	"notice.othersSignedOut": "മറ്റ് {count} ഉപകരണങ്ങൾ സൈൻ ഔട്ട് ചെയ്തു.",
 	"err.reauth": "ആദ്യം പാസ്‌കീ ഉപയോഗിച്ച് സ്ഥിരീകരിക്കുക, തുടർന്ന് വീണ്ടും ശ്രമിക്കുക.",
+	"bulk.allLabels": "എല്ലാ ലേബലുകളും",
 };
 
 export default dictionary;

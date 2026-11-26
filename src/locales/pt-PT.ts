@@ -597,6 +597,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Essa sessão já tinha sido terminada.",
 	"notice.othersSignedOut": "Terminadas as sessões em {count} outros dispositivos.",
 	"err.reauth": "Confirme primeiro com a sua chave de acesso e tente novamente.",
+	"bulk.allLabels": "Todas as etiquetas",
 };
 
 export default dictionary;

@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "ওই ডিভাইস আগেই সাইন আউট ছিল।",
 	"notice.othersSignedOut": "অন্য {count}টি ডিভাইস থেকে সাইন আউট করা হয়েছে।",
 	"err.reauth": "প্রথমে পাসকি দিয়ে নিশ্চিত করুন, তারপর আবার চেষ্টা করুন।",
+	"bulk.allLabels": "সব লেবেল",
 };
 
 export default dictionary;

@@ -576,6 +576,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "该设备已经退出登录了。",
 	"notice.othersSignedOut": "已退出其他 {count} 个设备。",
 	"err.reauth": "请先用通行密钥确认，然后重试。",
+	"bulk.allLabels": "所有标签",
 };
 
 export default dictionary;

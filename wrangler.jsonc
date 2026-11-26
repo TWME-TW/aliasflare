@@ -4,6 +4,9 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-11-01",
 	"compatibility_flags": ["nodejs_compat"],
+	// The app icons and manifest (installing the dashboard as an app). Cloudflare serves these
+	// files itself, without running the Worker.
+	"assets": { "directory": "public" },
 	// Query strings (searches, addresses in notices) are left out of logs and traces.
 	"observability": { "enabled": true, "redact_query_string": true },
 	// Alias domains and the optional Mailflare connection are set up on the dashboard after

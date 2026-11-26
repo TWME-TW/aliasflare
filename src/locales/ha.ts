@@ -597,6 +597,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "An riga an fita daga wannan na'urar.",
 	"notice.othersSignedOut": "An fita daga wasu na'urori {count}.",
 	"err.reauth": "Fara tabbatarwa da passkey, sannan ka sake gwadawa.",
+	"bulk.allLabels": "Duk lakabi",
 };
 
 export default dictionary;

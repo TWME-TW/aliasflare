@@ -597,6 +597,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "وہ آلہ پہلے ہی سائن آؤٹ تھا۔",
 	"notice.othersSignedOut": "{count} دیگر آلات سے سائن آؤٹ کر دیا گیا۔",
 	"err.reauth": "پہلے پاس کی سے تصدیق کریں، پھر دوبارہ کوشش کریں۔",
+	"bulk.allLabels": "تمام لیبلز",
 };
 
 export default dictionary;

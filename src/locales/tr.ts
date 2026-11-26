@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "Bu cihazın oturumu zaten kapalıydı.",
 	"notice.othersSignedOut": "{count} diğer cihazın oturumu kapatıldı.",
 	"err.reauth": "Önce geçiş anahtarınızla onaylayın, sonra tekrar deneyin.",
+	"bulk.allLabels": "Tüm etiketler",
 };
 
 export default dictionary;

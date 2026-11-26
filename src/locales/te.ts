@@ -582,6 +582,7 @@ const dictionary: Dictionary = {
 	"notice.sessionGone": "ఆ పరికరం ఇప్పటికే సైన్ అవుట్ అయి ఉంది.",
 	"notice.othersSignedOut": "ఇతర {count} పరికరాల నుండి సైన్ అవుట్ చేయబడింది.",
 	"err.reauth": "ముందుగా పాస్‌కీతో నిర్ధారించి, మళ్లీ ప్రయత్నించండి.",
+	"bulk.allLabels": "అన్ని లేబుళ్లు",
 };
 
 export default dictionary;

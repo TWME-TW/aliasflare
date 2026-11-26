@@ -125,15 +125,16 @@ form.row textarea { flex:1 1 240px; width:auto; }
 a.label-chip:hover { background:color-mix(in oklab, var(--lc) calc(var(--lab-tint) + 8%), var(--card)); }
 ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`).join("\n")}
 .swatches { display:flex; flex-wrap:wrap; gap:2px; border:none; margin:0; padding:0; }
-.colour-pick { display:flex; }
-.colour-pick > summary { display:inline-flex; align-items:center; gap:6px; min-height:40px; padding:0 10px; border:1px solid var(--line); border-radius:999px; background:var(--card); cursor:pointer; list-style:none; }
+/* The colour button sits in its row like the inputs beside it; the palette opens over the page below it. */
+.colour-pick { position:relative; display:inline-flex; margin:0; }
+.colour-pick > summary { display:inline-flex; align-items:center; gap:6px; min-height:40px; padding:0 10px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--text); font-weight:400; cursor:pointer; list-style:none; }
 .colour-pick > summary::-webkit-details-marker { display:none; }
 .colour-pick > summary::after { content:"▾"; color:var(--muted); font-size:12px; }
 .colour-pick > summary:hover { background:var(--hover); }
 .colour-pick .dot { width:20px; height:20px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); }
-.colour-pick[open] { flex:1 1 100%; order:5; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.colour-pick > .swatches { position:absolute; z-index:20; inset-inline-start:0; top:calc(100% + 6px); display:grid; grid-template-columns:repeat(6, auto); gap:2px; width:max-content; padding:6px; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:0 12px 32px rgb(0 0 0 / .18); }
 .colour-pick[open] > summary::after { content:"▴"; }
-.swatch { position:relative; display:inline-flex; padding:3px; cursor:pointer; }
+.swatch { position:relative; display:inline-flex; margin:0; padding:3px; cursor:pointer; }
 .swatch input { position:absolute; opacity:0; width:1px; height:1px; }
 .swatch span { width:24px; height:24px; border-radius:50%; background:var(--lc, #64748b); box-shadow:inset 0 0 0 1px rgb(0 0 0 / .08); transition:transform .1s; }
 .swatch:hover span { transform:scale(1.12); }
@@ -146,8 +147,8 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 .labels-row { display:inline-flex; flex-wrap:wrap; gap:4px; margin-inline-start:6px; vertical-align:middle; }
 .label-picks { display:flex; flex-wrap:wrap; gap:8px 18px; margin:8px 0; }
 /* The batch bar's label picker: a drop-down list of every label that scrolls, however many there are. */
-.label-menu { position:relative; }
-.label-menu > summary { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 14px; border:1px solid var(--line); border-radius:12px; background:var(--card); cursor:pointer; list-style:none; white-space:nowrap; }
+.label-menu { position:relative; margin:0; }
+.label-menu > summary { display:flex; align-items:center; gap:8px; min-height:44px; padding:0 14px; border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); font-weight:400; cursor:pointer; list-style:none; white-space:nowrap; }
 .label-menu > summary::-webkit-details-marker { display:none; }
 .label-menu > summary::after { content:"▾"; color:var(--muted); }
 .label-menu-list { position:absolute; z-index:20; inset-inline-start:0; top:calc(100% + 6px); display:grid; gap:2px; width:max-content; min-width:240px; max-width:min(360px, 90vw); max-height:300px; overflow:auto; padding:8px; border:1px solid var(--line); border-radius:12px; background:var(--card); box-shadow:0 12px 32px rgb(0 0 0 / .18); }
@@ -155,7 +156,8 @@ ${LABEL_COLOURS.map((colour) => `[data-colour="${colour}"] { --lc:${colour}; }`)
 .label-menu-list label { display:flex; align-items:center; gap:10px; min-height:40px; margin:0; padding:0 8px; border-radius:8px; font-weight:400; cursor:pointer; }
 .label-menu-list label[hidden] { display:none; }
 .label-menu-list label:hover { background:var(--hover); }
-@media (max-width: 720px) { .label-menu { flex:1 1 100%; } .label-menu-list { position:static; width:auto; max-width:none; margin-top:6px; box-shadow:none; } }
+.label-menu-list label.all { font-weight:500; border-bottom:1px solid var(--line); border-radius:8px 8px 0 0; margin-bottom:2px; }
+@media (max-width: 720px) { .colour-pick > .swatches { inset-inline-start:auto; inset-inline-end:0; } .label-menu { flex:1 1 100%; } .label-menu-list { position:static; width:auto; max-width:none; margin-top:6px; box-shadow:none; } }
 .label-picks label { display:inline-flex; align-items:center; gap:6px; font-weight:400; }
 .rule-rows { display:grid; gap:10px; margin:10px 0; counter-reset:rule-row; }
 /* Each condition or action is one card: what to look at and how, side by side, then the values. */
@@ -431,6 +433,8 @@ export function page(title: string, body: Html, options: PageOptions): Html {
 <meta name="robots" content="noindex" />
 ${themeMeta}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <title>${title} · aliasflare</title>
 <link rel="stylesheet" href="/assets/app.css?v=${STYLE_VERSION}" />
 <link rel="expect" href="#page-end" blocking="render" />
@@ -698,7 +702,8 @@ ${labels.length && !deletedView
 	? html`<details class="label-menu" data-bulk-labels>
 <summary data-template="${t("bulk.labelsChosen", { count: "{count}" })}" data-empty="${t("bulk.chooseLabels")}">${t("bulk.chooseLabels")}</summary>
 <div class="label-menu-list">
-${labels.length > 8 ? html`<input type="search" placeholder="${t("bulk.findLabel")}" aria-label="${t("bulk.findLabel")}" data-label-filter />` : ""}
+<input type="search" placeholder="${t("bulk.findLabel")}" aria-label="${t("bulk.findLabel")}" data-label-filter />
+<label class="all"><input type="checkbox" data-label-all /><span>${t("bulk.allLabels")}</span></label>
 ${labels.map((label) => html`<label data-name="${label.name.toLowerCase()}"><input type="checkbox" name="labels" value="${label.id}" /><span class="label-chip" data-colour="${nearestColour(label.colour)}">${label.name}</span></label>`)}
 </div>
 </details>`
