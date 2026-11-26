@@ -162,6 +162,65 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
 	return `${[...envelope(message, messageId, date), ...root.headers].join(CRLF)}${CRLF}${CRLF}${root.body}${CRLF}`;
 }
 
+/**
+ * A message's own top-level MIME entity: its Content-* header lines (as they were, folding and
+ * all) and the bytes of its body. Kept for mail that must not be rebuilt (PGP/MIME).
+ */
+export type Entity = { headers: string; body: Uint8Array };
+
+/** PGP/MIME (RFC 3156) from the top-level Content-Type: already encrypted, signed, or neither. */
+export function pgpKind(headerBlock: string | null): "encrypted" | "signed" | null {
+	if (!headerBlock) return null;
+	const type = /^content-type:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/im.exec(headerBlock)?.[1]?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
+	if (/^multipart\/encrypted\s*;/.test(type) && /protocol\s*=\s*"?application\/pgp-encrypted"?/.test(type)) return "encrypted";
+	if (/^multipart\/signed\s*;/.test(type) && /protocol\s*=\s*"?application\/pgp-signature"?/.test(type)) return "signed";
+	return null;
+}
+
+/** The top-level entity of a raw message, or null when it has no header section. */
+export function topEntity(raw: ArrayBuffer): Entity | null {
+	const bytes = new Uint8Array(raw);
+	// The end of the header section: the first empty line (CRLF CRLF, or bare LF LF).
+	let end = -1;
+	let start = -1;
+	for (let i = 0; i < bytes.length - 1 && i < 1_048_576; i++) {
+		if (bytes[i] !== 10) continue;
+		const next = bytes[i + 1] === 10 ? i + 2 : bytes[i + 1] === 13 && bytes[i + 2] === 10 ? i + 3 : -1;
+		if (next < 0) continue;
+		// The header section ends with the line break before the empty line (CR included).
+		end = i > 0 && bytes[i - 1] === 13 ? i - 1 : i;
+		start = next;
+		break;
+	}
+	if (end < 0) return null;
+	const head = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(bytes.subarray(0, end)).replace(/\r?\n/g, CRLF);
+	const lines: string[] = [];
+	let keep = false;
+	for (const line of head.split(CRLF)) {
+		if (/^[ \t]/.test(line)) {
+			if (keep) lines.push(line);
+			continue;
+		}
+		keep = /^content-(type|transfer-encoding):/i.test(line);
+		if (keep) lines.push(line);
+	}
+	if (!lines.length) return null;
+	return { headers: lines.join(CRLF), body: bytes.subarray(start) };
+}
+
+function joinBytes(parts: (string | Uint8Array)[]): Uint8Array {
+	const chunks = parts.map((part) => (typeof part === "string" ? encoder.encode(part) : part));
+	const out = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+	let at = 0;
+	for (const chunk of chunks) out.set(chunk, at), (at += chunk.length);
+	return out;
+}
+
+/** A new message around a kept entity: our headers, then the entity exactly as it came. */
+export function buildWithEntity(message: Pick<OutboundMessage, "from" | "replyTo" | "subject" | "headers"> & { to: OutboundMessage["from"] }, messageId: string, entity: Entity, date = new Date()): Uint8Array {
+	return joinBytes([`${[...envelope(message, messageId, date), entity.headers].join(CRLF)}${CRLF}${CRLF}`, entity.body]);
+}
+
 export type EncryptedMessage = Pick<OutboundMessage, "from" | "replyTo" | "subject" | "headers" | "text" | "html" | "attachments"> & { to: OutboundMessage["from"] };
 
 /** The subject a message shows outside when its real one is inside the encryption. */
@@ -171,18 +230,26 @@ export const HIDDEN_SUBJECT = "...";
  * The part that gets encrypted (RFC 3156): the body entity, with the subject, sender and recipient
  * inside it as protected headers when the subject is hidden, so the reader's app can show them.
  */
-export function encryptedPayload(message: EncryptedMessage, hideSubject: boolean): Uint8Array {
-	const root = buildBody(message);
+export function encryptedPayload(message: EncryptedMessage, hideSubject: boolean, entity?: Entity): Uint8Array {
+	const root: { headers: string[]; body: string | Uint8Array } = entity ? { headers: entity.headers.split(CRLF), body: entity.body } : buildBody(message);
 	const headers = hideSubject
 		? [
-				`${root.headers[0]}; protected-headers="v1"`,
-				...root.headers.slice(1),
+				...withProtectedHeaders(root.headers),
 				`Subject: ${encodeWords(message.subject)}`,
 				`From: ${formatAddress(message.from)}`,
 				`To: ${formatAddress(message.to)}`,
 			]
 		: root.headers;
-	return encoder.encode(`${headers.join(CRLF)}${CRLF}${CRLF}${root.body}${CRLF}`);
+	return joinBytes([`${headers.join(CRLF)}${CRLF}${CRLF}`, root.body, ...(typeof root.body === "string" ? [CRLF] : [])]);
+}
+
+/** The header lines with protected-headers="v1" added to the Content-Type (which may be folded). */
+function withProtectedHeaders(lines: string[]): string[] {
+	const start = lines.findIndex((line) => /^content-type:/i.test(line));
+	if (start < 0) return lines;
+	let last = start;
+	while (last + 1 < lines.length && /^[ \t]/.test(lines[last + 1]!)) last++;
+	return lines.map((line, index) => (index === last ? `${line.replace(/;?\s*$/, "")}; protected-headers="v1"` : line));
 }
 
 /** The whole PGP/MIME message (RFC 3156) around an armored OpenPGP message. */
