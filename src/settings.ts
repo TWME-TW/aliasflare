@@ -62,6 +62,8 @@ export type Settings = {
 	createAliasesFromMail: boolean;
 	/** Alias domains where mail does not create aliases even so (addy.io's catch-all off for a domain). */
 	aliasesFromMailOff: string[];
+	/** Forwarding addresses that get mail encrypted to their PGP key (kept from the pgp_keys table). */
+	pgpRecipients: string[];
 	removeTrackers: boolean;
 	showBanner: boolean;
 	/** Language of the banner and link pages in forwarded mail. */
@@ -96,6 +98,7 @@ export const DEFAULT_SETTINGS: Settings = {
 	autoForwardNewAliases: true,
 	createAliasesFromMail: true,
 	aliasesFromMailOff: [],
+	pgpRecipients: [],
 	removeTrackers: true,
 	showBanner: false,
 	language: "en",
@@ -180,6 +183,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		autoForwardNewAliases:
 			typeof raw.autoForwardNewAliases === "boolean" ? raw.autoForwardNewAliases : DEFAULT_SETTINGS.autoForwardNewAliases,
 		createAliasesFromMail: typeof raw.createAliasesFromMail === "boolean" ? raw.createAliasesFromMail : DEFAULT_SETTINGS.createAliasesFromMail,
+		pgpRecipients: Array.isArray(raw.pgpRecipients) ? [...new Set(raw.pgpRecipients.map(cleanAddress).filter(Boolean))].slice(0, 100) : [],
 		aliasesFromMailOff: Array.isArray(raw.aliasesFromMailOff) ? aliasDomains.filter((domain) => (raw.aliasesFromMailOff as unknown[]).includes(domain)) : [],
 		removeTrackers: typeof raw.removeTrackers === "boolean" ? raw.removeTrackers : DEFAULT_SETTINGS.removeTrackers,
 		showBanner: typeof raw.showBanner === "boolean" ? raw.showBanner : DEFAULT_SETTINGS.showBanner,

@@ -16,6 +16,7 @@ import { FORWARD_METHODS, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, UNSUBSCRI
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from "./outbound";
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
+import { formatFingerprint, type PgpKeyRow } from "./pgp";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 export type Notice = string | { text: string; bad?: boolean };
@@ -355,6 +356,7 @@ const ICONS = {
 	blocklist: `<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>`,
 	labels: `<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>`,
 	rules: `<path d="M3 4h18l-7 8v6l-4 2v-8z"/>`,
+	encryption: `<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
 	settings: `<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>`,
 	connection: `<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>`,
 	passkeys: `<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5"/>`,
@@ -448,7 +450,7 @@ ${themeToggle(t, options.path)}
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="aliasflare">
-${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/labels", "nav.labels", "labels")}${link("/rules", "nav.rules", "rules")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
+${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/labels", "nav.labels", "labels")}${link("/rules", "nav.rules", "rules")}${link("/encryption", "nav.encryption", "encryption")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
 <p class="powered">aliasflare · <a href="https://github.com/TWME-TW/aliasflare">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
@@ -1624,5 +1626,42 @@ ${checkbox("active", rule ? !!rule.active : true, t("rules.active"), "")}
 </section>
 </main>`,
 		{ t, nav: true, current: "/rules", path: action },
+	);
+}
+
+export function encryptionPage(t: Translate, input: { keys: PgpKeyRow[]; freePlan: boolean; notice?: Notice }): Html {
+	const { keys, freePlan, notice } = input;
+	const toggle = (key: PgpKeyRow, field: "encrypt" | "subject", on: boolean, label: MessageKey) =>
+		html`<form class="inline" method="post" action="/encryption/${encodeURIComponent(key.email)}/${field}"><input type="hidden" name="on" value="${on ? "1" : "0"}" /><button${field === "encrypt" && on ? html` class="primary"` : ""}>${t(label)}</button></form>`;
+	return page(
+		t("pgp.title"),
+		html`<main>
+${noticeBox(notice)}
+<section>
+<h2>${t("pgp.title")}</h2>
+${freePlan ? html`<p class="notice bad" role="alert">${t("pgp.freeWarning")}</p>` : ""}
+<p class="help">${t("pgp.help")}</p>
+<p class="help">${t("pgp.limits")}</p>
+<form class="mt12" method="post" action="/encryption">
+<label for="pgpEmail">${t("pgp.email")}</label>
+<input id="pgpEmail" name="email" type="email" required autocapitalize="none" spellcheck="false" />
+<label for="pgpKey">${t("pgp.key")}</label>
+<textarea id="pgpKey" name="key" rows="6" required spellcheck="false" autocapitalize="none" placeholder="${t("pgp.keyPlaceholder")}"></textarea>
+<button class="primary mt12">${t("pgp.save")}</button>
+</form>
+${keys.length === 0
+	? html`<p class="muted">${t("pgp.empty")}</p>`
+	: html`<div class="table-wrap"><table class="rt mt12"><thead><tr><th>${t("pgp.colEmail")}</th><th>${t("pgp.colFingerprint")}</th><th>${t("pgp.colEncrypt")}</th><th></th></tr></thead><tbody>
+${keys.map(
+	(key) => html`<tr><td data-label="${t("pgp.colEmail")}"><code>${key.email}</code></td><td data-label="${t("pgp.colFingerprint")}"><code>${formatFingerprint(key.fingerprint)}</code></td>
+<td data-label="${t("pgp.colEncrypt")}"><span class="pill${key.encrypt ? " ok" : ""}">${t(key.encrypt ? "pgp.on" : "pgp.off")}</span>${key.hide_subject ? html` · ${t("pgp.hideSubject")}` : ""}</td>
+<td data-label="">${key.encrypt ? toggle(key, "encrypt", false, "pgp.turnOff") : toggle(key, "encrypt", true, "pgp.turnOn")} ${key.hide_subject ? toggle(key, "subject", false, "pgp.showSubject") : toggle(key, "subject", true, "pgp.hideSubject")}
+<form class="inline" method="post" action="/encryption/${encodeURIComponent(key.email)}/delete"><button aria-label="${t("pgp.delete")}: ${key.email}">${t("pgp.delete")}</button></form></td></tr>`,
+)}
+</tbody></table></div>
+<p class="help">${t("pgp.hideSubjectHelp")}</p>`}
+</section>
+</main>`,
+		{ t, nav: true, current: "/encryption", path: "/encryption" },
 	);
 }

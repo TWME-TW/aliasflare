@@ -113,7 +113,8 @@ function multipart(subtype: string, parts: Part[]): Part {
 /** Header names the caller may not set: the message's own structure and addresses. */
 const RESERVED = /^(from|to|cc|bcc|reply-to|subject|date|message-id|mime-version|content-.*|sender|return-path)$/i;
 
-export function buildMime(message: OutboundMessage, messageId: string, date = new Date()): string {
+/** The message's body as one MIME entity: its Content-Type headers and what follows them. */
+export function buildBody(message: Pick<OutboundMessage, "text" | "html" | "attachments">): Part {
 	const body: Part[] = [];
 	if (message.text !== undefined || !message.html) body.push(textPart("plain", message.text ?? ""));
 	if (message.html) body.push(textPart("html", message.html));
@@ -133,11 +134,15 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
 	});
 	if (inline.length) root = multipart("related", [root, ...inline.map((file) => filePart(file, "inline"))]);
 	if (attached.length) root = multipart("mixed", [root, ...attached.map((file) => filePart(file, "attachment"))]);
+	return root;
+}
 
+/** The headers every message has, then the caller's own (never one of the reserved ones). */
+function envelope(message: Pick<OutboundMessage, "from" | "replyTo" | "subject" | "headers"> & { to: OutboundMessage["from"] }, messageId: string, date: Date): string[] {
 	const validDate = Number.isNaN(date.getTime()) ? new Date() : date;
-	const headers = [
+	return [
 		`From: ${formatAddress(message.from)}`,
-		`To: <${bareAddress(message.to)}>`,
+		`To: ${formatAddress(message.to)}`,
 		...(message.replyTo ? [`Reply-To: <${bareAddress(message.replyTo)}>`] : []),
 		`Subject: ${encodeWords(message.subject)}`,
 		`Date: ${validDate.toUTCString().replace("GMT", "+0000")}`,
@@ -149,9 +154,62 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
 				const structured = /^(in-reply-to|references)$/i.test(name);
 				return `${name}: ${structured ? foldAscii(oneLine(value).replace(/[^\x20-\x7e]+/g, "")) : encodeWords(value)}`;
 			}),
-		...root.headers,
 	];
-	return `${headers.join(CRLF)}${CRLF}${CRLF}${root.body}${CRLF}`;
+}
+
+export function buildMime(message: OutboundMessage, messageId: string, date = new Date()): string {
+	const root = buildBody(message);
+	return `${[...envelope(message, messageId, date), ...root.headers].join(CRLF)}${CRLF}${CRLF}${root.body}${CRLF}`;
+}
+
+export type EncryptedMessage = Pick<OutboundMessage, "from" | "replyTo" | "subject" | "headers" | "text" | "html" | "attachments"> & { to: OutboundMessage["from"] };
+
+/** The subject a message shows outside when its real one is inside the encryption. */
+export const HIDDEN_SUBJECT = "...";
+
+/**
+ * The part that gets encrypted (RFC 3156): the body entity, with the subject, sender and recipient
+ * inside it as protected headers when the subject is hidden, so the reader's app can show them.
+ */
+export function encryptedPayload(message: EncryptedMessage, hideSubject: boolean): Uint8Array {
+	const root = buildBody(message);
+	const headers = hideSubject
+		? [
+				`${root.headers[0]}; protected-headers="v1"`,
+				...root.headers.slice(1),
+				`Subject: ${encodeWords(message.subject)}`,
+				`From: ${formatAddress(message.from)}`,
+				`To: ${formatAddress(message.to)}`,
+			]
+		: root.headers;
+	return encoder.encode(`${headers.join(CRLF)}${CRLF}${CRLF}${root.body}${CRLF}`);
+}
+
+/** The whole PGP/MIME message (RFC 3156) around an armored OpenPGP message. */
+export function buildEncryptedMime(message: EncryptedMessage, messageId: string, armored: string, hideSubject: boolean, date = new Date()): string {
+	const mark = boundary();
+	const headers = [
+		...envelope({ ...message, subject: hideSubject ? HIDDEN_SUBJECT : message.subject }, messageId, date),
+		`Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"; boundary="${mark}"`,
+	];
+	const body = [
+		"This is an OpenPGP/MIME encrypted message (RFC 4880 and 3156)",
+		`--${mark}`,
+		"Content-Type: application/pgp-encrypted",
+		"Content-Description: PGP/MIME version identification",
+		"",
+		"Version: 1",
+		"",
+		`--${mark}`,
+		'Content-Type: application/octet-stream; name="encrypted.asc"',
+		"Content-Description: OpenPGP encrypted message",
+		'Content-Disposition: inline; filename="encrypted.asc"',
+		"",
+		armored.replace(/\r?\n/g, CRLF).trimEnd(),
+		"",
+		`--${mark}--`,
+	];
+	return `${headers.join(CRLF)}${CRLF}${CRLF}${body.join(CRLF)}${CRLF}`;
 }
 
 /** A new Message-ID on the sender's domain. */
