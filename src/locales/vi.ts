@@ -583,6 +583,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "Đã đăng xuất {count} thiết bị khác.",
 	"err.reauth": "Xác nhận bằng passkey trước, rồi thử lại.",
 	"bulk.allLabels": "Tất cả nhãn",
+	"settings.createFromMailDomains": "Trên các miền bí danh này (bỏ chọn một miền để từ chối thư gửi đến địa chỉ chưa phải bí danh):",
+	"exp.title": "Xuất bí danh",
+	"exp.help": "Mỗi bí danh dưới dạng tệp CSV, kể cả những bí danh đã xóa: địa chỉ, ghi chú, tên người gửi, chuyển tiếp, ghim, địa chỉ chuyển tiếp, nhãn và ngày. Nhập lại ở trên, tại đây hoặc trên một aliasflare khác.",
+	"exp.button": "Tải CSV",
+	"notice.ruleWebhook": "Webhook cần một địa chỉ https công khai.",
+	"rules.action.webhook": "Gửi webhook",
+	"rules.webhookKey": "Khóa ký webhook",
+	"rules.webhookKeyHelp": "Mỗi webhook là một POST JSON về thư (bí danh, người gửi và chủ đề, không bao giờ là nội dung). Tiêu đề X-Aliasflare-Signature là HMAC-SHA256 của nội dung với khóa này, dạng hex: hãy kiểm tra để biết yêu cầu đến từ đây.",
 };
 
 export default dictionary;

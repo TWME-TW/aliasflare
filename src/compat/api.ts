@@ -16,7 +16,7 @@ import { signToken, verifyToken } from "../crypto";
 import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from "../db";
 import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
-import { loadSettings, normalizeSettings, saveSettingKeys, type Settings } from "../settings";
+import { createsAliasesFromMail, loadSettings, normalizeSettings, saveSettingKeys, type Settings } from "../settings";
 import { createLabel, deleteLabel, getLabelWithCount, LabelError, labelsOf, listLabels, setAliasLabels, updateLabel, type LabelRow } from "../labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, reorderRules, RuleError, setRuleActive, updateRule, type Rule } from "../rules";
 import {
@@ -966,7 +966,7 @@ api.get("/v1/recipients/:id", async (c) => {
 	return c.json({ data: await addyRecipient(match.email, match.aliasCount, settings) });
 });
 
-const addyDomain = (domain: string, index: number) => ({
+const addyDomain = (settings: Settings) => (domain: string, index: number) => ({
 	id: addyDomainId(index),
 	user_id: OWNER_ID,
 	domain,
@@ -975,7 +975,7 @@ const addyDomain = (domain: string, index: number) => ({
 	aliases_count: 0,
 	default_recipient: null,
 	active: true,
-	catch_all: true,
+	catch_all: createsAliasesFromMail(settings, domain),
 	shared_with_family: false,
 	default_attached_recipients_only: false,
 	auto_create_regex: null,
@@ -986,13 +986,27 @@ const addyDomain = (domain: string, index: number) => ({
 	updated_at: "2000-01-01 00:00:00",
 });
 
-api.get("/v1/domains", (c) => c.json({ data: c.get("settings").aliasDomains.map(addyDomain) }));
+api.get("/v1/domains", (c) => c.json({ data: c.get("settings").aliasDomains.map(addyDomain(c.get("settings"))) }));
 
 api.get("/v1/domains/:id", (c) => {
 	const index = c.get("settings").aliasDomains.findIndex((_, i) => addyDomainId(i) === c.req.param("id"));
 	if (index < 0) throw new ClientError(404, "Not found");
-	return c.json({ data: addyDomain(c.get("settings").aliasDomains[index]!, index) });
+	return c.json({ data: addyDomain(c.get("settings"))(c.get("settings").aliasDomains[index]!, index) });
 });
+
+// Catch-all on or off for one domain: whether mail to an address there that is not an alias yet
+// creates it. It is a setting, so it needs "apps may change settings".
+async function setCatchAll(c: C, id: unknown, on: boolean) {
+	const settings = c.get("settings");
+	const index = settings.aliasDomains.findIndex((_, i) => addyDomainId(i) === id);
+	if (index < 0) throw new ClientError(404, "Not found");
+	const domain = settings.aliasDomains[index]!;
+	const off = settings.aliasesFromMailOff.filter((other) => other !== domain);
+	const next = await changeSettings(c, on ? { aliasesFromMailOff: off, createAliasesFromMail: true, ...(settings.createAliasesFromMail ? {} : { aliasesFromMailOff: settings.aliasDomains.filter((other) => other !== domain) }) } : { aliasesFromMailOff: [...off, domain] });
+	return addyDomain(next)(domain, index);
+}
+api.post("/v1/catch-all-domains", async (c) => c.json({ data: await setCatchAll(c, (await body(c)).id, true) }));
+api.delete("/v1/catch-all-domains/:id", async (c) => (await setCatchAll(c, c.req.param("id"), false), c.body(null, 204)));
 
 // Bulk alias actions from the apps' multiple selection: { ids: [...] } in, { message, ids } out,
 // ids being those that were changed.
@@ -1144,6 +1158,7 @@ const RULE_ERRORS: Record<RuleError["reason"], [number, string]> = {
 	limit: [422, "There are too many rules."],
 	missing: [404, "Not found"],
 	forwardTo: [422, "The Forward to recipient is not known."],
+	webhook: [422, "A webhook needs a public https address."],
 	unsupported: [422, "aliasflare cannot apply this rule as given: it supports no regular expressions, webhooks, encryption or description changes, and at most 10 conditions, 20 values in a condition and 200 characters in a value."],
 };
 

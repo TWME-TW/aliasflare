@@ -10,7 +10,8 @@
  * domains keeps receiving mail there, so importing it would do nothing; an alias on your own
  * domain works here once that domain's mail reaches Mailflare.
  */
-import { newId, now } from "./db";
+import { isForwardMode, newId, now, type ForwardMode } from "./db";
+import { LABEL_SEPARATOR } from "./export";
 import { cleanDisplayName, domainOf, extractEmail, makeReverseLocal, normalizeEmail } from "./format";
 import { aliasDomainOfReverse, isOwnAddress } from "./domains";
 import type { Settings } from "./settings";
@@ -51,6 +52,8 @@ export type ImportedAlias = {
 	deletedAt?: number | null;
 	/** Its labels at the source, by name. */
 	labels?: string[];
+	/** How it forwards when it is on, when the source says (aliasflare's own export does). */
+	forwardMode?: ForwardMode;
 	/** The alias's id at the source, for fetching its contacts. */
 	sourceId?: number;
 	contacts?: ImportedContact[];
@@ -561,7 +564,12 @@ const COLUMNS = {
 	lastReplyAt: ["last_replied"],
 	lastSentAt: ["last_sent"],
 	deletedAt: ["deleted_at"],
+	labels: ["labels"],
+	forwardMode: ["forward_mode"],
 };
+
+/** A cell aliasflare's export guarded against spreadsheet formulas, without the guard. */
+const unguard = (value: string | undefined) => (value && /^'[=+\-@\t\r]/.test(value) ? value.slice(1) : value);
 
 const truthy = (value: string | undefined) => !value || !/^(false|0|no|off|disabled|inactive)$/i.test(value.trim());
 
@@ -589,8 +597,10 @@ export function parseAliasCsv(input: string): ImportedAlias[] {
 			.filter((value): value is string => !!value);
 		out.push({
 			...empty(email),
-			note: text(cell(row, "note")),
-			name: text(cell(row, "name"), 100),
+			note: text(unguard(cell(row, "note"))),
+			name: text(unguard(cell(row, "name")), 100),
+			labels: (unguard(cell(row, "labels")) ?? "").split(LABEL_SEPARATOR).map((name) => cleanLabelName(name)).filter((name): name is string => !!name).slice(0, 50),
+			forwardMode: isForwardMode(cell(row, "forwardMode")?.trim()) ? (cell(row, "forwardMode")!.trim() as ForwardMode) : undefined,
 			enabled: truthy(cell(row, "enabled")),
 			pinned: (cell(row, "pinned") ?? "").trim() !== "" && truthy(cell(row, "pinned")),
 			destination: destinations[0] ?? null,
@@ -743,7 +753,7 @@ export async function importAliases(
 				alias.email,
 				mailboxByDomain.get(domainOf(alias.email)) ?? "",
 				enabled ? 1 : 0,
-				enabled ? "all" : "none",
+				enabled ? (alias.forwardMode === "no_promotions" ? "no_promotions" : "all") : "none",
 				destination,
 				alias.note,
 				name,

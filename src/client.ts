@@ -191,6 +191,8 @@ export const APP_SCRIPT = `(() => {
       input.disabled = none;
       if (type === "forwardTo") input.setAttribute("list", "rule-destinations");
       else input.removeAttribute("list");
+      if (type === "webhook") input.setAttribute("placeholder", "https://");
+      else input.removeAttribute("placeholder");
     };
     select.addEventListener("change", syncAction);
     syncAction();

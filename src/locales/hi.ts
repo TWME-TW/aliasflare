@@ -583,6 +583,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "{count} अन्य डिवाइस से साइन आउट कर दिया गया।",
 	"err.reauth": "पहले पासकी से पुष्टि करें, फिर दोबारा प्रयास करें।",
 	"bulk.allLabels": "सभी लेबल",
+	"settings.createFromMailDomains": "इन उपनाम डोमेन पर (जिन पतों पर अभी उपनाम नहीं हैं, उन पर मेल अस्वीकार करने के लिए किसी एक का निशान हटाएँ):",
+	"exp.title": "उपनाम निर्यात करें",
+	"exp.help": "हर उपनाम CSV फ़ाइल के रूप में, हटाए गए सहित: पता, नोट, भेजने वाले का नाम, फ़ॉरवर्डिंग, पिन, फ़ॉरवर्ड पता, लेबल और तारीखें। ऊपर, यहाँ या किसी दूसरे aliasflare में फिर से आयात करें।",
+	"exp.button": "CSV डाउनलोड करें",
+	"notice.ruleWebhook": "वेबहुक के लिए एक सार्वजनिक https पता ज़रूरी है।",
+	"rules.action.webhook": "वेबहुक भेजें",
+	"rules.webhookKey": "वेबहुक साइनिंग कुंजी",
+	"rules.webhookKeyHelp": "हर वेबहुक संदेश के बारे में एक JSON POST है (उपनाम, भेजने वाला और विषय, कभी उसकी सामग्री नहीं)। इसका X-Aliasflare-Signature हेडर इस कुंजी से बॉडी का HMAC-SHA256 है, हेक्स में: जाँचें कि अनुरोध यहीं से आया है।",
 };
 
 export default dictionary;

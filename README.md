@@ -33,7 +33,7 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 ## Features
 
 **Aliases and replies**
-- **Any number of alias domains.** Mail to any address on them arrives (an Email Routing catch-all), and you can create aliases ahead of time on the alias page or from the apps. Mail creates at most 200 new aliases a day, so mail to thousands of made-up addresses does not make thousands of aliases.
+- **Any number of alias domains.** Mail to any address on them arrives (an Email Routing catch-all), and you can create aliases ahead of time on the alias page or from the apps. Mail creates at most 200 new aliases a day, so mail to thousands of made-up addresses does not make thousands of aliases, and you can turn this off for all alias domains or for some (addy.io's catch-all setting).
 - **Forward to your real inbox.** Every alias forwards to a default address, or to its own.
 - **Reply through reverse aliases.** Each correspondent gets a private address. Mail you send to it goes out from the alias. Your real address is also replaced in calendar answers and in the headers of attached messages (not inside their encoded parts).
 - **One reverse-alias domain per alias domain.** Correspondents of `shop@a.com` write to `reply+…@r.a.com`, those of `me@b.net` to `reply+…@r.b.net`. Nothing a correspondent sees ties your domains together, and a reverse alias only works on its own domain.
@@ -53,12 +53,13 @@ Give every site its own address on your domains. aliasflare forwards their mail 
 - **Blocklist** of addresses, or domains with their subdomains, across all aliases.
 - **Search and batch editing** of the alias list, and **notes** edited in place.
 - **Labels** to group aliases: filter the list by one, or add one to many aliases at once.
-- **Rules** (as in addy.io): when the sender, subject or alias is, contains, starts or ends with (or is not, …) the values you give, block the message, replace its subject or sender name, forward it to another of your forwarding addresses, remove its attachments or hide the banner (not on mail that failed DMARC). They can act on replies too, in the order you choose. A rule from an app that uses something aliasflare cannot do, such as a regular expression, is refused rather than saved in part.
+- **Rules** (as in addy.io): when the sender, subject or alias is, contains, starts or ends with (or is not, …) the values you give, block the message, replace its subject or sender name, forward it to another of your forwarding addresses, remove its attachments, hide the banner (not on mail that failed DMARC) or call a webhook: a signed JSON POST with the alias, sender and subject, never the message itself. They can act on replies too, in the order you choose. A rule from an app that uses something aliasflare cannot do, such as a regular expression, is refused rather than saved in part.
 
 **Apps and browser extensions**
 - **SimpleLogin and addy.io clients.** Turn on either API in Settings, create an API key, and point the official SimpleLogin or addy.io app or browser extension at your Worker. Bitwarden's alias generator works too.
 - **MCP server** for AI assistants: list, create and switch aliases and edit their notes. It never sees mail, senders or activity.
 - **Import from SimpleLogin or addy.io**, with their API key or alias export (CSV), including SimpleLogin contacts and addy.io labels, rules and blocklist. Deleted aliases come in deleted, so they can be restored.
+- **Export your aliases** as CSV, labels and deleted aliases included. The import reads the file back, so it doubles as a backup.
 
 **Dashboard**
 - **Passkey sign-in**, with no password.

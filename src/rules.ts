@@ -4,12 +4,13 @@
  * earlier one's value. Matching is on plain text, case-insensitively; there are no regular
  * expressions, so no rule can make a message slow to check.
  */
-import { extractEmail, normalizeEmail } from "./format";
+import { extractEmail, normalizeEmail, safeHttpsUrl } from "./format";
 import { newId, now } from "./db";
+import { hmacHex } from "./crypto";
 
 export const CONDITION_TYPES = ["sender", "subject", "alias"] as const;
 export const MATCHES = ["is exactly", "is not", "contains", "does not contain", "starts with", "does not start with", "ends with", "does not end with"] as const;
-export const ACTION_TYPES = ["block", "subject", "displayFrom", "forwardTo", "removeAttachments", "banner"] as const;
+export const ACTION_TYPES = ["block", "subject", "displayFrom", "forwardTo", "removeAttachments", "banner", "webhook"] as const;
 /** Actions that act on replies too; the others only make sense for forwarded mail. */
 export const REPLY_ACTIONS: readonly ActionType[] = ["block", "subject", "removeAttachments"];
 
@@ -55,9 +56,12 @@ const MAX_ACTIONS = 10;
 export const MAX_VALUES = 20;
 export const MAX_VALUE_LENGTH = 200;
 export const MAX_RULE_NAME = 60;
+export const MAX_WEBHOOK_URL = 500;
+/** Webhooks one message can call, however many rules match. */
+const MAX_WEBHOOKS = 3;
 
 export class RuleError extends Error {
-	constructor(readonly reason: "invalid" | "limit" | "missing" | "forwardTo" | "unsupported") {
+	constructor(readonly reason: "invalid" | "limit" | "missing" | "forwardTo" | "webhook" | "unsupported") {
 		super(reason);
 	}
 }
@@ -86,12 +90,20 @@ function cleanCondition(raw: unknown): Condition | null {
 function cleanAction(raw: unknown): Action | null {
 	if (!raw || typeof raw !== "object") throw new RuleError("unsupported");
 	const { type, value } = raw as Record<string, unknown>;
-	// addy.io's webhooks, encryption and description changes are not done here.
+	// addy.io's encryption and description changes are not done here.
 	if (!ACTION_TYPES.includes(type as ActionType)) throw new RuleError("unsupported");
 	const kind = type as ActionType;
 	if (kind === "block" || kind === "removeAttachments") return { type: kind, value: "true" };
 	// Only hiding the banner: addy.io's top and bottom places are both "shown" here.
 	if (kind === "banner") return value === "off" ? { type: kind, value: "off" } : null;
+	if (kind === "webhook") {
+		// A public https address: never a private network, a port or credentials in the URL.
+		const raw = typeof value === "string" ? value.trim() : "";
+		if (!raw) return null;
+		const url = raw.length <= MAX_WEBHOOK_URL ? safeHttpsUrl(raw) : null;
+		if (!url) throw new RuleError("webhook");
+		return { type: kind, value: url.href };
+	}
 	const cleaned = text(typeof value === "number" ? String(value) : value, kind === "displayFrom" ? 100 : MAX_VALUE_LENGTH);
 	if (!cleaned) return null;
 	if (kind === "forwardTo") {
@@ -304,6 +316,8 @@ export type RuleOutcome = {
 	forwardTo?: string;
 	removeAttachments?: boolean;
 	hideBanner?: boolean;
+	/** Webhooks to call, with the name of the rule that asked. */
+	webhooks?: { rule: string; url: string }[];
 	applied: string[];
 };
 
@@ -362,6 +376,7 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 			else if (action.type === "forwardTo") outcome.forwardTo = action.value;
 			else if (action.type === "removeAttachments") outcome.removeAttachments = true;
 			else if (action.type === "banner") outcome.hideBanner = true;
+			else if (action.type === "webhook" && (outcome.webhooks ??= []).length < MAX_WEBHOOKS) outcome.webhooks.push({ rule: rule.name, url: action.value });
 		}
 		if (applied) outcome.applied.push(rule.id);
 		if (outcome.block) break;
@@ -371,4 +386,42 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 		await db.batch(outcome.applied.map((id) => db.prepare("UPDATE rules SET applied = applied + 1, last_applied = ? WHERE id = ?").bind(timestamp, id)));
 	}
 	return outcome;
+}
+
+/** The key webhook requests are signed with, shown on the Rules page so the receiver can check them. */
+export function webhookKey(signingSecret: string): Promise<string> {
+	return hmacHex(signingSecret, "aliasflare rule webhook");
+}
+
+/**
+ * Calls the webhooks of the rules that matched: a JSON POST about the message (never its body),
+ * signed in X-Aliasflare-Signature (HMAC-SHA256 of the body with the key on the Rules page, hex).
+ * A slow or failing receiver never holds up or fails the message: each call gets 5 seconds, and
+ * the outcome is only logged.
+ */
+export async function callWebhooks(
+	signingSecret: string,
+	webhooks: RuleOutcome["webhooks"],
+	message: { alias: string; sender: string; subject: string },
+): Promise<void> {
+	if (!webhooks?.length) return;
+	const key = await webhookKey(signingSecret);
+	await Promise.all(
+		webhooks.map(async ({ rule, url }) => {
+			const body = JSON.stringify({ event: "rule.matched", rule, alias: message.alias, sender: message.sender, subject: message.subject, received_at: new Date().toISOString() });
+			try {
+				const response = await fetch(url, {
+					method: "POST",
+					headers: { "Content-Type": "application/json", "User-Agent": "aliasflare", "X-Aliasflare-Signature": await hmacHex(key, body) },
+					body,
+					redirect: "manual",
+					signal: AbortSignal.timeout(5000),
+				});
+				await response.body?.cancel();
+				if (!response.ok) console.warn(JSON.stringify({ event: "webhook", rule, status: response.status }));
+			} catch (error) {
+				console.warn(JSON.stringify({ event: "webhook", rule, error: error instanceof Error ? error.message : String(error) }));
+			}
+		}),
+	);
 }

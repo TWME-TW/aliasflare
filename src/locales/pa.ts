@@ -592,6 +592,14 @@ const dictionary: Dictionary = {
 	"notice.othersSignedOut": "ਹੋਰ {count} ਡਿਵਾਈਸਾਂ ਤੋਂ ਸਾਈਨ ਆਊਟ ਕੀਤਾ ਗਿਆ।",
 	"err.reauth": "ਪਹਿਲਾਂ ਪਾਸਕੀ ਨਾਲ ਪੁਸ਼ਟੀ ਕਰੋ, ਫਿਰ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
 	"bulk.allLabels": "ਸਾਰੇ ਲੇਬਲ",
+	"settings.createFromMailDomains": "ਇਨ੍ਹਾਂ ਉਪਨਾਮ ਡੋਮੇਨਾਂ ਉੱਤੇ (ਜਿਨ੍ਹਾਂ ਪਤਿਆਂ ਉੱਤੇ ਅਜੇ ਉਪਨਾਮ ਨਹੀਂ ਹਨ, ਉਨ੍ਹਾਂ ਲਈ ਮੇਲ ਰੱਦ ਕਰਨ ਲਈ ਇੱਕ ਦਾ ਨਿਸ਼ਾਨ ਹਟਾਓ):",
+	"exp.title": "ਉਪਨਾਮ ਐਕਸਪੋਰਟ ਕਰੋ",
+	"exp.help": "ਹਰ ਉਪਨਾਮ CSV ਫ਼ਾਈਲ ਵਜੋਂ, ਮਿਟਾਏ ਗਏ ਸਮੇਤ: ਪਤਾ, ਨੋਟ, ਭੇਜਣ ਵਾਲੇ ਦਾ ਨਾਮ, ਫ਼ਾਰਵਰਡਿੰਗ, ਪਿੰਨ, ਫ਼ਾਰਵਰਡ ਪਤਾ, ਲੇਬਲ ਅਤੇ ਤਾਰੀਖ਼ਾਂ। ਉੱਪਰ, ਇੱਥੇ ਜਾਂ ਕਿਸੇ ਹੋਰ aliasflare ਵਿੱਚ ਮੁੜ ਇੰਪੋਰਟ ਕਰੋ।",
+	"exp.button": "CSV ਡਾਊਨਲੋਡ ਕਰੋ",
+	"notice.ruleWebhook": "ਵੈੱਬਹੁੱਕ ਨੂੰ ਇੱਕ ਜਨਤਕ https ਪਤਾ ਚਾਹੀਦਾ ਹੈ।",
+	"rules.action.webhook": "ਵੈੱਬਹੁੱਕ ਭੇਜੋ",
+	"rules.webhookKey": "ਵੈੱਬਹੁੱਕ ਸਾਈਨਿੰਗ ਕੁੰਜੀ",
+	"rules.webhookKeyHelp": "ਹਰ ਵੈੱਬਹੁੱਕ ਸੰਦੇਸ਼ ਬਾਰੇ ਇੱਕ JSON POST ਹੈ (ਉਪਨਾਮ, ਭੇਜਣ ਵਾਲਾ ਅਤੇ ਵਿਸ਼ਾ, ਕਦੇ ਵੀ ਸਮੱਗਰੀ ਨਹੀਂ)। ਇਸਦਾ X-Aliasflare-Signature ਹੈਡਰ ਇਸ ਕੁੰਜੀ ਨਾਲ ਬਾਡੀ ਦਾ HMAC-SHA256 ਹੈ, ਹੈਕਸ ਵਿੱਚ: ਜਾਂਚੋ ਕਿ ਬੇਨਤੀ ਇੱਥੋਂ ਆਈ ਹੈ।",
 };
 
 export default dictionary;

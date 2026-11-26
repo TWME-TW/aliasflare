@@ -600,6 +600,14 @@ export const en = {
 	"notice.sessionGone": "That device was already signed out.",
 	"notice.othersSignedOut": "Signed out {count} other devices.",
 	"err.reauth": "Confirm with your passkey first, then try again.",
+	"settings.createFromMailDomains": "On these alias domains (untick one to refuse mail to addresses there that are not aliases yet):",
+	"exp.title": "Export aliases",
+	"exp.help": "Every alias as a CSV file, deleted ones included: address, note, sender name, forwarding, pin, forwarding address, labels and dates. Import it again above, here or on another aliasflare.",
+	"exp.button": "Download CSV",
+	"notice.ruleWebhook": "A webhook needs a public https address.",
+	"rules.action.webhook": "Send a webhook",
+	"rules.webhookKey": "Webhook signing key",
+	"rules.webhookKeyHelp": "Each webhook is a JSON POST about the message (the alias, sender and subject, never its content). Its X-Aliasflare-Signature header is the HMAC-SHA256 of the body with this key, in hex: check it to know the request came from here.",
 };
 
 export type MessageKey = keyof typeof en;
