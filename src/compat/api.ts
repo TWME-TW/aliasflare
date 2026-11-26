@@ -9,6 +9,7 @@
 import { clientKey } from "../ratelimit";
 import { Hono, type Context } from "hono";
 import { presentedKey, verifyApiKey, type ApiKeyRow } from "../apikeys";
+import { requestCountry } from "../sessions";
 import { readTextLimited } from "../streams";
 import type { AppEnv } from "../auth";
 import { signToken, verifyToken } from "../crypto";
@@ -114,7 +115,7 @@ api.use("*", async (c, next) => {
 	const key = presentedKey(c.req.raw.headers);
 	// The request limits ran before this (see apiThrottled); failed keys also count against the stricter one.
 	const ip = clientKey(c.req.header("CF-Connecting-IP"));
-	const valid = key ? await verifyApiKey(c.env.DB, key, "apps") : null;
+	const valid = key ? await verifyApiKey(c.env.DB, key, "apps", requestCountry(c.req.raw)) : null;
 	if (!valid) {
 		if (c.env.LOGIN_RATE_LIMIT && !(await c.env.LOGIN_RATE_LIMIT.limit({ key: `api:${ip}` })).success) {
 			await recordApiLockout(ip);

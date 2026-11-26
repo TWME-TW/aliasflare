@@ -4,6 +4,12 @@
  */
 import { now } from "./db";
 
+/** The two-letter country Cloudflare reports for a request, or null (also in tests and local development). */
+export function requestCountry(request: Request): string | null {
+	const country = (request as { cf?: { country?: unknown } }).cf?.country;
+	return typeof country === "string" && /^[A-Z]{2}$/.test(country) ? country : null;
+}
+
 export type SessionRow = {
 	id: string;
 	passkey_name: string;
