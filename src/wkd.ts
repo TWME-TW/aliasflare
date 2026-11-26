@@ -14,7 +14,7 @@
 import { now } from "./db";
 import { readPublicKey } from "./pgp";
 import { bytesToBase64 } from "./crypto";
-import { extractEmail } from "./format";
+import { extractEmail, normalizeEmail } from "./format";
 
 export const WKD_SUBDOMAIN = "openpgpkey";
 
@@ -51,36 +51,48 @@ export async function wkdHash(address: string): Promise<string> {
 	return zbase32(new Uint8Array(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(local))));
 }
 
-/** Reads a key for an alias: public, able to encrypt, and with no user ID but the alias's. */
+/** Reads a key for an alias: public, able to encrypt, and with no user ID or attribute but the alias's. */
 export async function readWkdKey(armored: string, alias: string): Promise<{ binary: string; fingerprint: string }> {
 	const { readKey } = await import("openpgp");
+	const expected = normalizeEmail(alias);
 	// The common checks (not private, not expired, can encrypt) first.
 	const checked = await readPublicKey(armored);
 	const key = await readKey({ armoredKey: checked.armored });
-	const userIds = key.users.map((user) => user.userID?.userID ?? "").filter((id) => id);
-	if (!userIds.length || userIds.some((id) => extractEmail(id.includes("<") ? id.slice(id.lastIndexOf("<")) : id) !== alias)) throw new WkdError("otherAddress");
+	// Every user packet must be a User ID (no photo/attribute packets), naming only the alias and
+	// carrying no other email address in its display name or comment.
+	if (!key.users.length || key.users.some((user) => !user.userID?.userID)) throw new WkdError("otherAddress");
+	const userIds = key.users.map((user) => user.userID!.userID);
+	if (
+		userIds.some((id) => {
+			if (extractEmail(id) !== expected) return true;
+			const angle = id.indexOf("<");
+			return angle >= 0 && id.slice(0, angle).includes("@");
+		})
+	) {
+		throw new WkdError("otherAddress");
+	}
 	return { binary: bytesToBase64(key.write()), fingerprint: checked.fingerprint };
 }
 
 export async function wkdKeyOf(db: D1Database, alias: string): Promise<WkdKeyRow | null> {
-	return await db.prepare("SELECT * FROM wkd_keys WHERE alias_address = ?").bind(alias).first<WkdKeyRow>();
+	return await db.prepare("SELECT * FROM wkd_keys WHERE alias_address = ?").bind(normalizeEmail(alias)).first<WkdKeyRow>();
 }
 
 /** Publishes the key for the alias, refusing one in use for another alias or a forwarding address. */
 export async function saveWkdKey(db: D1Database, alias: string, key: { binary: string; fingerprint: string }): Promise<void> {
-	const [elsewhere, forwarding] = await db.batch([
-		db.prepare("SELECT 1 FROM wkd_keys WHERE fingerprint = ? AND alias_address != ?").bind(key.fingerprint, alias),
-		db.prepare("SELECT 1 FROM pgp_keys WHERE fingerprint = ?").bind(key.fingerprint),
-	]);
-	if (elsewhere!.results.length || forwarding!.results.length) throw new WkdError("keyInUse");
-	const domain = alias.slice(alias.lastIndexOf("@") + 1);
-	await db
+	const normalized = normalizeEmail(alias);
+	const domain = normalized.slice(normalized.lastIndexOf("@") + 1);
+	const result = await db
 		.prepare(
-			`INSERT INTO wkd_keys (alias_address, domain, hash, fingerprint, key_binary, created_at) VALUES (?, ?, ?, ?, ?, ?)
+			`INSERT INTO wkd_keys (alias_address, domain, hash, fingerprint, key_binary, created_at)
+			 SELECT ?, ?, ?, ?, ?, ?
+			 WHERE NOT EXISTS (SELECT 1 FROM wkd_keys WHERE fingerprint = ? AND alias_address != ?)
+			   AND NOT EXISTS (SELECT 1 FROM pgp_keys WHERE fingerprint = ?)
 			 ON CONFLICT (alias_address) DO UPDATE SET fingerprint = excluded.fingerprint, key_binary = excluded.key_binary, created_at = excluded.created_at`,
 		)
-		.bind(alias, domain, await wkdHash(alias), key.fingerprint, key.binary, now())
+		.bind(normalized, domain, await wkdHash(normalized), key.fingerprint, key.binary, now(), key.fingerprint, normalized, key.fingerprint)
 		.run();
+	if ((result.meta.changes ?? 0) === 0) throw new WkdError("keyInUse");
 }
 
 /** The key published for a hashed local part on a domain, if its alias is still live. */

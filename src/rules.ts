@@ -406,14 +406,20 @@ export async function callWebhooks(
 	signingSecret: string,
 	webhooks: RuleOutcome["webhooks"],
 	message: { alias: string; sender: string; subject: string },
+	blockedHosts: string[] = [],
 ): Promise<void> {
 	if (!webhooks?.length) return;
 	const key = await webhookKey(signingSecret);
 	await Promise.all(
 		webhooks.map(async ({ rule, url }) => {
+			const safe = safeHttpsUrl(url, blockedHosts);
+			if (!safe) {
+				console.warn(JSON.stringify({ event: "webhook", rule, error: "disallowed url" }));
+				return;
+			}
 			const body = JSON.stringify({ event: "rule.matched", rule, alias: message.alias, sender: message.sender, subject: message.subject, received_at: new Date().toISOString() });
 			try {
-				const response = await fetch(url, {
+				const response = await fetch(safe.href, {
 					method: "POST",
 					headers: { "Content-Type": "application/json", "User-Agent": "aliasflare", "X-Aliasflare-Signature": await hmacHex(key, body) },
 					body,

@@ -150,10 +150,23 @@ app.use("*", async (c, next) => {
 		const reads = [db.prepare("SELECT key, value FROM config"), db.prepare("SELECT key, value FROM settings")];
 		if (claimed) reads.push(db.prepare(LIVE_SESSION).bind(claimed, now()));
 		const [config, settings, session] = await db.batch<{ key: string; value: string }>(reads);
-		c.set("config", await loadConfig(c.env, config!.results));
-		c.set("settings", settingsFromRows(settings!.results));
+		const loadedConfig = await loadConfig(c.env, config!.results);
+		const loadedSettings = settingsFromRows(settings!.results);
+		c.set("config", loadedConfig);
+		c.set("settings", loadedSettings);
 		const row = session?.results[0] as { seen?: number | null; verified?: number | null } | undefined;
 		if (claimed) c.set("session", { id: claimed, live: !!row, seen: row?.seen ?? null, verified: row?.verified ?? null });
+		// A WKD host (openpgpkey.<aliasDomain>) is routed here only to serve public keys: keep the
+		// dashboard, login, health, API, MCP and webhook routes off it so alias domains are not linked.
+		const host = new URL(c.req.url).hostname.toLowerCase();
+		const publicHost = hostnameOf(loadedConfig.publicUrl)?.toLowerCase();
+		if (
+			host !== publicHost &&
+			loadedSettings.aliasDomains.some((domain) => host === `${WKD_SUBDOMAIN}.${domain}`) &&
+			!c.req.path.startsWith("/.well-known/openpgpkey/")
+		) {
+			return c.text("Not found", 404);
+		}
 	} catch (error) {
 		if (!(error instanceof ConfigError)) throw error;
 		console.error("Configuration error:", error.message);
@@ -286,7 +299,7 @@ async function rateLimited(c: C, bucket: "auth" | "ui" | "link" = "auth"): Promi
 const jsonError = (c: C, key: MessageKey, status: 400 | 401 | 403 | 409 | 429) => c.json({ error: c.get("t")(key) }, status);
 
 // Public on purpose, for uptime monitors: it tells only whether setup is complete, nothing else.
-app.get("/health", async (c) => c.json({ ok: missingConnection(await loadSettings(c.env.DB)).length === 0 }));
+app.get("/health", async (c) => c.json({ ok: missingConnection(c.get("settings") ?? (await loadSettings(c.env.DB))).length === 0 }));
 
 // ---------- Web Key Directory (public: senders' apps look keys up here) ----------
 
@@ -1112,7 +1125,8 @@ async function saveRule(c: C, id: string | null): Promise<Response> {
 	try {
 		const existing = id ? await getRule(c.env.DB, id) : null;
 		if (id && !existing) return redirectWithNotice(c, "/rules", "notice.ruleMissing");
-		const input = cleanRule(ruleFromForm(await c.req.parseBody(), existing), ownHosts(c.get("config")));
+		const reqHost = hostnameOf(c.req.url);
+		const input = cleanRule(ruleFromForm(await c.req.parseBody(), existing), [...ownHosts(c.get("config")), ...(reqHost ? [reqHost] : [])]);
 		// Mail goes only to the owner's own forwarding addresses, as in the apps: it carries the
 		// banner's signed links, which should not reach anyone else. Check every forwardTo action.
 		const forwardTos = input.actions.filter((action) => action.type === "forwardTo");
@@ -1277,7 +1291,13 @@ app.post("/import/:source", async (c) => {
 				if (alias.destination && !isOwnAddress(alias.destination, ownDomains)) allowedDestinations.add(alias.destination.toLowerCase());
 			}
 		}
-		extra = await importAddyExtras(c.env.DB, extras, selection.chosen, { batchSize, allowedDestinations, ownDomains });
+		const reqHost = hostnameOf(c.req.url);
+		extra = await importAddyExtras(c.env.DB, extras, selection.chosen, {
+			batchSize,
+			allowedDestinations,
+			ownDomains,
+			ownHosts: [...ownHosts(c.get("config")), ...(reqHost ? [reqHost] : [])],
+		});
 	}
 	const result = {
 		...(await importAliases(c.env.DB, settings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
@@ -1661,7 +1681,10 @@ export default {
 		const url = new URL(request.url);
 		if (url.pathname.includes("//")) {
 			url.pathname = url.pathname.replace(/\/{2,}/g, "/");
-			return app.fetch(new Request(url, request), env, ctx);
+			const normalized = new Request(url, request);
+			const cf = (request as { cf?: unknown }).cf;
+			if (cf !== undefined) Object.defineProperty(normalized, "cf", { value: cf });
+			return app.fetch(normalized, env, ctx);
 		}
 		return app.fetch(request, env, ctx);
 	},

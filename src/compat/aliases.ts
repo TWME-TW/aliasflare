@@ -439,12 +439,12 @@ export async function forgetAlias(db: D1Database, address: string): Promise<void
 	await forgetAliases(db, [address]);
 }
 
-/** Batch-forgets aliases, keeping each alias's 5 statements atomic in the same batch (20 aliases = 100 statements). */
+/** Batch-forgets aliases, keeping each alias's 6 statements atomic in the same batch (16 aliases = 96 statements). */
 export async function forgetAliases(db: D1Database, addresses: string[]): Promise<void> {
 	if (!addresses.length) return;
 	const ts = now();
-	for (let i = 0; i < addresses.length; i += 20) {
-		const chunk = addresses.slice(i, i + 20);
+	for (let i = 0; i < addresses.length; i += 16) {
+		const chunk = addresses.slice(i, i + 16);
 		await db.batch(chunk.flatMap((address) => [db.prepare("UPDATE aliases SET deleted_at = COALESCE(deleted_at, ?) WHERE address = ?").bind(ts, address), ...forgetStatements(db, address)]));
 	}
 }

@@ -441,7 +441,7 @@ export async function importAddyExtras(
 	db: D1Database,
 	extras: AddyExtras,
 	aliases: ImportedAlias[],
-	options: { batchSize?: number; allowedDestinations?: Set<string>; ownDomains?: string[] } = {},
+	options: { batchSize?: number; allowedDestinations?: Set<string>; ownDomains?: string[]; ownHosts?: string[] } = {},
 ): Promise<Pick<ImportResult, "labels" | "rules" | "rulesSkipped" | "blocked" | "unread">> {
 	const timestamp = now();
 	// Labels: those of the account, then any only named on an alias.
@@ -485,11 +485,12 @@ export async function importAddyExtras(
 	const inputs: RuleInput[] = [];
 	const rulesSkipped: string[] = [];
 	const ownDomains = options.ownDomains ?? [];
+	const blockedWebhookHosts = options.ownHosts ?? [];
 	const allowed = options.allowedDestinations;
 	for (const raw of extras.rules) {
 		let input: RuleInput;
 		try {
-			input = cleanRule(raw);
+			input = cleanRule(raw, blockedWebhookHosts);
 		} catch (error) {
 			if (!(error instanceof RuleError)) throw error;
 			const name = text(raw.name, 60);
