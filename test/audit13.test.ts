@@ -94,6 +94,10 @@ describe("1. PGP encryption cannot be bypassed by spoofed armor, duplicate Conte
 		const plainWord = "-----BEGIN PGP MESSAGE-----\r\n\r\nCONFIDENTIAL\r\n-----END PGP MESSAGE-----";
 		expect(isInlinePgpArmor(sandwiched)).toBe(false);
 		expect(isInlinePgpArmor(plainWord)).toBe(false);
+		// Genuine armor still counts, with the headers real clients add (Mailvelope writes a Comment).
+		const genuine = ["-----BEGIN PGP MESSAGE-----", "Version: Mailvelope v5", "Comment: https://www.mailvelope.com", "", "wV4DAAAAAAAAAAASAQdAexample", "=abcd", "-----END PGP MESSAGE-----"];
+		expect(isInlinePgpArmor(genuine.join("\r\n"))).toBe(true);
+		expect(isInlinePgpArmor(genuine.filter((line) => !/^(Version|Comment):/.test(line)).join("\n"))).toBe(true);
 
 		await deliverRaw("shop@a.test", `From: bob@store.test\r\nTo: shop@a.test\r\nSubject: Sandwich\r\nMessage-ID: <s1@x>\r\nContent-Type: text/plain\r\n\r\n${sandwiched}`);
 		const out1 = await rawOf(sent[0] as EmailMessage);

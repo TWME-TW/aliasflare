@@ -24,7 +24,7 @@ import { pgpKind, topEntity } from "./mime";
  * neither plain words nor two blocks sandwiching readable text can switch the owner's encryption off.
  */
 const INLINE_PGP_ARMOR =
-	/^-----BEGIN PGP MESSAGE-----\r?\n(?:(?:Version|Charset|MessageID|Hash):[ \t][^\r\n]{0,200}\r?\n){0,8}\r?\n([A-Za-z0-9+/]+={0,2}[ \t]*\r?\n(?:[A-Za-z0-9+/]+={0,2}[ \t]*\r?\n)*)(?:=[A-Za-z0-9+/]{4}[ \t]*\r?\n)?-----END PGP MESSAGE-----$/;
+	/^-----BEGIN PGP MESSAGE-----\r?\n(?:(?:Version|Comment|Charset|MessageID|Hash):[ \t][^\r\n]{0,200}\r?\n){0,8}\r?\n([A-Za-z0-9+/]+={0,2}[ \t]*\r?\n(?:[A-Za-z0-9+/]+={0,2}[ \t]*\r?\n)*)(?:=[A-Za-z0-9+/]{4}[ \t]*\r?\n)?-----END PGP MESSAGE-----$/;
 
 /** OpenPGP leading packet header bytes for encrypted messages (tags 1, 3, 9, 18; old and new formats). */
 const ENCRYPTED_PACKET_TAGS = new Set([1, 3, 9, 18]);
