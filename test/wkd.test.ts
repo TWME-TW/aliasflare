@@ -84,6 +84,19 @@ describe("publishing a key for an alias", () => {
 		expect(await db.prepare("SELECT COUNT(*) AS n FROM wkd_keys").first("n")).toBe(1);
 	});
 
+	it("refuses the same pairing from the other side: an alias's published key onto a forwarding address", async () => {
+		// The check used to run one way only. Saving a WKD key looked at the forwarding keys, but
+		// saving a forwarding key never looked at wkd_keys, so an alias's public key could also
+		// become the key a real mailbox's mail is encrypted to — tying the alias to that mailbox,
+		// which is exactly what a per-alias key must not do.
+		expect(notice(await post("/aliases/shop%40a.test/wkd", { key: aliasKey }))).toBe("notice.wkdSaved");
+		expect(notice(await post("/encryption", { email: "me@home.test", key: aliasKey }))).toBe("notice.wkdKeyInUse");
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM pgp_keys").first("n")).toBe(0);
+		// A key that is published nowhere still saves, so the ordinary path is untouched.
+		const plain = await generate("me@home.test");
+		expect(notice(await post("/encryption", { email: "me@home.test", key: plain }))).toBe("notice.pgpSaved");
+	});
+
 	it("stops answering when the key is removed or the alias deleted", async () => {
 		await post("/aliases/shop%40a.test/wkd", { key: aliasKey });
 		const url = `https://openpgpkey.a.test/.well-known/openpgpkey/a.test/hu/${await wkdHash("shop@a.test")}`;

@@ -17,8 +17,13 @@ import { callWebhooks, runRules } from "./rules";
 import { encryptionKeyFor, sendEncrypted, sendKept } from "./pgp";
 import { pgpKind, topEntity } from "./mime";
 
-/** An inline PGP message (RFC 4880 armor) in a plain-text body. */
-const INLINE_PGP = /^-----BEGIN PGP MESSAGE-----\r?$/m;
+/**
+ * An inline PGP message (RFC 4880 armor) that is a plain-text body's entire content. The whole body
+ * has to be the armor: a line that merely starts one is written by the sender, and treating a
+ * message as "already encrypted" because of it would let any sender turn the owner's encryption
+ * off and have the rest of the message delivered in the clear.
+ */
+const INLINE_PGP = /^-----BEGIN PGP MESSAGE-----\r?\n[\s\S]*\r?\n-----END PGP MESSAGE-----$/;
 import { listDestinations } from "./compat/aliases";
 import type { Settings } from "./settings";
 import { transformForward, type BannerInfo } from "./transform";
@@ -160,6 +165,28 @@ function rawHeaderSection(raw: ArrayBuffer): string | null {
 	const head = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(new Uint8Array(raw).subarray(0, 65536));
 	const end = head.search(/\r?\n\r?\n/);
 	return end >= 0 ? head.slice(0, end) : null;
+}
+
+/**
+ * The Content-Type the message's own header section declares, for deciding whether mail is PGP/MIME.
+ * Unlike rawHeaderSection this looks through the whole header section, however long it is, because
+ * the answer decides whether the body may be rebuilt at all: "too long to look at" must not be read
+ * as "not PGP", or a message with padded headers would be rebuilt and reach the owner undecryptable.
+ */
+function contentTypeOf(raw: ArrayBuffer): string | null {
+	const bytes = new Uint8Array(raw);
+	// Only the search for the blank line costs anything, and it stops at the header section's end.
+	let end = -1;
+	for (let i = 0; i < bytes.length - 1; i++) {
+		if (bytes[i] !== 10) continue;
+		if (bytes[i + 1] === 10 || (bytes[i + 1] === 13 && bytes[i + 2] === 10)) {
+			end = i;
+			break;
+		}
+	}
+	if (end < 0) return null;
+	const head = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true }).decode(bytes.subarray(0, end));
+	return /^content-type:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/im.exec(head)?.[1]?.trim() ?? "";
 }
 
 /** Forwards one message Mailflare received (its message.inbound webhook) to the alias's destination. */
@@ -398,9 +425,15 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 
 		const headerBlock = rawHeaderSection(stored!.raw);
 		// PGP/MIME mail, encrypted or signed, keeps its own body: rebuilt from its parts it would
-		// no longer decrypt in the owner's app, or its signature would fail.
-		const pgp = pgpKind(headerBlock);
+		// no longer decrypt in the owner's app, or its signature would fail. The kind is read from
+		// the whole header section rather than the 64 KiB rule check, so headers the rules decline
+		// to look at cannot make PGP mail look like an ordinary message.
+		const declaredType = contentTypeOf(stored!.raw);
+		const pgp = pgpKind(declaredType === null ? null : `Content-Type: ${declaredType}`);
 		const kept = pgp ? topEntity(stored!.raw) : null;
+		// Without the entity there is nothing to keep, and rebuilding PGP/MIME would hand the owner
+		// something their app cannot open. Refuse instead of sending a broken message.
+		if (pgp && !kept) return await skip("unreadable PGP/MIME message");
 		let email: Email;
 		try {
 			email = await PostalMime.parse(stored!.raw, { attachmentEncoding: "arraybuffer" });
@@ -552,9 +585,22 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// Encrypted to the forwarding address's PGP key when it has encryption on. That needs a
 		// message built here, so it goes as raw MIME. If it cannot be encrypted it is not sent in
 		// the clear: it fails, and shows under failed deliveries.
-		// Mail encrypted already (PGP/MIME, or inline PGP in the text) is not encrypted again.
-		const encryptedAlready = (kept && pgp === "encrypted") || INLINE_PGP.test(email.text ?? "");
-		const pgpKey = !encryptedAlready && settings.pgpRecipients.includes(normalizeEmail(recipient)) ? await encryptionKeyFor(db, recipient) : null;
+		// Mail encrypted already (PGP/MIME, or a body that is nothing but inline PGP) is not
+		// encrypted again: the owner's app would then have to decrypt twice. Only a message with
+		// nothing else in it counts: an HTML part or an attachment beside the armor is written by the
+		// sender too, and would otherwise go out readable.
+		const inlinePgp = !email.html && !email.attachments.length && INLINE_PGP.test((email.text ?? "").trim());
+		const encryptedAlready = (kept !== null && pgp === "encrypted") || inlinePgp;
+		const wantsEncryption = !encryptedAlready && settings.pgpRecipients.includes(normalizeEmail(recipient));
+		const pgpKey = wantsEncryption ? await encryptionKeyFor(db, recipient) : null;
+		// The settings list which addresses are encrypted, and the key table is what that list is
+		// made from. If the two disagree — a key removed while its flag was still set, say — sending
+		// anyway would put the message on the wire in the clear, which is the one thing turning
+		// encryption on promises never to happen.
+		if (wantsEncryption && !pgpKey) {
+			await finish(db, forwardId, { status: "failed", error: "not sent: this forwarding address has PGP encryption on, but its key is missing" });
+			return { status: 200, result: "not sent: cannot encrypt" };
+		}
 		const result = pgpKey
 			? await sendEncrypted(env, outgoing, pgpKey, kept ?? undefined)
 			: kept

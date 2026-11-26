@@ -24,7 +24,7 @@ export type PgpKeyRow = {
 };
 
 export class PgpError extends Error {
-	constructor(readonly reason: "invalid" | "private" | "noEncryption" | "expired" | "tooLarge") {
+	constructor(readonly reason: "invalid" | "private" | "noEncryption" | "expired" | "tooLarge" | "keyInUse") {
 		super(reason);
 	}
 }
@@ -92,8 +92,15 @@ export async function listPgpKeys(db: D1Database): Promise<PgpKeyRow[]> {
 	return (await db.prepare("SELECT * FROM pgp_keys ORDER BY email").all<PgpKeyRow>()).results;
 }
 
-/** Saves or replaces an address's key; encryption stays as it was (off for a new key). */
+/**
+ * Saves or replaces an address's key; encryption stays as it was (off for a new key). A key already
+ * published for an alias by WKD is refused: it would tie that alias to this forwarding address,
+ * which is the one thing a per-alias key must not do. The other order is refused when a WKD key is
+ * saved (see wkd.ts), so neither direction can pair an alias with a real mailbox.
+ */
 export async function savePgpKey(db: D1Database, email: string, key: { armored: string; fingerprint: string }): Promise<void> {
+	const published = await db.prepare("SELECT alias_address FROM wkd_keys WHERE fingerprint = ?").bind(key.fingerprint).first<{ alias_address: string }>();
+	if (published) throw new PgpError("keyInUse");
 	const timestamp = now();
 	await db
 		.prepare(

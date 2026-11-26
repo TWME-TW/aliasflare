@@ -87,7 +87,7 @@ function cleanCondition(raw: unknown): Condition | null {
 	return { type: type as ConditionType, match: match as Match, values: list };
 }
 
-function cleanAction(raw: unknown): Action | null {
+function cleanAction(raw: unknown, ownHosts: string[]): Action | null {
 	if (!raw || typeof raw !== "object") throw new RuleError("unsupported");
 	const { type, value } = raw as Record<string, unknown>;
 	// addy.io's encryption and description changes are not done here.
@@ -97,10 +97,13 @@ function cleanAction(raw: unknown): Action | null {
 	// Only hiding the banner: addy.io's top and bottom places are both "shown" here.
 	if (kind === "banner") return value === "off" ? { type: kind, value: "off" } : null;
 	if (kind === "webhook") {
-		// A public https address: never a private network, a port or credentials in the URL.
+		// A public https address: never a private network, a port, credentials in the URL, or this
+		// deployment's own host — a webhook back into aliasflare would have every matching message
+		// call itself again, once per delivery. The other places an owner-entered address is called
+		// block their own hosts the same way (see outbound.ts).
 		const raw = typeof value === "string" ? value.trim() : "";
 		if (!raw) return null;
-		const url = raw.length <= MAX_WEBHOOK_URL ? safeHttpsUrl(raw) : null;
+		const url = raw.length <= MAX_WEBHOOK_URL ? safeHttpsUrl(raw, ownHosts) : null;
 		if (!url) throw new RuleError("webhook");
 		return { type: kind, value: url.href };
 	}
@@ -115,13 +118,13 @@ function cleanAction(raw: unknown): Action | null {
 }
 
 /** Checks a rule from a form or an app. A rule needs a name, a condition and an action. */
-export function cleanRule(raw: Record<string, unknown>): RuleInput {
+export function cleanRule(raw: Record<string, unknown>, ownHosts: string[] = []): RuleInput {
 	const name = text(raw.name, MAX_RULE_NAME);
 	const rawConditions = Array.isArray(raw.conditions) ? raw.conditions : [];
 	const rawActions = Array.isArray(raw.actions) ? raw.actions : [];
 	if (rawConditions.length > MAX_CONDITIONS || rawActions.length > MAX_ACTIONS) throw new RuleError("unsupported");
 	const conditions = rawConditions.map(cleanCondition).filter((c): c is Condition => !!c);
-	const actions = rawActions.map(cleanAction).filter((a): a is Action => !!a);
+	const actions = rawActions.map((action) => cleanAction(action, ownHosts)).filter((a): a is Action => !!a);
 	if (!name || !conditions.length || !actions.length) throw new RuleError("invalid");
 	const rawOp = raw.operator === undefined || raw.operator === null || raw.operator === "" ? "AND" : String(raw.operator).trim().toUpperCase();
 	if (rawOp !== "AND" && rawOp !== "OR") throw new RuleError("invalid");

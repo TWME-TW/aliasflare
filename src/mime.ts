@@ -180,16 +180,17 @@ export function pgpKind(headerBlock: string | null): "encrypted" | "signed" | nu
 /** The top-level entity of a raw message, or null when it has no header section. */
 export function topEntity(raw: ArrayBuffer): Entity | null {
 	const bytes = new Uint8Array(raw);
-	// The end of the header section: the first empty line (CRLF CRLF, or bare LF LF).
+	// The end of the header section: the first empty line (CRLF CRLF, or bare LF LF). No length cap:
+	// a header section over a limit would come back as "no entity", and the caller would then rebuild
+	// a message that must not be rebuilt. The scan is linear and stops at the first blank line.
 	let end = -1;
 	let start = -1;
-	for (let i = 0; i < bytes.length - 1 && i < 1_048_576; i++) {
+	for (let i = 0; i < bytes.length - 1; i++) {
 		if (bytes[i] !== 10) continue;
-		const next = bytes[i + 1] === 10 ? i + 2 : bytes[i + 1] === 13 && bytes[i + 2] === 10 ? i + 3 : -1;
-		if (next < 0) continue;
+		if (!(bytes[i + 1] === 10 || (bytes[i + 1] === 13 && bytes[i + 2] === 10))) continue;
 		// The header section ends with the line break before the empty line (CR included).
 		end = i > 0 && bytes[i - 1] === 13 ? i - 1 : i;
-		start = next;
+		start = bytes[i + 1] === 10 ? i + 2 : i + 3;
 		break;
 	}
 	if (end < 0) return null;
