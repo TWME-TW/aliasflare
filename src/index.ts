@@ -178,19 +178,54 @@ app.onError((error, c) => {
 	return c.text("Internal error", 500);
 });
 
-// Bound non-import dashboard form POSTs before parseBody() buffers the body in isolate memory.
-app.use("*", async (c, next) => {
+/** A body parsed as a form (urlencoded or multipart). */
+const FORM_TYPES = /^(?:application\/x-www-form-urlencoded|multipart\/form-data)\b/i;
+
+/**
+ * Dashboard form POSTs. The body is read here, up to MAX_FORM_BYTES whatever Content-Length says
+ * (a chunked body has none, and parseBody() would buffer it whole before any check). It is parsed
+ * once here as well: a malformed form answers 400 instead of reaching the error handler as a 500,
+ * and parseBody() then reads the parsed form rather than the body again.
+ */
+export async function readFormBody(c: C, next: () => Promise<void>): Promise<Response | void> {
+	const path = c.req.path;
+	const contentType = c.req.header("Content-Type") ?? "";
 	if (
 		c.req.method === "POST" &&
-		!c.req.path.startsWith("/import/") &&
-		!c.req.path.startsWith("/api") &&
-		!c.req.path.startsWith("/mcp") &&
-		c.req.path !== "/webhook"
+		!path.startsWith("/import/") &&
+		path !== "/api" &&
+		!path.startsWith("/api/") &&
+		path !== "/mcp" &&
+		!path.startsWith("/mcp/") &&
+		path !== "/webhook" &&
+		FORM_TYPES.test(contentType)
 	) {
-		if (Number(c.req.header("Content-Length") ?? 0) > MAX_FORM_BYTES) return c.text("Request too large", 413);
+		if (Number(c.req.header("Content-Length") ?? 0) > MAX_FORM_BYTES) {
+			await c.req.raw.body?.cancel().catch(() => undefined);
+			return c.text("Request too large", 413);
+		}
+		const bytes = await readLimited(c.req.raw.body, MAX_FORM_BYTES);
+		if (bytes === null) return c.text("Request too large", 413);
+		const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+		// The same bytes stand in for the body of the request the handlers read (/lang and /theme
+		// read it as text), and as the parsed form parseBody() answers with. Cloudflare puts `cf` on
+		// the request itself (the country a session records, say), and a new Request drops it.
+		const cf = (c.req.raw as { cf?: unknown }).cf;
+		c.req.raw = new Request(c.req.raw, { body: buffer, duplex: "half" } as RequestInit);
+		if (cf !== undefined) Object.defineProperty(c.req.raw, "cf", { value: cf });
+		let form: FormData;
+		try {
+			form = await new Response(buffer, { headers: { "Content-Type": contentType } }).formData();
+		} catch {
+			return c.text("Malformed form", 400);
+		}
+		// Hono types this cache as the parsed values but reads promises from it (see parseBody()).
+		c.req.bodyCache.formData = Promise.resolve(form) as unknown as FormData;
 	}
-	await next();
-});
+	return next();
+}
+
+app.use("*", readFormBody);
 
 /**
  * A URL that shows a notice once at the top of the page. Only the message key and its
