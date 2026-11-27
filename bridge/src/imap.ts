@@ -261,7 +261,9 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 			if (cmd === "NOOP") {
 				if (creds && selectedFolder) {
 					const prevCount = cachedMessages.length;
-					await syncSelectedIfChanged();
+					// An explicit NOOP refreshes fully, so flag changes made elsewhere reach the client;
+					// only the IDLE timer uses the lighter counter check.
+					await refreshSelected();
 					if (cachedMessages.length !== prevCount) write(`* ${cachedMessages.length} EXISTS\r\n`);
 				}
 				write(`${tag} OK NOOP completed\r\n`);

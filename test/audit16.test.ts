@@ -128,18 +128,26 @@ describe("Audit 16: Security fixes & Cloudflare efficiency optimizations", () =>
 			expect(r429.status).toBe(429);
 			expect(sqls.length).toBe(0);
 
-			// 2. Invalid Mail App Password triggers LOGIN_RATE_LIMIT -> 429.
+			// 2. Repeated wrong Mail App Passwords hit LOGIN_RATE_LIMIT (keyed per address and username) -> 429,
+			// but never lock out the address: another app behind the same bridge IP still signs in.
+			const { password } = await createMailPassword(rawDb, { name: "Phone", username: "phone", allowImap: true, allowPop3: false, allowSmtp: false });
+			const keys: string[] = [];
 			const loginLimitEnv = makeEnv(rawDb, {
 				API_RATE_LIMIT: { limit: async () => ({ success: true }) } as unknown as RateLimit,
-				LOGIN_RATE_LIMIT: { limit: async () => ({ success: false }) } as unknown as RateLimit,
+				LOGIN_RATE_LIMIT: { limit: async ({ key }: { key: string }) => (keys.push(key), { success: false }) } as unknown as RateLimit,
 			});
-			const rBrute = await app.fetch(
-				new Request("https://alias.test/mail-api/v1/status", {
-					headers: { Authorization: `Basic ${Buffer.from("user:wrong").toString("base64")}`, "CF-Connecting-IP": "198.51.100.11" },
-				}),
-				loginLimitEnv,
-			);
-			expect(rBrute.status).toBe(429);
+			const status = async (user: string, pass: string) =>
+				(
+					await app.fetch(
+						new Request("https://alias.test/mail-api/v1/status", {
+							headers: { Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`, "CF-Connecting-IP": "198.51.100.11" },
+						}),
+						loginLimitEnv,
+					)
+				).status;
+			expect(await status("laptop", `${password}x`)).toBe(429);
+			expect(keys).toEqual(["mailgw:198.51.100.11:laptop"]);
+			expect(await status("phone", password)).toBe(200);
 		});
 
 		it("rejects oversized JSON control bodies (413) and performs zero D1 writes on GET /imap/folders", async () => {
@@ -459,7 +467,7 @@ describe("Audit 16: Security fixes & Cloudflare efficiency optimizations", () =>
 	});
 
 	describe("Bridge IMAP hardening & lightweight NOOP/IDLE polling", () => {
-		it("checks lightweight imapFolders() on NOOP and skips imapMessages() when unchanged", async () => {
+		it("refreshes fully on an explicit NOOP, so flags changed elsewhere reach the client", async () => {
 			let folderCalls = 0;
 			let messageCalls = 0;
 			const folders: ImapFolderInfo[] = [{ name: "INBOX", specialUse: null, uidvalidity: 1, uidnext: 2, exists: 1, unseen: 0 }];
@@ -534,8 +542,10 @@ describe("Audit 16: Security fixes & Cloudflare efficiency optimizations", () =>
 			}
 			await Promise.race([ended, new Promise((r) => setTimeout(r, 1000))]);
 			expect(out).toContain("A3 OK NOOP completed");
-			expect(messageCalls).toBe(1); // Only SELECT fetched full messages; NOOP skipped it!
-			expect(folderCalls).toBe(1);
+			// SELECT and NOOP each fetch the list (flags may have changed with the same count); only
+			// the IDLE timer uses the lighter imapFolders() check.
+			expect(messageCalls).toBe(2);
+			expect(folderCalls).toBe(0);
 		});
 	});
 });

@@ -8,7 +8,6 @@
 import { Hono, type Context } from "hono";
 import PostalMime from "postal-mime";
 import type { AppEnv } from "./auth";
-import { recordApiLockout } from "./compat/api";
 import { ensureAlias, newId, now, recordEvent, type AliasRow } from "./db";
 import { bytesToBase64 } from "./crypto";
 import { getDomainRow } from "./domain-settings";
@@ -124,13 +123,6 @@ mailGateway.use("*", async (c, next) => {
 	const ip = clientKey(c.req.header("CF-Connecting-IP"));
 	const creds = parseMailCredentials(c.req.raw.headers);
 	if (!creds) {
-		if (c.req.header("Authorization") && c.env.LOGIN_RATE_LIMIT) {
-			const { success } = await c.env.LOGIN_RATE_LIMIT.limit({ key: `mailgw:${ip}` });
-			if (!success) {
-				await recordApiLockout(ip);
-				return c.json({ error: "Too many failed attempts" }, 429);
-			}
-		}
 		return c.json({ error: "Authentication required" }, 401, { "WWW-Authenticate": 'Basic realm="aliasflare-mail"' });
 	}
 	const protocol = protocolForPath(new URL(c.req.url).pathname);
@@ -149,12 +141,12 @@ mailGateway.use("*", async (c, next) => {
 	const country = ((c.req.raw as Request & { cf?: { country?: string } }).cf?.country ?? "").toUpperCase() || null;
 	const row = await verifyMailPassword(c.env.DB, creds, protocol ?? undefined, country);
 	if (!row) {
+		// Failures are limited per address and username, never by locking out the address: every
+		// mail app behind one bridge shares its IP, so one wrong password must not lock out the rest.
+		// (Mail App Passwords are long and random, so guessing one is not the threat this guards.)
 		if (c.env.LOGIN_RATE_LIMIT) {
-			const { success } = await c.env.LOGIN_RATE_LIMIT.limit({ key: `mailgw:${ip}` });
-			if (!success) {
-				await recordApiLockout(ip);
-				return c.json({ error: "Too many failed attempts" }, 429);
-			}
+			const { success } = await c.env.LOGIN_RATE_LIMIT.limit({ key: `mailgw:${ip}:${creds.username ?? ""}` });
+			if (!success) return c.json({ error: "Too many failed attempts" }, 429);
 		}
 		return c.json({ error: "Invalid credentials or protocol not permitted" }, 401);
 	}
