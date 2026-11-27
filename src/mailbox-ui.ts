@@ -161,7 +161,7 @@ ${noticeBox(notice)}
 ${message.reason_detail ? html`<p class="notice ${message.folder === "Failed" ? "bad" : ""}">${t(`mb.folder.${message.folder}`)}: ${message.reason_detail}</p>` : ""}
 
 <div class="row mt12">
-${hasRaw && message.alias_address ? html`<form class="inline" method="post" action="${base}/resend"><button class="primary">${t("mb.resend")}</button></form>` : ""}
+${hasRaw && message.alias_address && message.folder !== "Sent" ? html`<form class="inline" method="post" action="${base}/resend"><button class="primary">${t("mb.resend")}</button></form>` : ""}
 <a href="${replyHref}"><button type="button">${t("mb.reply")}</button></a>
 <form class="inline" method="post" action="${base}/read"><input type="hidden" name="seen" value="${seen ? "0" : "1"}" /><button>${seen ? t("mb.markUnread") : t("mb.markRead")}</button></form>
 ${hasRaw ? html`<a href="${base}/raw"><button type="button">${t("mb.downloadEml")}</button></a>` : ""}

@@ -129,7 +129,9 @@ app.use("*", async (c, next) => {
 	await next();
 	c.header("X-Content-Type-Options", "nosniff");
 	c.header("Referrer-Policy", "same-origin");
-	c.header("X-Frame-Options", "DENY");
+	// Routes may set their own policy (the email preview needs SAMEORIGIN to be framed): only
+	// fill in the default when none was set.
+	if (!c.res.headers.has("X-Frame-Options")) c.header("X-Frame-Options", "DENY");
 	if (new URL(c.req.url).protocol === "https:") c.header("Strict-Transport-Security", "max-age=31536000");
 	if (NO_STORE.test(c.req.path)) c.header("Cache-Control", "no-store");
 	if (!c.res.headers.has("Content-Security-Policy")) {
@@ -879,11 +881,19 @@ app.get("/mailbox/:id/html", async (c) => {
 	const raw = await readMailboxRaw(c.env, c.get("config"), msg);
 	const parsed = raw ? await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" }).catch(() => null) : null;
 	if (!parsed?.html) return c.notFound();
-	// Strict sandbox CSP: zero scripts, zero external images/fonts/connections, allowed only inside our iframe.
-	c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'");
+	// Strict sandbox CSP: zero scripts, zero external images/fonts/connections, allowed only
+	// inside our iframe. The sandbox directive keeps the document self-contained even if it is
+	// ever opened outside the sandboxed iframe (CSP alone cannot block meta-refresh navigation).
+	c.header(
+		"Content-Security-Policy",
+		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; sandbox",
+	);
 	c.header("X-Frame-Options", "SAMEORIGIN");
 	c.header("Cache-Control", "no-store");
-	return c.html(parsed.html);
+	// A meta-refresh or <base> would navigate the preview (even inside the sandbox) to an
+	// attacker-controlled page. Matching whole tags is fooled by a ">" inside an attribute value;
+	// renaming the tag is not: an unknown <x-meta> or <x-base> element does nothing.
+	return c.html(parsed.html.replace(/<(\/?)(meta|base)(?=[\s/>])/gi, "<$1x-$2"));
 });
 
 app.get("/mailbox/:id/raw", async (c) => {
@@ -2119,7 +2129,11 @@ app.post("/aliases/bulk", async (c) => {
 									timestamp,
 								)
 							: action === "restore"
-								? statement("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ? AND deleted_at IS NOT NULL", timestamp)
+								? // Deleting turned forwarding off; restoring turns it back on, as the API's restore does.
+									statement(
+										"UPDATE aliases SET deleted_at = NULL, forward_mode = CASE WHEN forward_mode = 'none' THEN 'all' ELSE forward_mode END, forward_enabled = 1, updated_at = ? WHERE address = ? AND deleted_at IS NOT NULL",
+										timestamp,
+									)
 								: // Permanently deleting is only offered for deleted aliases, and only removes those,
 									// with everything recorded about them: contacts, forwards and other activity.
 									ids.flatMap((id) => forgetStatements(db, id));

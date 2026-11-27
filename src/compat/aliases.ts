@@ -462,7 +462,15 @@ export async function restoreAlias(db: D1Database, address: string): Promise<voi
 export async function restoreAliases(db: D1Database, addresses: string[]): Promise<void> {
 	if (!addresses.length) return;
 	const ts = now();
-	const statements = addresses.map((address) => db.prepare("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ?").bind(ts, address));
+	// Deletion turns forwarding off (forward_mode 'none'): restore re-enables it, matching the
+	// create path's restore, so a restored alias is active again as clients expect.
+	const statements = addresses.map((address) =>
+		db
+			.prepare(
+				"UPDATE aliases SET deleted_at = NULL, forward_mode = CASE WHEN forward_mode = 'none' THEN 'all' ELSE forward_mode END, forward_enabled = 1, updated_at = ? WHERE address = ?",
+			)
+			.bind(ts, address),
+	);
 	for (let i = 0; i < statements.length; i += 100) await db.batch(statements.slice(i, i + 100));
 }
 

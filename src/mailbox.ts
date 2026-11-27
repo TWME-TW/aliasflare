@@ -359,14 +359,42 @@ export async function listMailboxMessages(
 
 /** Permanently deletes all messages in a folder (e.g. Trash or Skipped), cleaning up blobs. */
 export async function emptyMailboxFolder(env: Env, config: AppConfig, folder: MailboxFolder): Promise<number> {
-	const { results } = await env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE folder = ? LIMIT 500")
-		.bind(folder)
-		.all<{ id: string; storage_kind: string; storage_key: string | null }>();
-	for (const item of results) {
-		await deleteRawBlob(env, config, item);
-		await env.DB.prepare("DELETE FROM mailbox_messages WHERE id = ?").bind(item.id).run();
+	// Batched so a large folder is emptied completely, within one request's limits: R2 objects go in
+	// one delete call per batch, D1 rows in grouped statements (at most 100 bound values each), and
+	// S3 objects (one request each) up to a budget. Whatever is left is emptied by the next press.
+	const BATCH = 500;
+	const free = config.workersPlan === "free";
+	const maxBatches = free ? 2 : 20;
+	let s3Budget = free ? 30 : 800;
+	let deleted = 0;
+	for (let batch = 0; batch < maxBatches; batch += 1) {
+		const { results } = await env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE folder = ? LIMIT ?")
+			.bind(folder, BATCH)
+			.all<{ id: string; storage_kind: string; storage_key: string | null }>();
+		if (!results.length) break;
+		const done: string[] = [];
+		for (const item of results) {
+			if (item.storage_kind === "s3" && item.storage_key) {
+				if (s3Budget <= 0) break;
+				s3Budget -= 1;
+				await deleteRawBlob(env, config, item);
+			}
+			done.push(item.id);
+		}
+		const r2Keys = results.filter((item) => done.includes(item.id) && item.storage_kind === "r2" && item.storage_key).map((item) => item.storage_key!);
+		if (r2Keys.length && env.MAILBOX_BUCKET) await env.MAILBOX_BUCKET.delete(r2Keys).catch(() => undefined);
+		const statements: D1PreparedStatement[] = [];
+		for (let k = 0; k < done.length; k += 100) {
+			const ids = done.slice(k, k + 100);
+			const marks = ids.map(() => "?").join(", ");
+			statements.push(env.DB.prepare(`DELETE FROM mailbox_blobs WHERE message_id IN (${marks})`).bind(...ids));
+			statements.push(env.DB.prepare(`DELETE FROM mailbox_messages WHERE id IN (${marks})`).bind(...ids));
+		}
+		if (statements.length) await env.DB.batch(statements);
+		deleted += done.length;
+		if (done.length < results.length || results.length < BATCH) break;
 	}
-	return results.length;
+	return deleted;
 }
 
 export async function updateMailboxFlags(db: D1Database, id: string, opts: { add?: string[]; remove?: string[]; set?: string[] }): Promise<MailboxMessage | null> {
