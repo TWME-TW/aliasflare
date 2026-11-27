@@ -13,7 +13,7 @@ import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
 import type { SessionRow } from "./sessions";
 import { FORWARD_METHODS, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, UNSUBSCRIBE_FALLBACKS, type Settings } from "./settings";
-import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
+import { APP_SCRIPT, OPENPGP_BROWSER, PASSKEY_SCRIPT } from "./client";
 import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from "./outbound";
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
 import { formatFingerprint, type PgpKeyRow } from "./pgp";
@@ -955,8 +955,7 @@ const TOKEN_PERMISSIONS: ["zone" | "account", string, string, MessageKey?][] = [
 	["account", "Workers Scripts", "Edit", "cf.forWkd"],
 ];
 
-/** The browser build of OpenPGP.js, copied into public/ at build time (scripts/vendor-openpgp.mjs). */
-export const OPENPGP_BROWSER = "/vendor/openpgp.min.mjs";
+export { OPENPGP_BROWSER };
 
 /**
  * Makes a key pair in the browser for the form it sits in: the public key goes into its key field,

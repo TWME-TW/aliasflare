@@ -137,6 +137,9 @@ export const PASSKEY_SCRIPT = `
 })();
 `;
 
+/** The browser build of OpenPGP.js, copied into public/ at build time (scripts/vendor-openpgp.mjs). */
+export const OPENPGP_BROWSER = "/vendor/openpgp.min.mjs";
+
 /** Small progressive enhancements for every page: the language menu applies on change. */
 export const APP_SCRIPT = `(() => {
   "use strict";
@@ -457,7 +460,7 @@ export const APP_SCRIPT = `(() => {
       const passphraseInput = box.querySelector("[data-pgp-passphrase]");
       const passphrase = passphraseInput ? passphraseInput.value : "";
       const mod = button.dataset.pgpGenerate;
-      if (mod !== "/vendor/openpgp.min.mjs") return;
+      if (mod !== ${JSON.stringify(OPENPGP_BROWSER)}) return;
       button.disabled = true;
       button.setAttribute("aria-busy", "true");
       try {
