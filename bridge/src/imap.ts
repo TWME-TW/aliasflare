@@ -16,10 +16,15 @@ export type ImapServerOptions = {
 	gateway: MailGatewayClient;
 	tls?: BridgeTlsOptions;
 	allowPlaintextAuth?: boolean;
+	/** Milliseconds between lightweight folder-status checks during IMAP IDLE (default 60s, min 15s). */
+	idlePollMs?: number;
 };
 
+const MAX_IMAP_BUFFER_BYTES = 10 * 1024 * 1024 + 64 * 1024;
+const MAX_PENDING_IMAP_COMMANDS = 128;
+
 function quoteImap(value: string): string {
-	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]/g, " ")}"`;
+	return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n\0]/g, " ")}"`;
 }
 
 function formatImapDate(epochSec: number): string {
@@ -164,18 +169,22 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 	let isSecure = initialSecure;
 	let creds: GatewayCredentials | null = null;
 	let selectedFolder: string | null = null;
+	let selectedUidNext = 0;
 	let readOnly = false;
 	let cachedMessages: (ImapMessageSummary & { seq: number })[] = [];
 	let idleTag: string | null = null;
 	let idleTimer: ReturnType<typeof setInterval> | null = null;
+	let idleInFlight = false;
 	let pendingAuthPlainTag: string | null = null;
 	let pendingAppend: { tag: string; folder: string; flags: string[]; remaining: number; chunks: Buffer[] } | null = null;
 	let buffer = Buffer.alloc(0);
 	let processing = Promise.resolve();
+	let pendingCommands = 0;
 	// Raised by STARTTLS: lines that arrived in the clear behind it are dropped, not run under TLS.
 	let generation = 0;
 	// Set while a line that announced a literal waits for its handler.
 	let awaitingLiteral = false;
+	const idlePollMs = Math.max(15_000, opts.idlePollMs ?? 60_000);
 	// RFC 3501 5.4: an autologout timer of at least 30 minutes (IDLE clients re-issue within 29).
 	if (socket instanceof net.Socket) socket.setTimeout(31 * 60_000, () => socket.destroy());
 
@@ -188,6 +197,7 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 			clearInterval(idleTimer);
 			idleTimer = null;
 		}
+		idleInFlight = false;
 		idleTag = null;
 	};
 
@@ -203,7 +213,19 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 		if (!creds || !selectedFolder) return null;
 		const data = await opts.gateway.imapMessages(creds, selectedFolder);
 		cachedMessages = data.messages.map((m, i) => ({ ...m, seq: i + 1 }));
+		selectedUidNext = data.uidnext;
 		return data;
+	};
+
+	/** Checks lightweight folder counters before fetching the full message list. */
+	const syncSelectedIfChanged = async (): Promise<boolean> => {
+		if (!creds || !selectedFolder) return false;
+		const folders = await opts.gateway.imapFolders(creds);
+		const info = folders.find((f) => f.name === selectedFolder);
+		if (!info) return false;
+		if (info.exists === cachedMessages.length && info.uidnext === selectedUidNext) return false;
+		await refreshSelected();
+		return true;
 	};
 
 	const handleLine = async (line: string) => {
@@ -239,7 +261,7 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 			if (cmd === "NOOP") {
 				if (creds && selectedFolder) {
 					const prevCount = cachedMessages.length;
-					await refreshSelected();
+					await syncSelectedIfChanged();
 					if (cachedMessages.length !== prevCount) write(`* ${cachedMessages.length} EXISTS\r\n`);
 				}
 				write(`${tag} OK NOOP completed\r\n`);
@@ -402,17 +424,20 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 				idleTag = tag;
 				write("+ idling\r\n");
 				idleTimer = setInterval(async () => {
-					if (!creds || !selectedFolder || !idleTag) return;
+					if (!creds || !selectedFolder || !idleTag || idleInFlight) return;
+					idleInFlight = true;
 					try {
 						const prev = cachedMessages.length;
-						await refreshSelected();
-						if (cachedMessages.length !== prev) {
+						const changed = await syncSelectedIfChanged();
+						if (changed && cachedMessages.length !== prev) {
 							write(`* ${cachedMessages.length} EXISTS\r\n`);
 						}
 					} catch {
 						// Ignore transient polling errors during IDLE.
+					} finally {
+						idleInFlight = false;
 					}
-				}, 15_000);
+				}, idlePollMs);
 				return;
 			}
 
@@ -638,6 +663,11 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 			}
 			const nl = buffer.indexOf(10);
 			if (nl < 0) break;
+			if (pendingCommands >= MAX_PENDING_IMAP_COMMANDS) {
+				write("* BYE Too many queued commands\r\n");
+				activeSocket.destroy();
+				return;
+			}
 			const line = buffer.subarray(0, nl).toString("utf8").replace(/\r$/, "");
 			buffer = buffer.subarray(nl + 1);
 			const gen = generation;
@@ -645,15 +675,23 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 			// as lines: its handler decides whether those bytes are the literal.
 			const literalAhead = /\{\d+\+?\}$/.test(line);
 			if (literalAhead) awaitingLiteral = true;
+			pendingCommands += 1;
 			processing = processing
 				.then(() => (gen === generation ? handleLine(line) : undefined))
 				.catch(() => undefined)
 				.then(() => {
+					pendingCommands = Math.max(0, pendingCommands - 1);
 					if (!literalAhead) return;
 					awaitingLiteral = false;
 					pump();
 				});
 			if (literalAhead) break;
+		}
+		// Cap buffer unconditionally (even while awaiting a literal) so pipelined floods cannot OOM the bridge.
+		if (buffer.length > MAX_IMAP_BUFFER_BYTES) {
+			write("* BYE Buffer limit exceeded\r\n");
+			activeSocket.destroy();
+			return;
 		}
 		// A command line (literals aside, which are counted above) is never this long.
 		if (!pendingAppend && !awaitingLiteral && buffer.length > 64 * 1024) {

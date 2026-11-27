@@ -102,10 +102,23 @@ export async function ensureRecipientRow(db: D1Database, rawEmail: string, descr
  * `aliases.destination` / `alias_recipients`, and any address in `pgp_keys`.
  */
 export async function listRecipients(db: D1Database, settings: Settings): Promise<RecipientView[]> {
-	const [recRes, aliasDestRes, attachRes, pgpRes, domainRes] = await db.batch([
+	const [recRes, attachCountsRes, fallbackCountsRes, pgpRes, domainRes] = await db.batch([
 		db.prepare("SELECT * FROM recipients"),
-		db.prepare("SELECT address, destination FROM aliases WHERE deleted_at IS NULL"),
-		db.prepare("SELECT ar.alias_address, ar.recipient_email FROM alias_recipients ar JOIN aliases a ON a.address = ar.alias_address WHERE a.deleted_at IS NULL"),
+		db.prepare(
+			`SELECT lower(ar.recipient_email) AS email, COUNT(*) AS cnt
+			 FROM alias_recipients ar
+			 JOIN aliases a ON a.address = ar.alias_address
+			 WHERE a.deleted_at IS NULL
+			 GROUP BY lower(ar.recipient_email)`,
+		),
+		db.prepare(
+			`SELECT lower(COALESCE(NULLIF(a.destination, ''), NULLIF(d.default_recipient, ''), '')) AS email, COUNT(*) AS cnt
+			 FROM aliases a
+			 LEFT JOIN domains d ON d.domain = lower(substr(a.address, instr(a.address, '@') + 1))
+			 WHERE a.deleted_at IS NULL
+			   AND NOT EXISTS (SELECT 1 FROM alias_recipients ar WHERE ar.alias_address = a.address)
+			 GROUP BY lower(COALESCE(NULLIF(a.destination, ''), NULLIF(d.default_recipient, ''), ''))`,
+		),
 		db.prepare("SELECT * FROM pgp_keys"),
 		db.prepare("SELECT domain, default_recipient FROM domains WHERE default_recipient IS NOT NULL AND default_recipient != ''"),
 	]);
@@ -118,17 +131,6 @@ export async function listRecipients(db: D1Database, settings: Settings): Promis
 	for (const row of (pgpRes?.results ?? []) as PgpKeyRow[]) {
 		pgpByEmail.set(normalizeEmail(row.email), row);
 	}
-	const domainDefault = new Map<string, string>();
-	for (const row of (domainRes?.results ?? []) as { domain: string; default_recipient: string }[]) {
-		domainDefault.set(row.domain.toLowerCase(), normalizeEmail(row.default_recipient));
-	}
-
-	const attachedByAlias = new Map<string, string[]>();
-	for (const row of (attachRes?.results ?? []) as { alias_address: string; recipient_email: string }[]) {
-		const list = attachedByAlias.get(row.alias_address) ?? [];
-		list.push(normalizeEmail(row.recipient_email));
-		attachedByAlias.set(row.alias_address, list);
-	}
 
 	const counts = new Map<string, number>();
 	const addEmail = (email: string, delta: number) => {
@@ -138,18 +140,17 @@ export async function listRecipients(db: D1Database, settings: Settings): Promis
 	};
 
 	for (const email of storedByEmail.keys()) addEmail(email, 0);
-	for (const email of domainDefault.values()) addEmail(email, 0);
+	for (const row of (domainRes?.results ?? []) as { domain: string; default_recipient: string }[]) {
+		addEmail(row.default_recipient, 0);
+	}
 	if (settings.defaultDestination) addEmail(settings.defaultDestination, 0);
 
-	for (const row of (aliasDestRes?.results ?? []) as { address: string; destination: string | null }[]) {
-		const attached = attachedByAlias.get(row.address);
-		if (attached && attached.length > 0) {
-			for (const email of attached) addEmail(email, 1);
-		} else {
-			const domain = row.address.slice(row.address.lastIndexOf("@") + 1).toLowerCase();
-			const target = row.destination?.toLowerCase() || domainDefault.get(domain) || settings.defaultDestination;
-			if (target) addEmail(target, 1);
-		}
+	for (const row of (attachCountsRes?.results ?? []) as { email: string; cnt: number }[]) {
+		addEmail(row.email, Number(row.cnt ?? 0));
+	}
+	for (const row of (fallbackCountsRes?.results ?? []) as { email: string; cnt: number }[]) {
+		const target = row.email || settings.defaultDestination;
+		if (target) addEmail(target, Number(row.cnt ?? 0));
 	}
 
 	const out: RecipientView[] = [];
@@ -374,11 +375,7 @@ export async function effectiveAliasDestinations(
 	return fallback ? [normalizeEmail(fallback)] : [];
 }
 
-/** Loads recipient behavior row + pgp key row for one destination email. */
-export async function recipientPolicy(
-	db: D1Database,
-	email: string,
-): Promise<{
+export type RecipientPolicy = {
 	active: boolean;
 	canReplySend: boolean;
 	shouldEncrypt: boolean;
@@ -387,14 +384,9 @@ export async function recipientPolicy(
 	removePgpKeys: boolean;
 	removePgpSignatures: boolean;
 	pgpKey: PgpKeyRow | null;
-}> {
-	const normalized = normalizeEmail(email);
-	const [recRes, pgpRes] = await db.batch([
-		db.prepare("SELECT * FROM recipients WHERE email = ?").bind(normalized),
-		db.prepare("SELECT * FROM pgp_keys WHERE email = ?").bind(normalized),
-	]);
-	const rec = (recRes?.results?.[0] as RecipientRow | undefined) ?? null;
-	const pgp = (pgpRes?.results?.[0] as PgpKeyRow | undefined) ?? null;
+};
+
+function buildRecipientPolicy(rec: RecipientRow | null, pgp: PgpKeyRow | null): RecipientPolicy {
 	const shouldEncrypt = pgp ? pgp.encrypt === 1 : rec?.should_encrypt === 1;
 	const protectedHeaders = pgp ? pgp.hide_subject === 1 : rec?.protected_headers === 1;
 	const inlineEncryption = pgp ? pgp.inline_encryption === 1 : rec?.inline_encryption === 1;
@@ -410,4 +402,36 @@ export async function recipientPolicy(
 		removePgpSignatures,
 		pgpKey: pgp,
 	};
+}
+
+/** Loads recipient behavior row + pgp key row for one destination email. */
+export async function recipientPolicy(db: D1Database, email: string): Promise<RecipientPolicy> {
+	const normalized = normalizeEmail(email);
+	const [recRes, pgpRes] = await db.batch([
+		db.prepare("SELECT * FROM recipients WHERE email = ?").bind(normalized),
+		db.prepare("SELECT * FROM pgp_keys WHERE email = ?").bind(normalized),
+	]);
+	const rec = (recRes?.results?.[0] as RecipientRow | undefined) ?? null;
+	const pgp = (pgpRes?.results?.[0] as PgpKeyRow | undefined) ?? null;
+	return buildRecipientPolicy(rec, pgp);
+}
+
+/** Batch-loads recipient policies for multiple destination emails in one D1 round trip. */
+export async function recipientPolicies(db: D1Database, emails: string[]): Promise<Map<string, RecipientPolicy>> {
+	const unique = [...new Set(emails.map(normalizeEmail).filter(Boolean))];
+	const map = new Map<string, RecipientPolicy>();
+	if (!unique.length) return map;
+	const marks = unique.map(() => "?").join(", ");
+	const [recRes, pgpRes] = await db.batch([
+		db.prepare(`SELECT * FROM recipients WHERE email IN (${marks})`).bind(...unique),
+		db.prepare(`SELECT * FROM pgp_keys WHERE email IN (${marks})`).bind(...unique),
+	]);
+	const recByEmail = new Map<string, RecipientRow>();
+	for (const row of (recRes?.results ?? []) as RecipientRow[]) recByEmail.set(normalizeEmail(row.email), row);
+	const pgpByEmail = new Map<string, PgpKeyRow>();
+	for (const row of (pgpRes?.results ?? []) as PgpKeyRow[]) pgpByEmail.set(normalizeEmail(row.email), row);
+	for (const email of unique) {
+		map.set(email, buildRecipientPolicy(recByEmail.get(email) ?? null, pgpByEmail.get(email) ?? null));
+	}
+	return map;
 }

@@ -618,25 +618,49 @@ function isoTime(timestamp: number | null | undefined): string {
 	return showable(timestamp) ? new Date(timestamp * 1000).toISOString() : "";
 }
 
+// Pure stateless ICU formatters cached per locale so rendering 100-200 rows does not construct
+// hundreds of Intl instances on every request (critical for Workers Free plan's 10 ms CPU limit).
+const relativeTimeFormatters = new Map<string, Intl.RelativeTimeFormat>();
+const dateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getRelativeTimeFormatter(locale: string): Intl.RelativeTimeFormat {
+	let fmt = relativeTimeFormatters.get(locale);
+	if (!fmt) {
+		fmt = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+		relativeTimeFormatters.set(locale, fmt);
+	}
+	return fmt;
+}
+
+function getDateTimeFormatter(locale: string): Intl.DateTimeFormat {
+	let fmt = dateTimeFormatters.get(locale);
+	if (!fmt) {
+		fmt = new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+		dateTimeFormatters.set(locale, fmt);
+	}
+	return fmt;
+}
+
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+	["year", 365 * 86400],
+	["month", 30 * 86400],
+	["week", 7 * 86400],
+	["day", 86400],
+	["hour", 3600],
+	["minute", 60],
+];
+
 function ago(timestamp: number, locale: string, now = Date.now() / 1000): string {
 	if (!showable(timestamp)) return "—";
 	const seconds = Math.round(timestamp - now);
-	const units: [Intl.RelativeTimeFormatUnit, number][] = [
-		["year", 365 * 86400],
-		["month", 30 * 86400],
-		["week", 7 * 86400],
-		["day", 86400],
-		["hour", 3600],
-		["minute", 60],
-	];
-	const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-	for (const [unit, size] of units) if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
+	const format = getRelativeTimeFormatter(locale);
+	for (const [unit, size] of RELATIVE_UNITS) if (Math.abs(seconds) >= size) return format.format(Math.round(seconds / size), unit);
 	return format.format(0, "second");
 }
 
 function when(timestamp: number | null, locale: string): string {
 	if (!showable(timestamp)) return "—";
-	return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(timestamp * 1000)) + " UTC";
+	return getDateTimeFormatter(locale).format(new Date(timestamp * 1000)) + " UTC";
 }
 
 function timeTag(timestamp: number | null, locale: string): Html | string {

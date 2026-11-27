@@ -48,6 +48,8 @@ export function attachSmtpSession(socket: Duplex, opts: SmtpServerOptions, initi
 	let dataOverflow = false;
 	let buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 	let processing = Promise.resolve();
+	let pendingLines = 0;
+	let paused = false;
 	// Raised by STARTTLS: lines that arrived in the clear behind it are dropped, not run under TLS.
 	let generation = 0;
 	if (socket instanceof net.Socket) socket.setTimeout(IDLE_TIMEOUT_MS, () => socket.destroy());
@@ -281,6 +283,11 @@ export function attachSmtpSession(socket: Duplex, opts: SmtpServerOptions, initi
 				buffer = buffer.subarray(nl + 1);
 				if (line.length && line[line.length - 1] === 0x0d) line = line.subarray(0, line.length - 1);
 				const gen = generation;
+				pendingLines += 1;
+				if (!paused && pendingLines >= 512 && typeof sock.pause === "function") {
+					paused = true;
+					sock.pause();
+				}
 				processing = processing
 					.then(() => {
 						if (gen !== generation) return;
@@ -290,7 +297,14 @@ export function attachSmtpSession(socket: Duplex, opts: SmtpServerOptions, initi
 						}
 						return handleLine(line.toString("utf8"));
 					})
-					.catch(() => undefined);
+					.catch(() => undefined)
+					.then(() => {
+						pendingLines = Math.max(0, pendingLines - 1);
+						if (paused && pendingLines < 128 && typeof sock.resume === "function") {
+							paused = false;
+							sock.resume();
+						}
+					});
 			}
 			if (buffer.byteLength > MAX_LINE_BYTES) {
 				write("500 5.5.6 Line too long\r\n");

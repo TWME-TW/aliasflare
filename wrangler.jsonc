@@ -10,7 +10,8 @@
 	// Copies the browser build of OpenPGP.js into public/vendor (key pairs made in the dashboard).
 	"build": { "command": "node scripts/vendor-openpgp.mjs" },
 	// Query strings (searches, addresses in notices) are left out of logs and traces.
-	"observability": { "enabled": true, "redact_query_string": true },
+	// invocation_logs is off so only explicit console logs (setup codes, warnings, errors) consume Observability quota.
+	"observability": { "enabled": true, "redact_query_string": true, "logs": { "enabled": true, "invocation_logs": false } },
 	// Alias domains and the optional Mailflare connection are set up on the dashboard after
 	// you register a passkey. Variables or secrets with the names listed in src/env.d.ts
 	// override them; keep_vars leaves dashboard-set ones alone.

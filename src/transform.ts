@@ -102,9 +102,12 @@ export async function transformForward(
 	let { html, text } = input;
 	let trackersRemoved = 0;
 
+	const atBottom = options.bannerLocation === "bottom";
+	let bottomInserted = false;
+
 	if (options.removeTrackers) {
 		if (html && typeof HTMLRewriter !== "undefined") {
-			html = await new HTMLRewriter()
+			let rewriter = new HTMLRewriter()
 				.on("img", {
 					element(element) {
 						const attributes = {
@@ -129,9 +132,22 @@ export async function transformForward(
 							trackersRemoved += 1;
 						}
 					},
-				})
-				.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
-				.text();
+				});
+			// Bottom banners sit at </body>, after every <img> and <a> has been counted, so one pass suffices.
+			if (options.banner && atBottom) {
+				const banner = options.banner;
+				rewriter = rewriter.on("body", {
+					element(element) {
+						if (bottomInserted) return;
+						element.onEndTag((endTag) => {
+							if (bottomInserted) return;
+							endTag.before(bannerHtml(banner, trackersRemoved, options.t), { html: true });
+							bottomInserted = true;
+						});
+					},
+				});
+			}
+			html = await rewriter.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } })).text();
 		}
 		if (text) {
 			const cleaned = cleanText(text);
@@ -143,24 +159,26 @@ export async function transformForward(
 
 	if (options.banner) {
 		const banner = options.banner;
-		const atBottom = options.bannerLocation === "bottom";
-		if (html) {
+		if (html && !bottomInserted) {
 			let inserted = false;
 			const block = bannerHtml(banner, trackersRemoved, options.t);
 			if (typeof HTMLRewriter !== "undefined") {
-				html = await new HTMLRewriter()
-					.on("body", {
-						element(element) {
-							if (inserted) return;
-							if (atBottom) element.append(block, { html: true });
-							else element.prepend(block, { html: true });
-							inserted = true;
-						},
-					})
-					.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
-					.text();
+				const hasBody = /<body[\s>/]/i.test(html);
+				if (hasBody) {
+					html = await new HTMLRewriter()
+						.on("body", {
+							element(element) {
+								if (inserted) return;
+								if (atBottom) element.append(block, { html: true });
+								else element.prepend(block, { html: true });
+								inserted = true;
+							},
+						})
+						.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
+						.text();
+				}
 				// Without a <body>, place a top banner right after <head> via HTMLRewriter.
-				if (!inserted && !atBottom) {
+				if (!inserted && !atBottom && /<head[\s>/]/i.test(html)) {
 					html = await new HTMLRewriter()
 						.on("head", {
 							element(element) {
