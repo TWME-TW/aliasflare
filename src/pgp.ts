@@ -138,15 +138,53 @@ export async function sendEncrypted(env: Env, message: Outgoing, key: PgpKeyRow,
 	return await sendRaw(env, message, raw, messageId);
 }
 
-/** A readable text version of an HTML body, for inline PGP (which carries text only). */
+const HIDDEN_ELEMENTS = new Set(["script", "style", "head", "title"]);
+const LINE_BREAK_ELEMENTS = new Set(["br", "p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"]);
+
+/**
+ * A readable text version of an HTML body, for inline PGP (which carries text only). One pass over
+ * the markup: text outside tags is kept, tags are dropped (some as line breaks), and the contents
+ * of script, style, head and title are skipped. The result is text, never rendered as HTML.
+ */
 export function htmlToPlainText(html: string): string {
 	const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-	return html
-		.replace(/<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, "")
-		.replace(/<!--[\s\S]*?-->/g, "")
-		.replace(/<br\s*\/?>/gi, "\n")
-		.replace(/<\/(p|div|li|tr|h[1-6]|blockquote)\s*>/gi, "\n")
-		.replace(/<[^>]*>/g, "")
+	const lower = html.toLowerCase();
+	let text = "";
+	let skipUntil: string | null = null;
+	let i = 0;
+	while (i < html.length) {
+		if (skipUntil) {
+			// Inside script or style a "<" is not a tag: only the element's own end tag ends it.
+			const end = lower.indexOf(`</${skipUntil}`, i);
+			const after = end < 0 ? -1 : html.indexOf(">", end);
+			i = after < 0 ? html.length : after + 1;
+			skipUntil = null;
+			continue;
+		}
+		const open = html.indexOf("<", i);
+		if (open < 0) {
+			text += html.slice(i);
+			break;
+		}
+		text += html.slice(i, open);
+		if (html.startsWith("<!--", open)) {
+			const end = html.indexOf("-->", open + 4);
+			i = end < 0 ? html.length : end + 3;
+			continue;
+		}
+		const close = html.indexOf(">", open + 1);
+		if (close < 0) break;
+		const tag = /^<\s*(\/?)\s*([a-zA-Z0-9]+)/.exec(html.slice(open, close + 1));
+		const name = tag?.[2]?.toLowerCase() ?? "";
+		const closing = tag?.[1] === "/";
+		if (!closing && HIDDEN_ELEMENTS.has(name) && !html.slice(open, close).endsWith("/")) {
+			skipUntil = name;
+		} else if (LINE_BREAK_ELEMENTS.has(name) && (closing || name === "br")) {
+			text += "\n";
+		}
+		i = close + 1;
+	}
+	return text
 		.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
 			if (name[0] === "#") {
 				const code = name[1] === "x" || name[1] === "X" ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
