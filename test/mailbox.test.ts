@@ -238,7 +238,10 @@ describe("dashboard Webmail UI, sandboxed HTML preview & compose", () => {
 		await db
 			.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at) VALUES ('off@a.test', 1, 'u1', 'none', 0, 1, 1), ('shop@a.test', 2, 'u2', 'all', 1, 1, 1)")
 			.run();
-		await deliver("off@a.test", { subject: "HTML Test", html: "<p>Hello</p><script>alert(1)</script>" });
+		await deliver("off@a.test", {
+			subject: "HTML Test",
+			html: '<base href="https://evil.test/"><meta http-equiv="refresh" content="0; url=https://evil.test/"><p>Hello</p><script>alert(1)</script>',
+		});
 
 		const listRes = await app.fetch(new Request(`${ORIGIN}/mailbox?folder=Skipped&q=subject:HTML+is:unread`, { headers: { cookie } }), env);
 		expect(listRes.status).toBe(200);
@@ -251,7 +254,16 @@ describe("dashboard Webmail UI, sandboxed HTML preview & compose", () => {
 		expect(detailHtml).toContain('sandbox=""');
 
 		const iframeRes = await app.fetch(new Request(`${ORIGIN}/mailbox/${msg.id}/html`, { headers: { cookie } }), env);
+		const iframeHtml = await iframeRes.text();
 		expect(iframeRes.headers.get("content-security-policy")).toContain("default-src 'none'");
+		// The sandbox directive keeps the preview self-contained even outside the sandboxed iframe.
+		expect(iframeRes.headers.get("content-security-policy")).toContain("sandbox");
+		// The preview is framed by the detail page: SAMEORIGIN must survive the global middleware.
+		expect(iframeRes.headers.get("x-frame-options")).toBe("SAMEORIGIN");
+		// A meta-refresh or <base> must not be able to navigate the preview to a phishing page.
+		expect(iframeHtml).not.toMatch(/<meta[^>]+http-equiv\s*=\s*["']?refresh/i);
+		expect(iframeHtml).not.toMatch(/<base\b/i);
+		expect(iframeHtml).toContain("Hello");
 
 		// Compose & send from alias -> stored in Sent.
 		const composeRes = await app.fetch(

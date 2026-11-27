@@ -32,6 +32,7 @@ import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { parseMailCredentials, verifyMailPassword, type MailPasswordRow, type MailProtocol } from "./mail-passwords";
 import { sendOutbound, type OutboundAttachment } from "./outbound";
 import { runRules } from "./rules";
+import { clientKey } from "./ratelimit";
 import { loadSettings, type Settings } from "./settings";
 import { readLimited } from "./streams";
 
@@ -97,7 +98,9 @@ export const mailGateway = new Hono<GatewayEnv>();
 
 // Authenticate every request using Mail App Passwords + check global & per-key protocol toggles.
 mailGateway.use("*", async (c, next) => {
-	const ip = c.req.header("CF-Connecting-IP") ?? "unknown";
+	// clientKey buckets IPv6 per /64: the bridge's egress hosts must not dodge the limit by
+	// rotating addresses within their /64.
+	const ip = clientKey(c.req.header("CF-Connecting-IP"));
 	if (c.env.API_RATE_LIMIT) {
 		const { success } = await c.env.API_RATE_LIMIT.limit({ key: `mailgw:${ip}` });
 		if (!success) return c.json({ error: "Rate limit exceeded" }, 429);

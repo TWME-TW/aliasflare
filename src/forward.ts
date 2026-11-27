@@ -941,6 +941,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 export async function resendMailboxMessage(env: Env, config: AppConfig, messageId: string): Promise<{ ok: boolean; detail: string }> {
 	const msg = await getMailboxMessage(env.DB, messageId);
 	if (!msg || !msg.alias_address) return { ok: false, detail: "Message not found or has no target alias." };
+	// A Sent copy is the owner's own outbound mail (from_address is the alias, not the sender):
+	// resending it would push the user's own mail back through the forwarding pipeline.
+	if (msg.folder === "Sent") return { ok: false, detail: "A sent copy cannot be resent." };
 	const raw = await readMailboxRaw(env, config, msg);
 	if (!raw) return { ok: false, detail: "No raw message copy is stored for this entry." };
 	const rawCopy = raw.slice().buffer as ArrayBuffer;

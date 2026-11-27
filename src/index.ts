@@ -129,7 +129,9 @@ app.use("*", async (c, next) => {
 	await next();
 	c.header("X-Content-Type-Options", "nosniff");
 	c.header("Referrer-Policy", "same-origin");
-	c.header("X-Frame-Options", "DENY");
+	// Routes may set their own policy (the email preview needs SAMEORIGIN to be framed): only
+	// fill in the default when none was set.
+	if (!c.res.headers.has("X-Frame-Options")) c.header("X-Frame-Options", "DENY");
 	if (new URL(c.req.url).protocol === "https:") c.header("Strict-Transport-Security", "max-age=31536000");
 	if (NO_STORE.test(c.req.path)) c.header("Cache-Control", "no-store");
 	if (!c.res.headers.has("Content-Security-Policy")) {
@@ -879,11 +881,18 @@ app.get("/mailbox/:id/html", async (c) => {
 	const raw = await readMailboxRaw(c.env, c.get("config"), msg);
 	const parsed = raw ? await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" }).catch(() => null) : null;
 	if (!parsed?.html) return c.notFound();
-	// Strict sandbox CSP: zero scripts, zero external images/fonts/connections, allowed only inside our iframe.
-	c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'");
+	// Strict sandbox CSP: zero scripts, zero external images/fonts/connections, allowed only
+	// inside our iframe. The sandbox directive keeps the document self-contained even if it is
+	// ever opened outside the sandboxed iframe (CSP alone cannot block meta-refresh navigation).
+	c.header(
+		"Content-Security-Policy",
+		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; sandbox",
+	);
 	c.header("X-Frame-Options", "SAMEORIGIN");
 	c.header("Cache-Control", "no-store");
-	return c.html(parsed.html);
+	// A meta-refresh or <base> would navigate the preview (even inside the sandbox) to an
+	// attacker-controlled page: strip both, as webmail providers do.
+	return c.html(parsed.html.replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "").replace(/<base\b[^>]*>/gi, ""));
 });
 
 app.get("/mailbox/:id/raw", async (c) => {

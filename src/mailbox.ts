@@ -359,14 +359,24 @@ export async function listMailboxMessages(
 
 /** Permanently deletes all messages in a folder (e.g. Trash or Skipped), cleaning up blobs. */
 export async function emptyMailboxFolder(env: Env, config: AppConfig, folder: MailboxFolder): Promise<number> {
-	const { results } = await env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE folder = ? LIMIT 500")
-		.bind(folder)
-		.all<{ id: string; storage_kind: string; storage_key: string | null }>();
-	for (const item of results) {
-		await deleteRawBlob(env, config, item);
-		await env.DB.prepare("DELETE FROM mailbox_messages WHERE id = ?").bind(item.id).run();
+	// Batched so a huge folder (e.g. thousands of skipped spam captures) is emptied completely,
+	// with a bound per call to keep one request from running away.
+	const BATCH = 500;
+	const MAX_BATCHES = 20;
+	let deleted = 0;
+	for (let batch = 0; batch < MAX_BATCHES; batch += 1) {
+		const { results } = await env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE folder = ? LIMIT ?")
+			.bind(folder, BATCH)
+			.all<{ id: string; storage_kind: string; storage_key: string | null }>();
+		if (!results.length) break;
+		for (const item of results) {
+			await deleteRawBlob(env, config, item);
+			await env.DB.prepare("DELETE FROM mailbox_messages WHERE id = ?").bind(item.id).run();
+		}
+		deleted += results.length;
+		if (results.length < BATCH) break;
 	}
-	return results.length;
+	return deleted;
 }
 
 export async function updateMailboxFlags(db: D1Database, id: string, opts: { add?: string[]; remove?: string[]; set?: string[] }): Promise<MailboxMessage | null> {

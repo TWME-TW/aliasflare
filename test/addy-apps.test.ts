@@ -115,6 +115,8 @@ describe("addy.io apps", () => {
 		expect(deleted.json.ids).toEqual(["u1"]);
 		const restored = await call("/v1/aliases/restore/bulk", "POST", { ids: ["u1", "u2", "u4"] });
 		expect(restored.json.ids).toEqual(["u1", "u4"]);
+		// Deletion turned forwarding off, so restoring re-activates the alias.
+		expect((await call("/v1/aliases/u1")).json.data.active).toBe(true);
 		const forgotten = await call("/v1/aliases/forget/bulk", "POST", { ids: ["u4"] });
 		expect(forgotten.json.ids).toEqual(["u4"]);
 		expect((await call("/v1/aliases/u4")).status).toBe(404);
