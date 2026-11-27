@@ -224,7 +224,8 @@ ${noticeBox(notice)}
 ${aliases.map((addr) => html`<option value="${addr}" ${addr === from ? "selected" : ""}>${addr}</option>`)}
 </select>
 <label for="composeTo">${t("mb.colTo")}</label>
-<input id="composeTo" name="to" type="email" value="${to}" required placeholder="recipient@example.com" />
+<input id="composeTo" name="to" type="email" value="${to}" required placeholder="recipient@example.com" list="composeToList" autocomplete="off" data-recipient-search="/mailbox/recipients" data-from-select="composeFrom" />
+<datalist id="composeToList"></datalist>
 <label for="composeSubject">${t("mb.colSubject")}</label>
 <input id="composeSubject" name="subject" type="text" value="${subject}" maxlength="500" required />
 <label for="composeBody">${t("mb.body")}</label>

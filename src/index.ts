@@ -760,6 +760,34 @@ app.get("/mailbox", async (c) => {
 	);
 });
 
+/**
+ * Recipient suggestions for Compose: the people the aliases have mail with (most recent first),
+ * matched on address or name, one entry per address with the alias it last used.
+ */
+app.get("/mailbox/recipients", async (c) => {
+	const q = (c.req.query("q") ?? "").trim().toLowerCase().slice(0, 100);
+	const like = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+	const { results } = await c.env.DB.prepare(
+		`SELECT c.email, c.name, c.alias_address,
+		        MAX(COALESCE(c.last_reply_at, 0), COALESCE(c.last_forward_at, 0), COALESCE(c.last_sent_at, 0), c.created_at) AS seen
+		 FROM contacts c JOIN aliases a ON a.address = c.alias_address
+		 WHERE c.blocked = 0 AND a.deleted_at IS NULL AND (c.email LIKE ?1 ESCAPE '\\' OR LOWER(COALESCE(c.name, '')) LIKE ?1 ESCAPE '\\')
+		 ORDER BY seen DESC LIMIT 100`,
+	)
+		.bind(like)
+		.all<{ email: string; name: string | null; alias_address: string }>();
+	const seen = new Set<string>();
+	const recipients: { email: string; name: string | null; alias: string }[] = [];
+	for (const row of results) {
+		if (seen.has(row.email)) continue;
+		seen.add(row.email);
+		recipients.push({ email: row.email, name: row.name, alias: row.alias_address });
+		if (recipients.length >= 15) break;
+	}
+	c.header("Cache-Control", "no-store");
+	return c.json({ recipients });
+});
+
 app.get("/mailbox/compose", async (c) => {
 	const { results } = await c.env.DB.prepare("SELECT address FROM aliases WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 200").all<{ address: string }>();
 	const aliases = results.map((r) => r.address);
