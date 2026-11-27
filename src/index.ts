@@ -57,6 +57,7 @@ import {
 	addSimpleLoginContacts,
 	newFetchBudget,
 	defaultImportDomains,
+	detectCustomDomains,
 	fetchAddy,
 	fetchAddyExtras,
 	importAddyExtras,
@@ -100,7 +101,9 @@ import {
 	STYLE,
 	importPage,
 	loginPage,
+	mailboxSettingsPage,
 	messagePage,
+	onboardingPage,
 	passkeysPage,
 	settingsPage,
 	setupPage,
@@ -232,6 +235,7 @@ export async function readFormBody(c: C, next: () => Promise<void>): Promise<Res
 	if (
 		c.req.method === "POST" &&
 		!path.startsWith("/import/") &&
+		!path.startsWith("/onboarding/import/") &&
 		path !== "/api" &&
 		!path.startsWith("/api/") &&
 		path !== "/mcp" &&
@@ -1173,6 +1177,43 @@ app.post("/settings", async (c) => {
 	return reply("notice.settingsSaved", true);
 });
 
+app.get("/settings/mailbox", async (c) =>
+	c.html(mailboxSettingsPage(c.get("t"), { settings: await pageSettings(c), notice: noticeFrom(c) })),
+);
+
+app.post("/settings/mailbox", async (c) => {
+	const form = await c.req.parseBody();
+	const current = await loadSettings(c.env.DB);
+	const settings = normalizeSettings({
+		...current,
+		mailboxEnabled: form.mailboxEnabled === "1",
+		storeFailed: form.storeFailed === "1",
+		storeSkippedAliasOff: form.storeSkippedAliasOff === "1",
+		storeSkippedPromotions: form.storeSkippedPromotions === "1",
+		storeSkippedRuleBlock: form.storeSkippedRuleBlock === "1",
+		storeSkippedBlockedSender: form.storeSkippedBlockedSender === "1",
+		storeSkippedUnknownAlias: form.storeSkippedUnknownAlias === "1",
+		storeForwardedCopy: form.storeForwardedCopy === "1",
+		storeSentCopy: form.storeSentCopy === "1",
+		mailboxMailflareIntegration: form.mailboxMailflareIntegration === "1",
+		mailboxRetentionDays: form.mailboxRetentionDays,
+		mailboxMaxMessageKb: form.mailboxMaxMessageKb,
+		mailboxQuotaMb: form.mailboxQuotaMb,
+		mailboxQuotaPolicy: form.mailboxQuotaPolicy,
+		mailboxStorageBackend: form.mailboxStorageBackend,
+		imapEnabled: form.imapEnabled === "1",
+		pop3Enabled: form.pop3Enabled === "1",
+		smtpEnabled: form.smtpEnabled === "1",
+		pop3Folders: (["INBOX", "Skipped", "Failed", "Sent", "Trash"] as const).filter((f) => form[`pop3Folder:${f}`] === "1"),
+		pop3DeleteAction: form.pop3DeleteAction,
+		smtpFromPolicy: form.smtpFromPolicy,
+		smtpRateLimitPerHour: form.smtpRateLimitPerHour,
+	});
+	const { pgpRecipients: _kept, ...changed } = settings;
+	await saveSettingKeys(c.env.DB, changed);
+	return savedNotice(c, "/settings/mailbox", "notice.settingsSaved", true);
+});
+
 async function renderConnection(c: C, config: AppConfig, setup?: DomainSetup[]) {
 	const settings = await pageSettings(c);
 	return c.html(
@@ -1219,9 +1260,29 @@ app.post("/connection/cloudflare", async (c) => {
 	}
 	await saveConfig(c.env.DB, values);
 	const config = await loadConfig(c.env);
-	const settings = await loadSettings(c.env.DB);
+	let settings = await loadSettings(c.env.DB);
+	// Allow adding alias domains directly on the Connection page so setup is never blocked.
+	const addedDomains = [
+		...new Set(
+			text("aliasDomains")
+				.split(/[\s,]+/)
+				.map((domain) => domain.trim().toLowerCase().replace(/\.$/, ""))
+				.filter(Boolean),
+		),
+	];
+	if (addedDomains.length) {
+		const merged = [...new Set([...settings.aliasDomains, ...addedDomains])];
+		const badDomain = merged.find((domain) => !DOMAIN_PATTERN.test(domain)) ?? clashingDomain(merged);
+		if (badDomain) return redirectWithNotice(c, "/connection", "notice.badAliasDomain", { value: badDomain });
+		if (merged.length > MAX_ALIAS_DOMAINS) return redirectWithNotice(c, "/connection", "notice.tooManyDomains", { count: String(MAX_ALIAS_DOMAINS) });
+		if (settings.defaultDestination && isOwnAddress(settings.defaultDestination, merged)) {
+			return redirectWithNotice(c, "/connection", "notice.destinationOnReverse");
+		}
+		await saveSettingKeys(c.env.DB, { aliasDomains: merged });
+		settings = { ...settings, aliasDomains: merged };
+	}
 	const chosen = (Array.isArray(form.domains) ? form.domains : [form.domains]).filter((domain): domain is string => typeof domain === "string");
-	const domains = settings.aliasDomains.filter((domain) => chosen.includes(domain));
+	const domains = [...new Set([...settings.aliasDomains.filter((domain) => chosen.includes(domain)), ...addedDomains])];
 	if (!domains.length) return redirectWithNotice(c, "/connection", "notice.needAliasDomains");
 	// Each domain takes about a dozen Cloudflare API calls; the Free plan allows 50 subrequests per request.
 	if (config.workersPlan === "free" && domains.length > FREE_PLAN_SETUP_DOMAINS) {
@@ -1570,18 +1631,31 @@ app.get("/export/aliases.csv", async (c) => {
 
 app.get("/import", async (c) => {
 	const settings = await loadSettings(c.env.DB);
-	return c.html(importPage(c.get("t"), { domains: await defaultImportDomains(c.env.DB, settings) }));
+	return c.html(
+		importPage(c.get("t"), {
+			domains: await defaultImportDomains(c.env.DB, settings),
+			addDomainsDefault: settings.aliasDomains.length === 0,
+		}),
+	);
 });
 
-app.post("/import/:source", async (c) => {
+type ImportOutcome = {
+	domains: string[];
+	sourceLabel: string;
+	error?: string;
+	result?: Awaited<ReturnType<typeof importAliases>>;
+	addedDomains?: string[];
+	status?: 400 | 413;
+};
+
+async function executeImport(c: C, sourceName: string, options: { allowAutoDetect: boolean }): Promise<ImportOutcome | null> {
 	const t = c.get("t");
-	const sourceName = c.req.param("source");
-	if (!Object.hasOwn(IMPORT_SOURCES, sourceName)) return c.notFound();
+	if (!Object.hasOwn(IMPORT_SOURCES, sourceName)) return null;
 	const source = IMPORT_SOURCES[sourceName as keyof typeof IMPORT_SOURCES];
 	// A CSV file is at most 5 MB: enforce the cap on both declared length and actual stream bytes.
-	if (Number(c.req.header("Content-Length") ?? 0) > MAX_IMPORT_UPLOAD) return c.text(t("imp.err.format"), 413);
+	if (Number(c.req.header("Content-Length") ?? 0) > MAX_IMPORT_UPLOAD) return { domains: [], sourceLabel: source.label, error: t("imp.err.format"), status: 413 };
 	const rawBytes = await readLimited(c.req.raw.body, MAX_IMPORT_UPLOAD);
-	if (rawBytes === null) return c.text(t("imp.err.format"), 413);
+	if (rawBytes === null) return { domains: [], sourceLabel: source.label, error: t("imp.err.format"), status: 413 };
 	const settings = await loadSettings(c.env.DB);
 	const bounded = new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers, body: rawBytes.buffer as ArrayBuffer });
 	const form: Record<string, string | File> = Object.create(null);
@@ -1589,18 +1663,19 @@ app.post("/import/:source", async (c) => {
 		const data = await bounded.formData();
 		for (const [k, v] of data.entries()) form[k] = v;
 	} catch {
-		return c.text(t("imp.err.format"), 400);
+		return { domains: [], sourceLabel: source.label, error: t("imp.err.format"), status: 400 };
 	}
-	const domains = (typeof form.domains === "string" ? form.domains : "")
-		.split(/[\s,]+/)
-		.map((domain) => domain.trim().toLowerCase().replace(/\.$/, ""))
-		.filter((domain) => DOMAIN_PATTERN.test(domain));
-	const render = async (extra: { error?: string; result?: Awaited<ReturnType<typeof importAliases>> }) =>
-		c.html(
-			importPage(t, { domains: domains.length ? domains : await defaultImportDomains(c.env.DB, settings), source: source.label, ...extra }),
-			extra.error ? 400 : 200,
-		);
-	if (!domains.length) return render({ error: t("imp.err.noDomains") });
+	let domains = [
+		...new Set(
+			(typeof form.domains === "string" ? form.domains : "")
+				.split(/[\s,]+/)
+				.map((domain) => domain.trim().toLowerCase().replace(/\.$/, ""))
+				.filter((domain) => DOMAIN_PATTERN.test(domain)),
+		),
+	];
+	if (!domains.length && !options.allowAutoDetect) {
+		return { domains: await defaultImportDomains(c.env.DB, settings), sourceLabel: source.label, error: t("imp.err.noDomains"), status: 400 };
+	}
 
 	let server = "";
 	let aliases: ImportedAlias[];
@@ -1609,24 +1684,30 @@ app.post("/import/:source", async (c) => {
 	try {
 		if (source.fetch) {
 			const apiKey = typeof form.apiKey === "string" ? form.apiKey.trim() : "";
-			if (!apiKey) return render({ error: t("imp.err.auth") });
+			if (!apiKey) return { domains, sourceLabel: source.label, error: t("imp.err.auth"), status: 400 };
 			let url: URL;
 			try {
 				url = new URL(typeof form.server === "string" && form.server.trim() ? form.server.trim() : source.server);
 			} catch {
-				return render({ error: t("imp.err.badServer") });
+				return { domains, sourceLabel: source.label, error: t("imp.err.badServer"), status: 400 };
 			}
-			if (url.protocol !== "https:") return render({ error: t("imp.err.badServer") });
+			if (url.protocol !== "https:") return { domains, sourceLabel: source.label, error: t("imp.err.badServer"), status: 400 };
 			// A public host only: not an IP address, an internal name or this service itself. A
 			// port is allowed, for self-hosted servers.
 			const host = new URL(url.href);
 			host.port = "";
-			const ownHosts = [c.req.url, c.get("config").publicUrl, c.get("config").siteOrigin, c.get("config").mailflareUrl].map(hostnameOf).filter((h): h is string => !!h);
-			if (!safeHttpsUrl(host.href, ownHosts)) return render({ error: t("imp.err.badServer") });
+			const ownHostsList = [c.req.url, c.get("config").publicUrl, c.get("config").siteOrigin, c.get("config").mailflareUrl]
+				.map(hostnameOf)
+				.filter((h): h is string => !!h);
+			if (!safeHttpsUrl(host.href, ownHostsList)) return { domains, sourceLabel: source.label, error: t("imp.err.badServer"), status: 400 };
 			server = url.origin;
 			// One budget for the whole import, so aliases and contacts together stay inside Workers' subrequest limit.
 			const budget = newFetchBudget(c.get("config").workersPlan);
 			aliases = await source.fetch(server, apiKey, budget);
+			if (!domains.length) {
+				domains = detectCustomDomains(aliases, settings.aliasDomains);
+				if (!domains.length) return { domains: [], sourceLabel: source.label, error: t("imp.err.noCustomDomains"), status: 400 };
+			}
 			selection = selectByDomain(aliases, domains, settings.aliasDomains);
 			// Contacts are fetched only for the aliases being imported, one list per alias.
 			if (sourceName === "simplelogin" && form.contacts === "1") await addSimpleLoginContacts(server, apiKey, selection.chosen, budget);
@@ -1634,9 +1715,13 @@ app.post("/import/:source", async (c) => {
 			if (sourceName === "addy") extras = await fetchAddyExtras(server, apiKey, budget);
 		} else {
 			const file = form.file;
-			if (!(file instanceof File) || file.size === 0) return render({ error: t("imp.err.empty") });
-			if (file.size > 5_000_000) return render({ error: t("imp.err.format") });
+			if (!(file instanceof File) || file.size === 0) return { domains, sourceLabel: source.label, error: t("imp.err.empty"), status: 400 };
+			if (file.size > 5_000_000) return { domains, sourceLabel: source.label, error: t("imp.err.format"), status: 400 };
 			aliases = parseAliasCsv(await file.text());
+			if (!domains.length) {
+				domains = detectCustomDomains(aliases, settings.aliasDomains);
+				if (!domains.length) return { domains: [], sourceLabel: source.label, error: t("imp.err.noCustomDomains"), status: 400 };
+			}
 			selection = selectByDomain(aliases, domains, settings.aliasDomains);
 			// A labels column (aliasflare's own export) brings its labels, made by name as needed.
 			if (selection.chosen.some((alias) => alias.labels?.length)) extras = { labels: [], rules: [], blocklist: [], unread: [] };
@@ -1647,16 +1732,38 @@ app.post("/import/:source", async (c) => {
 			error.reason === "fetch"
 				? t("imp.err.fetch", { server, detail: error.message })
 				: t(error.reason === "auth" ? "imp.err.auth" : error.reason === "empty" ? "imp.err.empty" : "imp.err.format");
-		return render({ error: message });
+		return { domains, sourceLabel: source.label, error: message, status: 400 };
 	}
+
+	// Optionally register imported custom domains into aliasDomains so the user does not have to enter them twice.
+	const addedDomains: string[] = [];
+	let effectiveSettings = settings;
+	if (form.addDomains === "1") {
+		const importedDomains = [...new Set(selection.chosen.map((alias) => domainOf(alias.email)))];
+		const nextDomains = [...settings.aliasDomains];
+		for (const d of importedDomains) {
+			if (nextDomains.length >= MAX_ALIAS_DOMAINS) break;
+			if (nextDomains.includes(d) || !DOMAIN_PATTERN.test(d)) continue;
+			const trial = [...nextDomains, d];
+			if (clashingDomain(trial)) continue;
+			if (settings.defaultDestination && isOwnAddress(settings.defaultDestination, trial)) continue;
+			nextDomains.push(d);
+			addedDomains.push(d);
+		}
+		if (addedDomains.length) {
+			await saveSettingKeys(c.env.DB, { aliasDomains: nextDomains });
+			effectiveSettings = { ...settings, aliasDomains: nextDomains };
+		}
+	}
+
 	// Labels first: importing the aliases labels them by name. Rules' forwardTo targets must be
 	// known owner destinations (plus any destinations being imported when keepDestinations is on).
 	const keepDestinations = form.destinations === "1";
 	const batchSize = c.get("config").workersPlan === "free" ? 500 : 100;
 	let extra: Partial<Awaited<ReturnType<typeof importAddyExtras>>> = {};
 	if (extras) {
-		const ownDomains = [...new Set([...settings.aliasDomains, ...domains, ...selection.chosen.map((alias) => domainOf(alias.email))])];
-		const allowedDestinations = new Set((await listDestinations(c.env.DB, settings)).map((d) => d.email.toLowerCase()));
+		const ownDomains = [...new Set([...effectiveSettings.aliasDomains, ...domains, ...selection.chosen.map((alias) => domainOf(alias.email))])];
+		const allowedDestinations = new Set((await listDestinations(c.env.DB, effectiveSettings)).map((d) => d.email.toLowerCase()));
 		if (keepDestinations) {
 			for (const alias of selection.chosen) {
 				if (alias.destination && !isOwnAddress(alias.destination, ownDomains)) allowedDestinations.add(alias.destination.toLowerCase());
@@ -1671,7 +1778,7 @@ app.post("/import/:source", async (c) => {
 		});
 	}
 	const result = {
-		...(await importAliases(c.env.DB, settings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
+		...(await importAliases(c.env.DB, effectiveSettings, sourceName as keyof typeof IMPORT_SOURCES, selection, aliases.length, {
 			keepDestinations,
 			// Fewer, larger batches on the Free plan, where a request may make only 50 D1 queries.
 			batchSize,
@@ -1681,7 +1788,142 @@ app.post("/import/:source", async (c) => {
 	console.log(
 		JSON.stringify({ event: "import", source: sourceName, ...result, skippedDomains: result.skippedDomains.length, newDestinations: result.newDestinations.length, rulesSkipped: result.rulesSkipped?.length }),
 	);
-	return render({ result });
+	return { domains, sourceLabel: source.label, result, addedDomains };
+}
+
+app.post("/import/:source", async (c) => {
+	const outcome = await executeImport(c, c.req.param("source"), { allowAutoDetect: false });
+	if (!outcome) return c.notFound();
+	if (outcome.status === 413) return c.text(outcome.error ?? "", 413);
+	const settings = await loadSettings(c.env.DB);
+	return c.html(
+		importPage(c.get("t"), {
+			domains: outcome.domains.length ? outcome.domains : await defaultImportDomains(c.env.DB, settings),
+			source: outcome.sourceLabel,
+			result: outcome.result,
+			addedDomains: outcome.addedDomains,
+			addDomainsDefault: settings.aliasDomains.length === 0,
+			error: outcome.error,
+		}),
+		outcome.error ? 400 : 200,
+	);
+});
+
+// ---------- guided initial setup wizard (/onboarding) ----------
+
+async function renderOnboarding(
+	c: C,
+	step: 1 | 2 | 3,
+	extra: {
+		config?: AppConfig;
+		setup?: DomainSetup[];
+		importDomains?: string[];
+		importResult?: Awaited<ReturnType<typeof importAliases>>;
+		addedDomains?: string[];
+		importError?: string;
+		importSource?: string;
+		notice?: Notice;
+	} = {},
+) {
+	const config = extra.config ?? c.get("config");
+	const settings = await loadSettings(c.env.DB);
+	const fixed = envOverrides(c.env);
+	return c.html(
+		onboardingPage(c.get("t"), {
+			step,
+			settings,
+			cloudflare: {
+				hasToken: fixed.has("cloudflareApiToken"),
+				workerName: config.workerName,
+				workersPlan: config.workersPlan,
+				setup: extra.setup,
+			},
+			fixed,
+			importDomains: extra.importDomains ?? (await defaultImportDomains(c.env.DB, settings)),
+			importResult: extra.importResult,
+			addedDomains: extra.addedDomains,
+			importError: extra.importError,
+			importSource: extra.importSource,
+			notice: extra.notice ?? noticeFrom(c),
+		}),
+		extra.importError ? 400 : 200,
+	);
+}
+
+app.get("/onboarding", async (c) => {
+	const raw = Number(c.req.query("step"));
+	const step: 1 | 2 | 3 = raw === 2 ? 2 : raw === 3 ? 3 : 1;
+	return renderOnboarding(c, step);
+});
+
+app.post("/onboarding/domains", async (c) => {
+	const form = await c.req.parseBody();
+	const fixed = envOverrides(c.env);
+	const text = (key: string) => (typeof form[key] === "string" ? (form[key] as string).trim() : "");
+	const aliasDomains = [
+		...new Set(
+			text("aliasDomains")
+				.split(/[\s,]+/)
+				.map((domain) => domain.trim().toLowerCase().replace(/\.$/, ""))
+				.filter(Boolean),
+		),
+	];
+	if (!aliasDomains.length) return redirectWithNotice(c, "/onboarding?step=1", "notice.needAliasDomains");
+	const badDomain = aliasDomains.find((domain) => !DOMAIN_PATTERN.test(domain)) ?? clashingDomain(aliasDomains);
+	if (badDomain) return redirectWithNotice(c, "/onboarding?step=1", "notice.badAliasDomain", { value: badDomain });
+	if (aliasDomains.length > MAX_ALIAS_DOMAINS) {
+		return redirectWithNotice(c, "/onboarding?step=1", "notice.tooManyDomains", { count: String(MAX_ALIAS_DOMAINS) });
+	}
+	const destination = text("defaultDestination");
+	if (destination && !extractEmail(destination)) return redirectWithNotice(c, "/onboarding?step=1", "notice.badDestination");
+	if (destination && isOwnAddress(extractEmail(destination)!, aliasDomains)) {
+		return redirectWithNotice(c, "/onboarding?step=1", "notice.destinationOnReverse");
+	}
+	const configValues: Record<string, string> = {};
+	if (!fixed.has("workersPlan") && text("workersPlan")) {
+		if (!isWorkersPlan(text("workersPlan"))) return redirectWithNotice(c, "/onboarding?step=1", "notice.badProvider");
+		configValues.workersPlan = text("workersPlan");
+	}
+	if (!fixed.has("workerName") && typeof form.workerName === "string") {
+		const name = text("workerName").toLowerCase();
+		if (name && !WORKER_NAME_PATTERN.test(name)) return redirectWithNotice(c, "/onboarding?step=1", "notice.badWorkerName");
+		configValues.workerName = name;
+	}
+	// Never store a Cloudflare API token submitted from the dashboard.
+	const token = fixed.has("cloudflareApiToken") ? c.get("config").cloudflareApiToken : text("cloudflareApiToken");
+	await c.env.DB.prepare("DELETE FROM config WHERE key = 'cloudflareApiToken'").run();
+	await saveConfig(c.env.DB, configValues);
+	await saveSettingKeys(c.env.DB, {
+		aliasDomains,
+		defaultDestination: destination ? (extractEmail(destination) ?? "") : "",
+	});
+	const config = await loadConfig(c.env);
+	const wantsCloudflare = text("intent") !== "save" && !!token;
+	if (!wantsCloudflare) return redirectWithNotice(c, "/onboarding?step=2", "notice.domainsSaved");
+	if (config.workersPlan === "free" && aliasDomains.length > FREE_PLAN_SETUP_DOMAINS) {
+		return redirectWithNotice(c, "/onboarding?step=1", "notice.freeSetupLimit", { count: String(FREE_PLAN_SETUP_DOMAINS) });
+	}
+	const setup = await setUpCloudflare({
+		token,
+		domains: aliasDomains,
+		workerName: config.workerName,
+		replaceCatchAll: form.replaceCatchAll === "1",
+		wkdHost: form.wkdHost === "1",
+	});
+	return renderOnboarding(c, 1, { config, setup, notice: { text: c.get("t")("notice.domainsSaved") } });
+});
+
+app.post("/onboarding/import/:source", async (c) => {
+	const outcome = await executeImport(c, c.req.param("source"), { allowAutoDetect: true });
+	if (!outcome) return c.notFound();
+	if (outcome.status === 413) return c.text(outcome.error ?? "", 413);
+	return renderOnboarding(c, 2, {
+		importDomains: outcome.domains,
+		importSource: outcome.sourceLabel,
+		importResult: outcome.result,
+		addedDomains: outcome.addedDomains,
+		importError: outcome.error,
+	});
 });
 
 async function renderApiKeys(

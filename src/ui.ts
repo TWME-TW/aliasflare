@@ -354,6 +354,33 @@ html[data-navigating] body::before { content:""; position:fixed; top:0; left:0; 
 .jump a { flex:none; display:inline-flex; align-items:center; min-height:36px; padding:0 14px; border-radius:999px; background:var(--card); border:1px solid var(--line); color:var(--text); font-size:14px; font-weight:500; white-space:nowrap; }
 .jump a:hover { background:var(--hover); text-decoration:none; }
 .jump a[aria-current] { background:var(--nav-active); border-color:transparent; color:var(--nav-active-text); }
+/* Top sub-tabs for consolidated navigation sections (Filters & Settings). */
+.subnav { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding:4px 0 6px; border-bottom:1px solid var(--line); margin-bottom:2px; }
+.subnav::-webkit-scrollbar { display:none; }
+.subnav a { flex:none; display:inline-flex; align-items:center; gap:8px; min-height:38px; padding:0 16px; border-radius:999px; color:var(--muted); font-size:14px; font-weight:500; white-space:nowrap; transition:background-color .15s, color .15s; }
+.subnav a:hover { background:var(--hover); color:var(--text); text-decoration:none; }
+.subnav a[aria-current] { background:var(--nav-active); color:var(--nav-active-text); font-weight:600; }
+.subnav a svg.i { width:17px; height:17px; }
+.subnav-secondary { display:flex; gap:8px; flex-wrap:wrap; padding:2px 0; }
+.subnav-secondary a { display:inline-flex; align-items:center; gap:6px; min-height:34px; padding:0 14px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--text); font-size:13px; font-weight:500; }
+.subnav-secondary a:hover { background:var(--hover); text-decoration:none; }
+.subnav-secondary a[aria-current] { background:var(--nav-active); border-color:transparent; color:var(--nav-active-text); font-weight:600; }
+/* Onboarding quick-setup stepper. */
+.stepper { display:flex; gap:8px; flex-wrap:wrap; list-style:none; padding:0; margin:0; }
+.stepper li { flex:1 1 140px; }
+.stepper a, .stepper span { display:flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 16px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--muted); font-size:14px; font-weight:500; text-decoration:none; }
+.stepper a:hover { background:var(--hover); color:var(--text); text-decoration:none; }
+.stepper [aria-current="step"] { background:var(--nav-active); border-color:transparent; color:var(--nav-active-text); font-weight:600; }
+.stepper .done { border-color:color-mix(in oklab, var(--ok) 40%, var(--line)); color:var(--ok); }
+.wizard-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:16px; }
+.wizard-actions a.btn-link { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; padding:0 20px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--primary); font-weight:500; text-decoration:none; }
+.wizard-actions a.btn-link:hover { background:var(--hover); text-decoration:none; }
+.wizard-actions a.btn-link.primary { background:var(--primary); border-color:var(--primary); color:var(--primary-text); }
+.wizard-actions a.btn-link.primary:hover { background:var(--primary-hover); border-color:var(--primary-hover); }
+.check-list { list-style:none; padding:0; margin:12px 0; display:grid; gap:10px; }
+.check-list li { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 16px; border:1px solid var(--line); border-radius:16px; background:var(--bg); }
+.cf-box { margin-top:18px; padding:16px 18px; border:1px solid var(--line); border-radius:18px; background:var(--bg); }
+.cf-box h3 { margin:0 0 6px; font-size:15px; }
 section[id] { scroll-margin-top:64px; }
 .m0 { margin:0; }
 .mono { font-family:ui-monospace,monospace; direction:ltr; unicode-bidi:isolate; }
@@ -441,11 +468,38 @@ function themeToggle(t: Translate, path = "/"): Html {
 </form>`;
 }
 
+const ORGANIZE_PATHS = new Set(["/rules", "/labels", "/blocklist"]);
+const SETTINGS_PATHS = new Set(["/settings", "/settings/mailbox", "/connection", "/api-keys", "/encryption", "/passkeys", "/import", "/onboarding"]);
+
+function organizeSubnav(t: Translate, current: string): Html {
+	const tab = (href: string, key: MessageKey, name: keyof typeof ICONS) =>
+		html`<a href="${href}" ${current === href ? html`aria-current="page"` : ""}>${icon(name)}<span>${t(key)}</span></a>`;
+	return html`<nav class="subnav" aria-label="${t("nav.organize")}">
+${tab("/rules", "nav.rules", "rules")}${tab("/labels", "nav.labels", "labels")}${tab("/blocklist", "nav.blocklist", "blocklist")}
+</nav>`;
+}
+
+function settingsSubnav(t: Translate, current: string): Html {
+	const tab = (href: string, key: MessageKey, name: keyof typeof ICONS, active = current === href) =>
+		html`<a href="${href}" ${active ? html`aria-current="page"` : ""}>${icon(name)}<span>${t(key)}</span></a>`;
+	return html`<nav class="subnav" aria-label="${t("nav.settings")}">
+${tab("/settings", "nav.tab.general", "settings")}${tab("/connection", "nav.tab.connection", "connection")}${tab("/settings/mailbox", "nav.tab.mailbox", "mailbox")}${tab("/api-keys", "nav.tab.keys", "apiKeys")}${tab("/encryption", "nav.tab.security", "encryption", current === "/encryption" || current === "/passkeys")}${tab("/import", "nav.tab.import", "import")}
+</nav>`;
+}
+
+function securitySubnav(t: Translate, current: "/encryption" | "/passkeys"): Html {
+	return html`<nav class="subnav-secondary" aria-label="${t("nav.tab.security")}">
+<a href="/encryption" ${current === "/encryption" ? html`aria-current="page"` : ""}>${t("pgp.title")}</a>
+<a href="/passkeys" ${current === "/passkeys" ? html`aria-current="page"` : ""}>${t("pk.title")}</a>
+</nav>`;
+}
+
 export function page(title: string, body: Html, options: PageOptions): Html {
 	const { t } = options;
 	const theme: Theme = t.theme ?? "system";
-	const link = (href: string, key: MessageKey, name: keyof typeof ICONS) =>
-		html`<a href="${href}" ${options.current === href ? html`aria-current="page"` : ""}>${icon(name)}<span>${t(key)}</span></a>`;
+	const cur = options.current ?? "";
+	const link = (href: string, key: MessageKey, name: keyof typeof ICONS, active = cur === href) =>
+		html`<a href="${href}" ${active ? html`aria-current="page"` : ""}>${icon(name)}<span>${t(key)}</span></a>`;
 	const brand = html`<a class="brand" href="/">${LOGO}<span>aliasflare</span></a>`;
 	const themeMeta =
 		theme === "light"
@@ -475,7 +529,7 @@ ${themeToggle(t, options.path)}
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="aliasflare">
-${link("/", "nav.aliases", "aliases")}${link("/mailbox", "nav.mailbox", "mailbox")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/labels", "nav.labels", "labels")}${link("/rules", "nav.rules", "rules")}${link("/encryption", "nav.encryption", "encryption")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
+${link("/", "nav.aliases", "aliases")}${link("/mailbox", "nav.mailbox", "mailbox")}${link("/activity", "nav.activity", "activity")}${link("/rules", "nav.organize", "rules", ORGANIZE_PATHS.has(cur))}${link("/settings", "nav.settings", "settings", SETTINGS_PATHS.has(cur))}
 <p class="powered">aliasflare · <a href="https://github.com/TWME-TW/aliasflare">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
@@ -527,7 +581,7 @@ export function setupPage(t: Translate, input: { codeInLogs: boolean; notice?: N
 <h1>${t("setup.welcome")}</h1>
 ${noticeBox(input.notice)}
 <p>${t("setup.intro")}</p>
-<form data-passkey="setup" data-next="/connection">
+<form data-passkey="setup" data-next="/onboarding">
 <label for="code">${t("setup.code")}</label>
 <input id="code" name="code" type="text" autocomplete="one-time-code" autocapitalize="characters" required autofocus />
 <p class="help">${withCode(input.codeInLogs ? t("setup.codeFromLogs") : t("setup.codeFromSecret"))}</p>
@@ -610,7 +664,7 @@ export type AliasListState = { query: string; filter: "all" | "active" | "disabl
 /** The "New alias" form above the alias list. */
 function newAliasForm(t: Translate, settings: Settings): Html | string {
 	if (settings.aliasDomains.length === 0) {
-		return html`<p class="notice">${t("new.noDomains")} <a href="/settings">${t("dash.goToSettings")}</a></p>`;
+		return html`<p class="notice">${t("new.noDomains")} <a href="/onboarding">${t("dash.startWizard")} <span class="arrow" aria-hidden="true">→</span></a></p>`;
 	}
 	// One form: the first button (the one Enter presses) creates the named alias; each random
 	// button skips the name and creates an alias of its kind on the chosen domain in one click.
@@ -684,9 +738,9 @@ export function dashboardPage(
 		html`<main>
 ${noticeBox(notice)}
 ${missing.length
-	? html`<p class="notice">${t("dash.notConnected", { missing: missing.map((key) => t(key)).join(", ") })} <a href="/settings">${t("dash.finishConnection")}</a></p>`
+	? html`<p class="notice">${t("dash.notConnected", { missing: missing.map((key) => t(key)).join(", ") })} <a href="/onboarding">${t("dash.startWizard")} <span class="arrow" aria-hidden="true">→</span></a></p>`
 	: ""}
-${!settings.defaultDestination ? html`<p class="notice">${t("dash.setDestination")} <a href="/settings">${t("dash.goToSettings")}</a></p>` : ""}
+${!settings.defaultDestination && !missing.length ? html`<p class="notice">${t("dash.setDestination")} <a href="/settings">${t("dash.goToSettings")}</a></p>` : ""}
 <section>
 <h2>${t("dash.title")}</h2>
 <p class="help">${t("dash.aliasesHelp")}</p>
@@ -845,32 +899,18 @@ export function settingsPage(t: Translate, input: { settings: Settings; origin: 
 	return page(
 		t("settings.title"),
 		html`<main>
+${settingsSubnav(t, "/settings")}
 ${noticeBox(notice)}
 <nav class="jump" aria-label="${t("settings.title")}">
-<a href="#language-settings">${t("settings.display")}</a><a href="#forwarding">${t("settings.section")}</a><a href="#mailbox-settings">${t("mb.title")}</a><a href="#unsubscribe">${t("settings.unsubscribe")}</a><a href="#clients">${t("set.clients")}</a>
+<a href="#domains">${t("settings.domainsSection")}</a><a href="#forwarding">${t("settings.section")}</a><a href="#unsubscribe">${t("settings.unsubscribe")}</a><a href="#clients">${t("set.clients")}</a><a href="#language-settings">${t("settings.display")}</a>
 </nav>
 <form class="sections" method="post" action="/settings" data-autosave data-msg-failed="${t("link.error")}">
-<section id="language-settings">
-<h2>${t("settings.display")}</h2>
-<label for="uiTheme">${t("theme.label")}</label>
-<select id="uiTheme" name="uiTheme">
-${THEMES.map((mode) => html`<option value="${mode}" ${(t.theme ?? "system") === mode ? "selected" : ""}>${t(`theme.${mode}`)}</option>`)}
-</select>
-<p class="help">${t("theme.help")}</p>
+<section id="domains">
+<h2>${t("settings.domainsSection")}</h2>
+<label for="aliasDomains">${t("set.aliasDomains")}</label>
+<input id="aliasDomains" name="aliasDomains" type="text" value="${settings.aliasDomains.join(", ")}" placeholder="mail.example.com" autocapitalize="none" spellcheck="false" />
+<p class="help">${t("set.aliasDomainsHelp")} <a href="/connection#cloudflare">${t("settings.setupCloudflareLink")} <span class="arrow" aria-hidden="true">→</span></a></p>
 
-<label for="uiLocale">${t("set.uiLanguage")}</label>
-<select id="uiLocale" name="uiLocale">
-${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${t.locale === locale ? "selected" : ""}>${LOCALE_NAMES[locale]}</option>`)}
-</select>
-<p class="help">${t("set.uiLanguageHelp")}</p>
-
-<label for="language">${t("settings.mailLanguage")}</label>
-<select id="language" name="language">
-${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${settings.language === locale ? "selected" : ""}>${LOCALE_NAMES[locale]}</option>`)}
-</select>
-</section>
-<section id="forwarding">
-<h2>${t("settings.section")}</h2>
 <label for="defaultDestination">${t("settings.destination")}</label>
 <input id="defaultDestination" name="defaultDestination" type="email" value="${settings.defaultDestination}" placeholder="you@gmail.com" />
 <p class="help">${t("settings.destinationHelp")}</p>
@@ -882,6 +922,18 @@ ${FORWARD_METHODS.map((method) => html`<option value="${method}" ${settings.forw
 <p class="help">${t("settings.forwardMethodHelp")}</p>
 <p class="notice" data-direct-note${settings.forwardMethod === "direct" ? "" : html` hidden`}>${t("settings.forwardMethodDirectNote")}</p>
 
+${checkbox("createAliasesFromMail", settings.createAliasesFromMail, t("settings.createFromMail"), t("settings.createFromMailHelp"))}
+${settings.aliasDomains.length > 1
+	? html`<fieldset class="domain-list"><legend class="help">${t("settings.createFromMailDomains")}</legend>
+${settings.aliasDomains.map((domain) => html`<label class="check"><input type="hidden" name="fromMailShown:${domain}" value="1" /><input type="checkbox" name="fromMail:${domain}" value="1" ${settings.aliasesFromMailOff.includes(domain) ? "" : "checked"} /><span><code>${domain}</code></span></label>`)}
+</fieldset>`
+	: ""}
+${checkbox("autoForwardNewAliases", settings.autoForwardNewAliases, t("settings.autoForward"), t("settings.autoForwardHelp"))}
+<p class="help mt12"><a href="/onboarding">${t("onb.rerunLink")} <span class="arrow" aria-hidden="true">→</span></a></p>
+</section>
+
+<section id="forwarding">
+<h2>${t("settings.section")}</h2>
 <label for="senderFormat">${t("settings.senderFormat")}</label>
 <select id="senderFormat" name="senderFormat">
 ${SENDER_FORMATS.map(
@@ -889,6 +941,14 @@ ${SENDER_FORMATS.map(
 )}
 </select>
 <p class="help">${t("settings.senderFormatHelp")}</p>
+
+<label for="defaultFromName">${t("settings.defaultFromName")}</label>
+<input id="defaultFromName" name="defaultFromName" type="text" maxlength="100" value="${settings.defaultFromName}" />
+<p class="help">${t("settings.defaultFromNameHelp")}</p>
+
+<label for="defaultEmailSubject">${t("settings.defaultEmailSubject")}</label>
+<input id="defaultEmailSubject" name="defaultEmailSubject" type="text" maxlength="200" value="${settings.defaultEmailSubject}" />
+<p class="help">${t("settings.defaultEmailSubjectHelp")}</p>
 
 ${checkbox("reverseAliasReplacement", settings.reverseAliasReplacement, t("settings.replacement"), t("settings.replacementHelp"))}
 ${checkbox("includeSenderInReverseAlias", settings.includeSenderInReverseAlias, t("settings.includeSender"), t("settings.includeSenderHelp"))}
@@ -905,76 +965,15 @@ ${BANNER_LOCATIONS.map((loc) => html`<option value="${loc}" ${settings.bannerLoc
 ${SPAM_WARNING_BEHAVIOURS.map((mode) => html`<option value="${mode}" ${settings.spamWarningBehaviour === mode ? "selected" : ""}>${t(`spamWarn.${mode}`)}</option>`)}
 </select>
 
-<label for="defaultFromName">${t("settings.defaultFromName")}</label>
-<input id="defaultFromName" name="defaultFromName" type="text" maxlength="100" value="${settings.defaultFromName}" />
-<p class="help">${t("settings.defaultFromNameHelp")}</p>
-
-<label for="defaultEmailSubject">${t("settings.defaultEmailSubject")}</label>
-<input id="defaultEmailSubject" name="defaultEmailSubject" type="text" maxlength="200" value="${settings.defaultEmailSubject}" />
-<p class="help">${t("settings.defaultEmailSubjectHelp")}</p>
-
-${checkbox("createAliasesFromMail", settings.createAliasesFromMail, t("settings.createFromMail"), t("settings.createFromMailHelp"))}
-${settings.aliasDomains.length > 1
-	? html`<fieldset class="domain-list"><legend class="help">${t("settings.createFromMailDomains")}</legend>
-${settings.aliasDomains.map((domain) => html`<label class="check"><input type="hidden" name="fromMailShown:${domain}" value="1" /><input type="checkbox" name="fromMail:${domain}" value="1" ${settings.aliasesFromMailOff.includes(domain) ? "" : "checked"} /><span><code>${domain}</code></span></label>`)}
-</fieldset>`
-	: ""}
-${checkbox("autoForwardNewAliases", settings.autoForwardNewAliases, t("settings.autoForward"), t("settings.autoForwardHelp"))}
-</section>
-
-<section id="mailbox-settings">
-<h2>${t("mb.title")}</h2>
-<p class="help">${t("mb.settingsHelp")}</p>
-<input type="hidden" name="mailboxSettingsShown" value="1" />
-${checkbox("mailboxEnabled", settings.mailboxEnabled, t("mb.enable"), t("mb.enableHelp"))}
-${checkbox("storeFailed", settings.storeFailed, t("mb.storeFailed"), t("mb.storeFailedHelp"))}
-${checkbox("storeSkippedAliasOff", settings.storeSkippedAliasOff, t("mb.storeSkippedAliasOff"), "")}
-${checkbox("storeSkippedPromotions", settings.storeSkippedPromotions, t("mb.storeSkippedPromotions"), "")}
-${checkbox("storeSkippedRuleBlock", settings.storeSkippedRuleBlock, t("mb.storeSkippedRuleBlock"), "")}
-${checkbox("storeSkippedBlockedSender", settings.storeSkippedBlockedSender, t("mb.storeSkippedBlockedSender"), "")}
-${checkbox("storeSkippedUnknownAlias", settings.storeSkippedUnknownAlias, t("mb.storeSkippedUnknownAlias"), t("mb.storeSkippedUnknownAliasHelp"))}
-${checkbox("storeForwardedCopy", settings.storeForwardedCopy, t("mb.storeForwardedCopy"), t("mb.storeForwardedCopyHelp"))}
-${checkbox("storeSentCopy", settings.storeSentCopy, t("mb.storeSentCopy"), "")}
-${checkbox("mailboxMailflareIntegration", settings.mailboxMailflareIntegration, t("mb.mailflareIntegration"), "")}
-
-<label for="mailboxStorageBackend">${t("mb.storageBackend")}</label>
-<select id="mailboxStorageBackend" name="mailboxStorageBackend">
-${STORAGE_BACKENDS.map((b) => html`<option value="${b}" ${settings.mailboxStorageBackend === b ? "selected" : ""}>${t(`mb.backend.${b}`)}</option>`)}
+<label for="randomAliasFormat">${t("set.randomFormat")}</label>
+<select id="randomAliasFormat" name="randomAliasFormat">
+${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings.randomAliasFormat === format ? "selected" : ""}>${t(`set.format.${format}`)}</option>`)}
 </select>
 
-<label for="mailboxRetentionDays">${t("mb.retentionDays")}</label>
-<input id="mailboxRetentionDays" name="mailboxRetentionDays" type="number" min="0" max="3650" value="${String(settings.mailboxRetentionDays)}" />
-<p class="help">${t("mb.retentionHelp")}</p>
-
-<label for="mailboxMaxMessageKb">${t("mb.maxMessageKb")}</label>
-<input id="mailboxMaxMessageKb" name="mailboxMaxMessageKb" type="number" min="64" max="25600" value="${String(settings.mailboxMaxMessageKb)}" />
-
-<label for="mailboxQuotaMb">${t("mb.quotaMb")}</label>
-<input id="mailboxQuotaMb" name="mailboxQuotaMb" type="number" min="10" max="102400" value="${String(settings.mailboxQuotaMb)}" />
-
-<label for="mailboxQuotaPolicy">${t("mb.quotaPolicy")}</label>
-<select id="mailboxQuotaPolicy" name="mailboxQuotaPolicy">
-${QUOTA_POLICIES.map((p) => html`<option value="${p}" ${settings.mailboxQuotaPolicy === p ? "selected" : ""}>${t(`mb.quota.${p}`)}</option>`)}
+<label for="aliasSeparator">${t("settings.aliasSeparator")}</label>
+<select id="aliasSeparator" name="aliasSeparator">
+${ALIAS_SEPARATORS.map((sep) => html`<option value="${sep}" ${settings.aliasSeparator === sep ? "selected" : ""}><code>${sep}</code></option>`)}
 </select>
-
-<h3 id="mail-protocols">${t("proto.title")}</h3>
-<p class="help">${t("proto.help")} <a href="/api-keys#mail-passwords">${t("proto.managePasswords")} <span class="arrow" aria-hidden="true">→</span></a></p>
-${checkbox("imapEnabled", settings.imapEnabled, t("proto.imapEnable"), t("proto.imapHelp"))}
-${checkbox("pop3Enabled", settings.pop3Enabled, t("proto.pop3Enable"), t("proto.pop3Help"))}
-<fieldset class="domain-list"><legend class="help">${t("proto.pop3Folders")}</legend>
-${MAILBOX_FOLDERS.map((f) => html`<label class="check"><input type="checkbox" name="pop3Folder:${f}" value="1" ${settings.pop3Folders.includes(f) ? "checked" : ""} /><span>${t(`mb.folder.${f}`)}</span></label>`)}
-</fieldset>
-<label for="pop3DeleteAction">${t("proto.pop3Delete")}</label>
-<select id="pop3DeleteAction" name="pop3DeleteAction">
-${POP3_DELETE_ACTIONS.map((a) => html`<option value="${a}" ${settings.pop3DeleteAction === a ? "selected" : ""}>${t(`proto.pop3Del.${a}`)}</option>`)}
-</select>
-${checkbox("smtpEnabled", settings.smtpEnabled, t("proto.smtpEnable"), t("proto.smtpHelp"))}
-<label for="smtpFromPolicy">${t("proto.smtpFromPolicy")}</label>
-<select id="smtpFromPolicy" name="smtpFromPolicy">
-${SMTP_FROM_POLICIES.map((p) => html`<option value="${p}" ${settings.smtpFromPolicy === p ? "selected" : ""}>${t(`proto.smtpFrom.${p}`)}</option>`)}
-</select>
-<label for="smtpRateLimitPerHour">${t("proto.smtpRateLimit")}</label>
-<input id="smtpRateLimitPerHour" name="smtpRateLimitPerHour" type="number" min="1" max="1000" value="${String(settings.smtpRateLimitPerHour)}" />
 </section>
 
 <section id="unsubscribe">
@@ -1021,28 +1020,111 @@ ${UNSUBSCRIBE_FALLBACKS.map((fallback) => html`<option value="${fallback}" ${rul
 ${checkbox("simpleloginApi", settings.simpleloginApi, t("set.simpleloginApi"), t("set.simpleloginApiHelp", { url: origin }))}
 ${checkbox("addyApi", settings.addyApi, t("set.addyApi"), t("set.addyApiHelp", { url: origin }))}
 ${checkbox("mcpServer", settings.mcpServer, t("set.mcpServer"), t("set.mcpServerHelp", { url: `${origin}/mcp` }))}
-
-<label for="aliasDomains">${t("set.aliasDomains")}</label>
-<input id="aliasDomains" name="aliasDomains" type="text" value="${settings.aliasDomains.join(", ")}" placeholder="mail.example.com" autocapitalize="none" spellcheck="false" />
-<p class="help">${t("set.aliasDomainsHelp")}</p>
-
-<label for="randomAliasFormat">${t("set.randomFormat")}</label>
-<select id="randomAliasFormat" name="randomAliasFormat">
-${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings.randomAliasFormat === format ? "selected" : ""}>${t(`set.format.${format}`)}</option>`)}
-</select>
-
-<label for="aliasSeparator">${t("settings.aliasSeparator")}</label>
-<select id="aliasSeparator" name="aliasSeparator">
-${ALIAS_SEPARATORS.map((sep) => html`<option value="${sep}" ${settings.aliasSeparator === sep ? "selected" : ""}><code>${sep}</code></option>`)}
-</select>
-
 ${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.appSettingsHelp"))}
+</section>
+
+<section id="language-settings">
+<h2>${t("settings.display")}</h2>
+<label for="uiTheme">${t("theme.label")}</label>
+<select id="uiTheme" name="uiTheme">
+${THEMES.map((mode) => html`<option value="${mode}" ${(t.theme ?? "system") === mode ? "selected" : ""}>${t(`theme.${mode}`)}</option>`)}
+</select>
+<p class="help">${t("theme.help")}</p>
+
+<label for="uiLocale">${t("set.uiLanguage")}</label>
+<select id="uiLocale" name="uiLocale">
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${t.locale === locale ? "selected" : ""}>${LOCALE_NAMES[locale]}</option>`)}
+</select>
+<p class="help">${t("set.uiLanguageHelp")}</p>
+
+<label for="language">${t("settings.mailLanguage")}</label>
+<select id="language" name="language">
+${LOCALE_LIST.map((locale) => html`<option value="${locale}" lang="${locale}" ${settings.language === locale ? "selected" : ""}>${LOCALE_NAMES[locale]}</option>`)}
+</select>
 
 <noscript><p><button class="primary">${t("settings.saveButton")}</button></p></noscript>
 </section>
 </form>
 </main>`,
 		{ t, nav: true, current: "/settings", path: "/settings" },
+	);
+}
+
+export function mailboxSettingsPage(t: Translate, input: { settings: Settings; notice?: Notice }): Html {
+	const { settings, notice } = input;
+	return page(
+		t("nav.tab.mailbox"),
+		html`<main>
+${settingsSubnav(t, "/settings/mailbox")}
+${noticeBox(notice)}
+<nav class="jump" aria-label="${t("nav.tab.mailbox")}">
+<a href="#mailbox-settings">${t("mb.title")}</a><a href="#mailbox-storage">${t("mb.storageTitle")}</a><a href="#mail-protocols">${t("proto.title")}</a>
+</nav>
+<form class="sections" method="post" action="/settings/mailbox" data-autosave data-msg-failed="${t("link.error")}">
+<section id="mailbox-settings">
+<h2>${t("mb.title")}</h2>
+<p class="help">${t("mb.settingsHelp")}</p>
+<input type="hidden" name="mailboxSettingsShown" value="1" />
+${checkbox("mailboxEnabled", settings.mailboxEnabled, t("mb.enable"), t("mb.enableHelp"))}
+${checkbox("storeFailed", settings.storeFailed, t("mb.storeFailed"), t("mb.storeFailedHelp"))}
+${checkbox("storeSkippedAliasOff", settings.storeSkippedAliasOff, t("mb.storeSkippedAliasOff"), "")}
+${checkbox("storeSkippedPromotions", settings.storeSkippedPromotions, t("mb.storeSkippedPromotions"), "")}
+${checkbox("storeSkippedRuleBlock", settings.storeSkippedRuleBlock, t("mb.storeSkippedRuleBlock"), "")}
+${checkbox("storeSkippedBlockedSender", settings.storeSkippedBlockedSender, t("mb.storeSkippedBlockedSender"), "")}
+${checkbox("storeSkippedUnknownAlias", settings.storeSkippedUnknownAlias, t("mb.storeSkippedUnknownAlias"), t("mb.storeSkippedUnknownAliasHelp"))}
+${checkbox("storeForwardedCopy", settings.storeForwardedCopy, t("mb.storeForwardedCopy"), t("mb.storeForwardedCopyHelp"))}
+${checkbox("storeSentCopy", settings.storeSentCopy, t("mb.storeSentCopy"), "")}
+${checkbox("mailboxMailflareIntegration", settings.mailboxMailflareIntegration, t("mb.mailflareIntegration"), "")}
+</section>
+
+<section id="mailbox-storage">
+<h2>${t("mb.storageTitle")}</h2>
+<p class="help"><a href="/connection#storage">${t("mb.storageConnLink")} <span class="arrow" aria-hidden="true">→</span></a></p>
+<label for="mailboxStorageBackend">${t("mb.storageBackend")}</label>
+<select id="mailboxStorageBackend" name="mailboxStorageBackend">
+${STORAGE_BACKENDS.map((b) => html`<option value="${b}" ${settings.mailboxStorageBackend === b ? "selected" : ""}>${t(`mb.backend.${b}`)}</option>`)}
+</select>
+
+<label for="mailboxRetentionDays">${t("mb.retentionDays")}</label>
+<input id="mailboxRetentionDays" name="mailboxRetentionDays" type="number" min="0" max="3650" value="${String(settings.mailboxRetentionDays)}" />
+<p class="help">${t("mb.retentionHelp")}</p>
+
+<label for="mailboxMaxMessageKb">${t("mb.maxMessageKb")}</label>
+<input id="mailboxMaxMessageKb" name="mailboxMaxMessageKb" type="number" min="64" max="25600" value="${String(settings.mailboxMaxMessageKb)}" />
+
+<label for="mailboxQuotaMb">${t("mb.quotaMb")}</label>
+<input id="mailboxQuotaMb" name="mailboxQuotaMb" type="number" min="10" max="102400" value="${String(settings.mailboxQuotaMb)}" />
+
+<label for="mailboxQuotaPolicy">${t("mb.quotaPolicy")}</label>
+<select id="mailboxQuotaPolicy" name="mailboxQuotaPolicy">
+${QUOTA_POLICIES.map((p) => html`<option value="${p}" ${settings.mailboxQuotaPolicy === p ? "selected" : ""}>${t(`mb.quota.${p}`)}</option>`)}
+</select>
+</section>
+
+<section id="mail-protocols">
+<h2>${t("proto.title")}</h2>
+<p class="help">${t("proto.help")} <a href="/api-keys#mail-passwords">${t("proto.managePasswords")} <span class="arrow" aria-hidden="true">→</span></a></p>
+${checkbox("imapEnabled", settings.imapEnabled, t("proto.imapEnable"), t("proto.imapHelp"))}
+${checkbox("pop3Enabled", settings.pop3Enabled, t("proto.pop3Enable"), t("proto.pop3Help"))}
+<fieldset class="domain-list"><legend class="help">${t("proto.pop3Folders")}</legend>
+${MAILBOX_FOLDERS.map((f) => html`<label class="check"><input type="checkbox" name="pop3Folder:${f}" value="1" ${settings.pop3Folders.includes(f) ? "checked" : ""} /><span>${t(`mb.folder.${f}`)}</span></label>`)}
+</fieldset>
+<label for="pop3DeleteAction">${t("proto.pop3Delete")}</label>
+<select id="pop3DeleteAction" name="pop3DeleteAction">
+${POP3_DELETE_ACTIONS.map((a) => html`<option value="${a}" ${settings.pop3DeleteAction === a ? "selected" : ""}>${t(`proto.pop3Del.${a}`)}</option>`)}
+</select>
+${checkbox("smtpEnabled", settings.smtpEnabled, t("proto.smtpEnable"), t("proto.smtpHelp"))}
+<label for="smtpFromPolicy">${t("proto.smtpFromPolicy")}</label>
+<select id="smtpFromPolicy" name="smtpFromPolicy">
+${SMTP_FROM_POLICIES.map((p) => html`<option value="${p}" ${settings.smtpFromPolicy === p ? "selected" : ""}>${t(`proto.smtpFrom.${p}`)}</option>`)}
+</select>
+<label for="smtpRateLimitPerHour">${t("proto.smtpRateLimit")}</label>
+<input id="smtpRateLimitPerHour" name="smtpRateLimitPerHour" type="number" min="1" max="1000" value="${String(settings.smtpRateLimitPerHour)}" />
+<noscript><p><button class="primary">${t("settings.saveButton")}</button></p></noscript>
+</section>
+</form>
+</main>`,
+		{ t, nav: true, current: "/settings/mailbox", path: "/settings/mailbox" },
 	);
 }
 
@@ -1143,7 +1225,11 @@ export function connectionPage(
 	return page(
 		t("conn.title"),
 		html`<main>
+${settingsSubnav(t, "/connection")}
 ${noticeBox(notice)}
+<nav class="jump" aria-label="${t("conn.title")}">
+<a href="#cloudflare">${t("cf.title")}</a><a href="#sending">${t("conn.sendingTitle")}</a><a href="#mailflare">${t("conn.mailflareTitle")}</a><a href="#storage">${t("conn.storageTitle")}</a><a href="#public-url">${t("conn.publicUrl")}</a>
+</nav>
 <section id="cloudflare">
 <h2>${t("cf.title")} ${missing.length ? html`<span class="pill bad">${t("conn.incomplete")}</span>` : html`<span class="pill ok">${t("conn.ready")}</span>`}</h2>
 <p class="help">${t("cf.help")}</p>
@@ -1156,13 +1242,18 @@ ${cloudflare.setup
 		)
 	: ""}
 <form method="post" action="/connection/cloudflare" data-busy>
-<fieldset><legend>${t("cf.domains")}</legend>
 ${cloudflare.domains.length
-	? cloudflare.domains.map(
+	? html`<fieldset><legend>${t("cf.domains")}</legend>
+${cloudflare.domains.map(
 			(domain) => html`<label class="check"><input type="checkbox" name="domains" value="${domain}" checked /> <code>${domain}</code> <span class="muted"><span class="arrow" aria-hidden="true">→</span> ${t("cf.reverseIs", { reverse: reverseDomainFor(domain) })}</span></label>`,
-		)
-	: html`<p class="help">${t("notice.needAliasDomains")} <a href="/settings#clients">${t("nav.settings")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
+		)}
 </fieldset>
+<label for="cfAddDomains">${t("cf.domainsInput")}</label>
+<input id="cfAddDomains" name="aliasDomains" type="text" placeholder="another.example.com" autocapitalize="none" spellcheck="false" />
+<p class="help">${t("cf.domainsInputHelp")}</p>`
+	: html`<label for="cfAddDomains">${t("cf.domainsInput")}</label>
+<input id="cfAddDomains" name="aliasDomains" type="text" placeholder="a.com, b.net" autocapitalize="none" spellcheck="false" required />
+<p class="help">${t("cf.domainsInputHelp")}</p>`}
 ${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.tokenHelp"))}
 <ul class="perms">${TOKEN_PERMISSIONS.map(
 	([scope, name, level, note]) => html`<li><span class="pill scope ${scope}">${t(scope === "zone" ? "cf.scopeZone" : "cf.scopeAccount")}</span><span class="perm-name">${name}${note ? html` <span class="muted">${t(note)}</span>` : ""}</span><span class="perm-level">${level}</span></li>`,
@@ -1173,7 +1264,7 @@ ${checkbox("wkdHost", false, t("cf.wkdHost"), t("cf.wkdHostHelp"))}
 <label for="workerName">${t("cf.workerName")}</label>
 <input id="workerName" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
 <p class="help">${t("cf.workerNameHelp")}</p>${fixedNote("workerName")}
-<p><button class="primary"${cloudflare.domains.length ? "" : html` disabled data-stay-disabled`}>${t("cf.run")}</button></p>
+<p><button class="primary">${t("cf.run")}</button></p>
 </form>
 <details><summary>${t("conn.checklist")}</summary>
 <ol class="steps">
@@ -1185,12 +1276,6 @@ ${checkbox("wkdHost", false, t("cf.wkdHost"), t("cf.wkdHostHelp"))}
 </details>
 </section>
 <form method="post" action="/connection" class="sections">
-<section>
-<h2>${t("conn.publicUrl")}</h2>
-<input id="publicUrl" name="publicUrl" type="url" value="${values.publicUrl}" placeholder="https://alias.example.com" aria-label="${t("conn.publicUrl")}" ${disabled("publicUrl")} />
-<p class="help">${t("conn.publicUrlHelp")}</p>${fixedNote("publicUrl")}
-<p><button class="primary">${t("conn.saveButton")}</button></p>
-</section>
 <section id="sending">
 <h2>${t("conn.sendingTitle")}</h2>
 <p class="help">${t("conn.sendingHelp")}</p>
@@ -1243,6 +1328,12 @@ ${fixedNote("mailboxS3Prefix")}
 ${checkbox("mailboxS3PathStyle", s3.pathStyle, t("conn.s3PathStyle"), t("conn.s3PathStyleHelp"))}
 <p class="row"><button class="primary">${t("conn.saveButton")}</button></p>
 </section>
+<section id="public-url">
+<h2>${t("conn.publicUrl")}</h2>
+<input id="publicUrl" name="publicUrl" type="url" value="${values.publicUrl}" placeholder="https://alias.example.com" aria-label="${t("conn.publicUrl")}" ${disabled("publicUrl")} />
+<p class="help">${t("conn.publicUrlHelp")}</p>${fixedNote("publicUrl")}
+<p><button class="primary">${t("conn.saveButton")}</button></p>
+</section>
 </form>
 </main>`,
 		{ t, nav: true, current: "/connection", path: "/connection" },
@@ -1265,6 +1356,8 @@ export function passkeysPage(t: Translate, input: { passkeys: PasskeyRow[]; devi
 	return page(
 		t("pk.title"),
 		html`<main>
+${settingsSubnav(t, "/passkeys")}
+${securitySubnav(t, "/passkeys")}
 ${noticeBox(notice)}
 <section>
 <h2>${t("pk.title")}</h2>
@@ -1314,6 +1407,7 @@ export function blocklistPage(t: Translate, input: { entries: BlocklistRow[]; no
 	return page(
 		t("bl.title"),
 		html`<main>
+${organizeSubnav(t, "/blocklist")}
 ${noticeBox(notice)}
 <section>
 <h2>${t("bl.title")}</h2>
@@ -1477,6 +1571,7 @@ export function apiKeysPage(
 	return page(
 		t("keys.title"),
 		html`<main>
+${settingsSubnav(t, "/api-keys")}
 ${noticeBox(notice)}
 ${newKey
 	? html`<section><h2>${t("keys.createdTitle")}</h2><p class="notice" role="status">${t("keys.created")}</p>
@@ -1524,7 +1619,7 @@ ${errorBox(t)}
 ${anyMailProto
 	? html`<p>${t("proto.gatewayUrl")}: <span class="alias-cell"><code>${origin}/mail-api/v1</code>${copyButton(t, `${origin}/mail-api/v1`)}</span></p>
 <p class="muted">${mailProtocols.imap ? html`<span class="pill ok">IMAP</span> ` : ""}${mailProtocols.pop3 ? html`<span class="pill ok">POP3</span> ` : ""}${mailProtocols.smtp ? html`<span class="pill ok">SMTP</span>` : ""}</p>`
-	: html`<p class="notice">${t("proto.allOff")} <a href="/settings#mail-protocols">${t("nav.settings")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
+	: html`<p class="notice">${t("proto.allOff")} <a href="/settings/mailbox#mail-protocols">${t("nav.tab.mailbox")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
 ${mailPasswords.length
 	? html`<div class="table-wrap"><table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("proto.colUser")}</th><th>${t("proto.colProtocols")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
 ${mailPasswords.map(
@@ -1567,9 +1662,9 @@ ENABLE_SMTP=${mailProtocols.smtp ? "true" : "false"}</pre>
 
 export function importPage(
 	t: Translate,
-	input: { domains: string[]; result?: ImportResult; error?: string; source?: string },
+	input: { domains: string[]; result?: ImportResult; addedDomains?: string[]; addDomainsDefault?: boolean; error?: string; source?: string },
 ): Html {
-	const { domains, result, error, source } = input;
+	const { domains, result, addedDomains = [], addDomainsDefault = false, error, source } = input;
 	const keyField = (id: string, help: MessageKey) => html`<label for="${id}-key">${t("imp.apiKey")}</label>
 <input id="${id}-key" name="apiKey" type="password" autocomplete="off" spellcheck="false" required />
 <p class="help">${t(help)}</p>`;
@@ -1577,14 +1672,17 @@ export function importPage(
 <input name="server" type="url" value="${value}" aria-label="${t("imp.server")}" />
 <p class="help">${t("imp.serverHelp")}</p></details>`;
 	const domainsField = html`<input type="hidden" name="domains" value="${domains.join(" ")}" data-domains />
+${checkbox("addDomains", addDomainsDefault, t("imp.addDomains"), t("imp.addDomainsHelp"))}
 ${checkbox("destinations", false, t("imp.destinations"), t("imp.destinationsHelp"))}`;
 	return page(
 		t("imp.title"),
 		html`<main>
+${settingsSubnav(t, "/import")}
 ${error ? html`<p class="notice bad" role="alert">${error}</p>` : ""}
 ${result
 	? html`<section><h2>${t("imp.resultTitle", { source: source ?? "" })}</h2>
 <p class="notice" role="status">${t("imp.done", { found: String(result.found), created: String(result.created), updated: String(result.updated) })}${result.deleted ? html` ${t("imp.doneDeleted", { count: String(result.deleted) })}` : ""}${result.contacts ? html` ${t("imp.doneContacts", { count: String(result.contacts) })}` : ""}${result.labels ? html` ${t("imp.doneLabels", { count: String(result.labels) })}` : ""}${result.rules ? html` ${t("imp.doneRules", { count: String(result.rules) })}` : ""}${result.blocked ? html` ${t("imp.doneBlocked", { count: String(result.blocked) })}` : ""}</p>
+${addedDomains.length ? html`<p>${t("imp.addedDomains")} ${addedDomains.map((d) => html`<code>${d}</code> `)} <a href="/connection#cloudflare">${t("settings.setupCloudflareLink")} <span class="arrow" aria-hidden="true">→</span></a></p>` : ""}
 ${result.unread?.length ? html`<p class="notice bad" role="alert">${t("imp.unread", { parts: result.unread.join(", ") })}</p>` : ""}
 ${result.rulesSkipped?.length
 	? html`<p>${t("imp.rulesSkipped")}</p><ul class="results">${result.rulesSkipped.map((name) => html`<li>${name}</li>`)}</ul>`
@@ -1721,6 +1819,7 @@ export function labelsPage(t: Translate, input: { labels: LabelWithCount[]; noti
 	return page(
 		t("labels.title"),
 		html`<main>
+${organizeSubnav(t, "/labels")}
 ${noticeBox(notice)}
 <section>
 <h2>${t("labels.title")}</h2>
@@ -1771,6 +1870,7 @@ export function rulesPage(t: Translate, input: { rules: Rule[]; notice?: Notice;
 	return page(
 		t("rules.title"),
 		html`<main>
+${organizeSubnav(t, "/rules")}
 ${noticeBox(notice)}
 <section>
 <h2>${t("rules.title")}</h2>
@@ -1817,6 +1917,7 @@ export function ruleEditPage(t: Translate, input: { rule: Rule | null; destinati
 	return page(
 		title,
 		html`<main>
+${organizeSubnav(t, "/rules")}
 <p class="m0"><a href="/rules"><span class="arrow" aria-hidden="true">←</span> ${t("rules.title")}</a></p>
 ${noticeBox(notice)}
 <section>
@@ -1864,6 +1965,8 @@ export function encryptionPage(t: Translate, input: { keys: PgpKeyRow[]; freePla
 	return page(
 		t("pgp.title"),
 		html`<main>
+${settingsSubnav(t, "/encryption")}
+${securitySubnav(t, "/encryption")}
 ${noticeBox(notice)}
 <section>
 <h2>${t("pgp.title")}</h2>
@@ -1892,5 +1995,178 @@ ${keys.map(
 </section>
 </main>`,
 		{ t, nav: true, current: "/encryption", path: "/encryption" },
+	);
+}
+
+/** Guided initial setup wizard: domains + optional Cloudflare auto-setup → optional migration → ready. */
+export function onboardingPage(
+	t: Translate,
+	input: {
+		step: 1 | 2 | 3;
+		settings: Settings;
+		cloudflare: { hasToken: boolean; workerName: string; workersPlan: WorkersPlan; setup?: DomainSetup[] };
+		fixed: Set<string>;
+		importDomains?: string[];
+		importResult?: ImportResult;
+		addedDomains?: string[];
+		importError?: string;
+		importSource?: string;
+		notice?: Notice;
+	},
+): Html {
+	const { step, settings, cloudflare, fixed, importDomains = settings.aliasDomains, importResult, addedDomains = [], importError, importSource, notice } = input;
+	const disabled = (key: string) => (fixed.has(key) ? "disabled" : "");
+	const step1Done = settings.aliasDomains.length > 0;
+	const stepper = html`<ol class="stepper" aria-label="${t("onb.title")}">
+<li><a href="/onboarding?step=1" class="${step !== 1 && step1Done ? "done" : ""}" ${step === 1 ? html`aria-current="step"` : ""}>${step1Done && step !== 1 ? "✓ " : ""}${t("onb.step1")}</a></li>
+<li><a href="/onboarding?step=2" class="${step !== 2 && importResult ? "done" : ""}" ${step === 2 ? html`aria-current="step"` : ""}>${importResult && step !== 2 ? "✓ " : ""}${t("onb.step2")}</a></li>
+<li><a href="/onboarding?step=3" ${step === 3 ? html`aria-current="step"` : ""}>${t("onb.step3")}</a></li>
+</ol>`;
+
+	const step1Body = html`<section>
+<h1>${t("onb.s1Title")}</h1>
+<p class="help">${t("onb.s1Help")}</p>
+<p class="help"><a href="/onboarding?step=2">${t("onb.importFirstLink")} <span class="arrow" aria-hidden="true">→</span></a></p>
+${cloudflare.setup
+	? cloudflare.setup.map(
+			(result) => html`<h3><code>${result.domain}</code></h3><ul class="results">${result.steps.map(
+				(s) => html`<li><span class="pill ${s.ok ? "ok" : "bad"}">${s.ok ? "✓" : "✕"}</span> <b>${t(`cf.step.${s.step}`)}</b> <span class="muted">${s.detail}</span></li>`,
+			)}</ul>`,
+		)
+	: ""}
+${cloudflare.setup
+	? html`<div class="wizard-actions">
+<a class="btn-link primary" href="/onboarding?step=2">${t("onb.continueMigrate")} <span class="arrow" aria-hidden="true">→</span></a>
+<a class="btn-link" href="/onboarding?step=3">${t("onb.finish")}</a>
+</div>`
+	: ""}
+<form method="post" action="/onboarding/domains" data-busy>
+<label for="onb-domains">${t("set.aliasDomains")}</label>
+<input id="onb-domains" name="aliasDomains" type="text" value="${settings.aliasDomains.join(", ")}" placeholder="a.com, b.net" autocapitalize="none" spellcheck="false" required />
+<p class="help">${t("set.aliasDomainsHelp")}</p>
+
+<label for="onb-dest">${t("settings.destination")}</label>
+<input id="onb-dest" name="defaultDestination" type="email" value="${settings.defaultDestination}" placeholder="you@gmail.com" />
+<p class="help">${t("settings.destinationHelp")}</p>
+
+<label for="onb-plan">${t("conn.plan")}</label>
+<select id="onb-plan" name="workersPlan" ${disabled("workersPlan")}>
+${WORKERS_PLANS.map((plan) => html`<option value="${plan}" ${cloudflare.workersPlan === plan ? "selected" : ""}>${t(`conn.plan.${plan}`)}</option>`)}
+</select>
+<p class="help">${t("conn.planHelp")}</p>
+
+<div class="cf-box">
+<h3>${t("onb.cfOptional")}</h3>
+<p class="help">${t("onb.cfOptionalHelp")}</p>
+<p class="notice">${t("cf.warnMx")}</p>
+<label for="onb-cf-token">${t("cf.token")} ${cloudflare.hasToken ? html`<span class="pill ok">${t("conn.isSet")}</span>` : ""}</label>
+<input id="onb-cf-token" name="cloudflareApiToken" type="password" autocomplete="off" placeholder="${cloudflare.hasToken ? t("conn.keepCurrent") : ""}" ${disabled("cloudflareApiToken")} />
+<details><summary>${t("cf.tokenScope")}</summary>
+<p class="help">${t("cf.tokenHelp")}</p>
+<ul class="perms">${TOKEN_PERMISSIONS.map(
+	([scope, name, level, note]) => html`<li><span class="pill scope ${scope}">${t(scope === "zone" ? "cf.scopeZone" : "cf.scopeAccount")}</span><span class="perm-name">${name}${note ? html` <span class="muted">${t(note)}</span>` : ""}</span><span class="perm-level">${level}</span></li>`,
+)}</ul>
+</details>
+${checkbox("replaceCatchAll", false, t("cf.replaceCatchAll"), t("cf.replaceCatchAllHelp"))}
+${checkbox("wkdHost", false, t("cf.wkdHost"), t("cf.wkdHostHelp"))}
+<label for="onb-worker">${t("cf.workerName")}</label>
+<input id="onb-worker" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
+</div>
+
+<div class="wizard-actions">
+<button class="primary" name="intent" value="cloudflare">${t("onb.saveAndSetup")}</button>
+<button name="intent" value="save">${t("onb.saveContinue")}</button>
+<a class="btn-link" href="/onboarding?step=2">${t("onb.skipMigrate")}</a>
+</div>
+</form>
+</section>`;
+
+	const keyField = (id: string, help: MessageKey) => html`<label for="onb-${id}-key">${t("imp.apiKey")}</label>
+<input id="onb-${id}-key" name="apiKey" type="password" autocomplete="off" spellcheck="false" required />
+<p class="help">${t(help)}</p>`;
+	const serverField = (value: string) => html`<details><summary>${t("imp.server")}</summary>
+<input name="server" type="url" value="${value}" aria-label="${t("imp.server")}" />
+<p class="help">${t("imp.serverHelp")}</p></details>`;
+	const domainsHidden = html`<input type="hidden" name="domains" value="${importDomains.join(" ")}" data-domains />
+${checkbox("addDomains", true, t("imp.addDomains"), t("imp.addDomainsHelp"))}
+${checkbox("destinations", false, t("imp.destinations"), t("imp.destinationsHelp"))}`;
+
+	const step2Body = html`${importError ? html`<p class="notice bad" role="alert">${importError}</p>` : ""}
+${importResult
+	? html`<section>
+<h2>${t("imp.resultTitle", { source: importSource ?? "" })}</h2>
+<p class="notice" role="status">${t("imp.done", { found: String(importResult.found), created: String(importResult.created), updated: String(importResult.updated) })}${importResult.deleted ? html` ${t("imp.doneDeleted", { count: String(importResult.deleted) })}` : ""}${importResult.contacts ? html` ${t("imp.doneContacts", { count: String(importResult.contacts) })}` : ""}${importResult.labels ? html` ${t("imp.doneLabels", { count: String(importResult.labels) })}` : ""}${importResult.rules ? html` ${t("imp.doneRules", { count: String(importResult.rules) })}` : ""}${importResult.blocked ? html` ${t("imp.doneBlocked", { count: String(importResult.blocked) })}` : ""}</p>
+${addedDomains.length ? html`<p>${t("imp.addedDomains")} ${addedDomains.map((d) => html`<code>${d}</code> `)}</p>` : ""}
+${importResult.skippedDomains.length
+	? html`<p>${t("imp.skipped")}</p><ul class="results">${importResult.skippedDomains.map(
+			(item) => html`<li><code>${item.domain}</code> <span class="muted">${t("imp.count", { count: String(item.count) })}</span></li>`,
+		)}</ul>`
+	: ""}
+<div class="wizard-actions">
+<a class="btn-link primary" href="/onboarding?step=3">${t("onb.finish")} <span class="arrow" aria-hidden="true">→</span></a>
+<a class="btn-link" href="/onboarding?step=1">${t("onb.backToDomains")}</a>
+</div>
+</section>`
+	: ""}
+<section>
+<h1>${t("onb.s2Title")}</h1>
+<p class="help">${t("onb.s2Help")}</p>
+<label for="onb-imp-domains">${t("imp.domains")}</label>
+<textarea id="onb-imp-domains" rows="2" spellcheck="false" data-domains-source placeholder="a.com">${importDomains.join("\n")}</textarea>
+<p class="help">${t("imp.autoDetectHelp")}</p>
+<div class="wizard-actions">
+<a class="btn-link" href="/onboarding?step=3">${t("onb.skipMigrate")} <span class="arrow" aria-hidden="true">→</span></a>
+<a class="btn-link" href="/onboarding?step=1"><span class="arrow" aria-hidden="true">←</span> ${t("onb.step1")}</a>
+</div>
+</section>
+<section>
+<h2>${t("imp.fromSimplelogin")}</h2>
+<form method="post" action="/onboarding/import/simplelogin" data-import>
+${keyField("sl", "imp.slKeyHelp")}
+${checkbox("contacts", true, t("imp.contacts"), t("imp.contactsHelp"))}
+${serverField("https://app.simplelogin.io")}${domainsHidden}
+<p><button class="primary">${t("imp.button")}</button></p>
+</form>
+</section>
+<section>
+<h2>${t("imp.fromAddy")}</h2>
+<form method="post" action="/onboarding/import/addy" data-import>
+${keyField("addy", "imp.addyKeyHelp")}${serverField("https://app.addy.io")}${domainsHidden}
+<p><button class="primary">${t("imp.button")}</button></p>
+</form>
+</section>
+<section>
+<h2>${t("imp.fromCsv")}</h2>
+<form method="post" action="/onboarding/import/csv" enctype="multipart/form-data" data-import>
+<label for="onb-imp-file">${t("imp.file")}</label>
+<input id="onb-imp-file" name="file" type="file" accept=".csv,text/csv" required />
+<p class="help">${t("imp.csvHelp")}</p>${domainsHidden}
+<p><button class="primary">${t("imp.button")}</button></p>
+</form>
+</section>`;
+
+	const step3Body = html`<section>
+<h1>${t("onb.s3Title")}</h1>
+<p class="help">${t("onb.s3Help")}</p>
+<ul class="check-list">
+<li><span class="pill ${settings.aliasDomains.length ? "ok" : "bad"}">${settings.aliasDomains.length ? "✓" : "!"}</span> <b>${t("onb.checkDomains")}</b> ${settings.aliasDomains.length ? settings.aliasDomains.map((d) => html`<code>${d}</code> `) : html`<a href="/onboarding?step=1">${t("dash.finishConnection")}</a>`}</li>
+<li><span class="pill ${settings.defaultDestination ? "ok" : "bad"}">${settings.defaultDestination ? "✓" : "!"}</span> <b>${t("onb.checkDestination")}</b> ${settings.defaultDestination ? html`<code>${settings.defaultDestination}</code>` : html`<a href="/onboarding?step=1">${t("dash.goToSettings")}</a>`}</li>
+<li><span class="pill ${settings.mailboxEnabled ? "ok" : ""}">${settings.mailboxEnabled ? "✓" : "—"}</span> <b>${t("onb.checkMailbox")}</b> <span class="muted">${t("onb.checkMailboxDetail")}</span></li>
+</ul>
+<div class="wizard-actions">
+<a class="btn-link primary" href="/">${t("onb.goDashboard")} <span class="arrow" aria-hidden="true">→</span></a>
+<a class="btn-link" href="/connection#sending">${t("onb.nextSending")}</a>
+<a class="btn-link" href="/api-keys">${t("onb.nextKeys")}</a>
+</div>
+</section>`;
+
+	return page(
+		t("onb.title"),
+		html`<main>
+${stepper}
+${noticeBox(notice)}
+${step === 1 ? step1Body : step === 2 ? step2Body : step3Body}
+</main>`,
+		{ t, nav: true, current: "/onboarding", path: `/onboarding?step=${step}` },
 	);
 }

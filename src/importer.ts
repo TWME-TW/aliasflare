@@ -629,6 +629,54 @@ export async function defaultImportDomains(db: D1Database, settings: Settings): 
 
 export type Selection = { chosen: ImportedAlias[]; skippedDomains: ImportResult["skippedDomains"] };
 
+/**
+ * Shared domains owned by SimpleLogin and addy.io. Aliases on these domains keep receiving mail
+ * at the original service and cannot be pointed at aliasflare, so auto-detection skips them.
+ */
+const SHARED_PROVIDER_DOMAINS = [
+	"simplelogin.com",
+	"simplelogin.co",
+	"simplelogin.fr",
+	"simplelogin.io",
+	"aleeas.com",
+	"8alias.com",
+	"8shield.net",
+	"dralias.com",
+	"passinbox.com",
+	"passmail.com",
+	"passmail.net",
+	"passfwd.com",
+	"slmail.me",
+	"slmails.com",
+	"silomails.com",
+	"anonaddy.me",
+	"anonaddy.com",
+	"addy.io",
+	"mailer.me",
+	"dmail.ai",
+];
+
+/** True when a domain belongs to SimpleLogin's or addy.io's shared pool (including subdomains). */
+export function isSharedProviderDomain(domain: string): boolean {
+	const lower = domain.trim().toLowerCase().replace(/\.$/, "");
+	return SHARED_PROVIDER_DOMAINS.some((shared) => lower === shared || lower.endsWith(`.${shared}`));
+}
+
+/**
+ * Custom domains present in a list of imported aliases, excluding shared SimpleLogin/addy.io
+ * domains and any reverse-alias domain of another domain in the set.
+ */
+export function detectCustomDomains(aliases: ImportedAlias[], existingAliasDomains: string[] = []): string[] {
+	const candidates = new Set<string>();
+	for (const alias of aliases) {
+		const domain = domainOf(normalizeEmail(alias.email));
+		if (!domain || !DOMAIN_PATTERN.test(domain) || isSharedProviderDomain(domain)) continue;
+		candidates.add(domain);
+	}
+	const known = new Set([...candidates, ...existingAliasDomains.map((d) => d.toLowerCase())]);
+	return [...candidates].filter((domain) => !known.has(aliasDomainOfReverse(domain) ?? "")).sort();
+}
+
 /** Splits aliases into those on the chosen domains (deduplicated) and counts of the rest by domain. */
 export function selectByDomain(aliases: ImportedAlias[], domains: string[], existingAliasDomains: string[] = []): Selection {
 	const wanted = new Set(domains.map((domain) => domain.toLowerCase()));
