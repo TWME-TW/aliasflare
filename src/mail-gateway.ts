@@ -5,11 +5,13 @@
  * clients connect to the stateless companion Bridge (`bridge/`), which authenticates each session
  * against this HTTPS API using scoped Mail App Passwords (`afm_...`).
  */
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import PostalMime from "postal-mime";
 import type { AppEnv } from "./auth";
 import { ensureAlias, newId, now, recordEvent, type AliasRow } from "./db";
-import { domainOf, extractEmail, normalizeEmail } from "./format";
+import { bytesToBase64 } from "./crypto";
+import { getDomainRow } from "./domain-settings";
+import { cleanDisplayName, domainOf, extractEmail, normalizeEmail } from "./format";
 import {
 	deleteMailboxMessage,
 	folderStats,
@@ -324,8 +326,16 @@ mailGateway.get("/pop3/messages", async (c) => {
 	});
 });
 
+/** A message POP3 may see: only in the folders Settings expose to POP3. */
+async function pop3Message(c: Context<GatewayEnv>, id: string) {
+	const msg = await getMailboxMessage(c.env.DB, id);
+	const settings = c.get("mailSettings");
+	const folders: readonly string[] = settings.pop3Folders.length ? settings.pop3Folders : ["INBOX"];
+	return msg && folders.includes(msg.folder) ? msg : null;
+}
+
 mailGateway.get("/pop3/messages/:id/raw", async (c) => {
-	const msg = await getMailboxMessage(c.env.DB, c.req.param("id"));
+	const msg = await pop3Message(c, c.req.param("id"));
 	if (!msg) return c.json({ error: "Message not found" }, 404);
 	const raw = (await readMailboxRaw(c.env, c.get("config"), msg)) ?? synthesizeHeadersOnlyRaw(msg);
 	return c.body(raw as Uint8Array<ArrayBuffer>, 200, { "Content-Type": "message/rfc822" });
@@ -334,7 +344,7 @@ mailGateway.get("/pop3/messages/:id/raw", async (c) => {
 mailGateway.delete("/pop3/messages/:id", async (c) => {
 	const id = c.req.param("id");
 	const settings = c.get("mailSettings");
-	const msg = await getMailboxMessage(c.env.DB, id);
+	const msg = await pop3Message(c, id);
 	if (!msg) return c.json({ error: "Message not found" }, 404);
 	if (settings.pop3DeleteAction === "expunge") {
 		await deleteMailboxMessage(c.env, c.get("config"), id);
@@ -393,6 +403,9 @@ mailGateway.post("/smtp/send", async (c) => {
 	if (alias.forward_mode === "none") {
 		return c.json({ error: "Alias is disabled" }, 403);
 	}
+	// A deactivated domain neither receives nor sends, as for replies.
+	const domainRow = await getDomainRow(db, domainOf(alias.address));
+	if (domainRow && domainRow.active === 0) return c.json({ error: "This domain is deactivated" }, 403);
 
 	let parsed;
 	try {
@@ -402,7 +415,8 @@ mailGateway.post("/smtp/send", async (c) => {
 	}
 
 	const subject = parsed.subject?.slice(0, 500) || "(no subject)";
-	const displayName = parsed.from?.name || alias.name || settings.defaultFromName || "";
+	// The name goes into a From header: control characters, quotes and brackets are cleaned out.
+	const displayName = cleanDisplayName(parsed.from?.name || alias.name || settings.defaultFromName) ?? "";
 	const fromHeader = displayName ? { name: displayName, email: alias.address } : alias.address;
 
 	// Apply rules configured for outgoing sends/replies.
@@ -437,17 +451,29 @@ mailGateway.post("/smtp/send", async (c) => {
 	if (parsed.references) extraHeaders.References = parsed.references;
 
 	const sentIds: string[] = [];
-	try {
-		for (const to of recipients) {
-			const cleanTo = normalizeEmail(to);
+	const notSent: string[] = [];
+	for (const to of recipients) {
+		const cleanTo = normalizeEmail(to);
+		try {
 			if (alias.mailbox_id && mailflareReady(config)) {
 				await sendViaMailflare(mailflareConfig(config), {
 					mailboxId: alias.mailbox_id,
-					from: displayName ? `"${displayName.replace(/"/g, "")}" <${alias.address}>` : alias.address,
+					from: displayName ? `"${displayName}" <${alias.address}>` : alias.address,
 					to: [cleanTo],
 					subject: rules.subject ?? subject,
 					text: parsed.text || undefined,
 					html: parsed.html || undefined,
+					...(parsed.inReplyTo ? { inReplyTo: parsed.inReplyTo } : {}),
+					...(parsed.references ? { references: parsed.references.split(/\s+/).filter(Boolean) } : {}),
+					...(attachments.length
+						? {
+								attachments: attachments.map((att) => ({
+									filename: att.filename,
+									type: att.type,
+									contentBase64: bytesToBase64(new Uint8Array(att.content as ArrayBuffer)),
+								})),
+							}
+						: {}),
 				});
 				sentIds.push(newId("smtp"));
 			} else {
@@ -462,9 +488,12 @@ mailGateway.post("/smtp/send", async (c) => {
 				});
 				sentIds.push(res.messageId || newId("smtp"));
 			}
+		} catch (error) {
+			notSent.push(`${cleanTo}: ${error instanceof Error ? error.message : String(error)}`.slice(0, 300));
 		}
-	} catch (error) {
-		const detail = error instanceof Error ? error.message : String(error);
+	}
+	if (notSent.length) {
+		const detail = notSent.join("; ").slice(0, 1000);
 		if (settings.mailboxEnabled && settings.storeFailed) {
 			await storeMailboxMessage(c.env, config, settings, {
 				folder: "Failed",
@@ -479,7 +508,10 @@ mailGateway.post("/smtp/send", async (c) => {
 				parsed,
 			}).catch(() => undefined);
 		}
-		return c.json({ error: `Failed to send: ${detail.slice(0, 200)}` }, 502);
+		// SMTP has no partial success after DATA: with nothing sent the client may try again, but
+		// once a copy went out a retry would send it twice, so the rest is recorded in Failed.
+		if (!sentIds.length) return c.json({ error: `Failed to send: ${detail.slice(0, 200)}` }, 502);
+		await recordEvent(db, { kind: "send", aliasAddress: alias.address, status: "failed", detail: `SMTP not sent to ${detail}` }).catch(() => undefined);
 	}
 
 	await recordEvent(db, {

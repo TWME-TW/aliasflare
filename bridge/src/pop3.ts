@@ -38,6 +38,10 @@ export function attachPop3Session(socket: Duplex, opts: Pop3ServerOptions, initi
 	const deleted = new Set<number>();
 	let buffer = "";
 	let processing = Promise.resolve();
+	// Raised by STLS: lines that arrived in the clear behind it are dropped, not run under TLS.
+	let generation = 0;
+	// RFC 1939: an inactivity autologout timer of at least 10 minutes.
+	if (socket instanceof net.Socket) socket.setTimeout(10 * 60_000, () => socket.destroy());
 
 	const write = (text: string | Buffer) => {
 		if (!activeSocket.destroyed && activeSocket.writable) activeSocket.write(text);
@@ -64,6 +68,8 @@ export function attachPop3Session(socket: Duplex, opts: Pop3ServerOptions, initi
 				write("+OK Begin TLS negotiation\r\n");
 				const rawSock = activeSocket;
 				rawSock.removeAllListeners("data");
+				generation += 1;
+				buffer = "";
 				const tlsSock = new tls.TLSSocket(rawSock, { isServer: true, cert: opts.tls.cert, key: opts.tls.key });
 				activeSocket = tlsSock;
 				isSecure = true;
@@ -214,9 +220,17 @@ export function attachPop3Session(socket: Duplex, opts: Pop3ServerOptions, initi
 			while ((nl = buffer.indexOf("\n")) >= 0) {
 				const line = buffer.slice(0, nl).replace(/\r$/, "");
 				buffer = buffer.slice(nl + 1);
-				processing = processing.then(() => handleLine(line));
+				const gen = generation;
+				processing = processing.then(() => (gen === generation ? handleLine(line) : undefined)).catch(() => undefined);
+			}
+			// RFC 1939 commands are at most 255 octets; anything this long is not a client.
+			if (buffer.length > 8 * 1024) {
+				write("-ERR Line too long\r\n");
+				sock.destroy();
 			}
 		});
+		// Without a listener, one reset connection would crash the whole bridge.
+		sock.on("error", () => sock.destroy());
 	};
 
 	bindSocketEvents(activeSocket);

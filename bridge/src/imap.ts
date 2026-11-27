@@ -172,6 +172,12 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 	let pendingAppend: { tag: string; folder: string; flags: string[]; remaining: number; chunks: Buffer[] } | null = null;
 	let buffer = Buffer.alloc(0);
 	let processing = Promise.resolve();
+	// Raised by STARTTLS: lines that arrived in the clear behind it are dropped, not run under TLS.
+	let generation = 0;
+	// Set while a line that announced a literal waits for its handler.
+	let awaitingLiteral = false;
+	// RFC 3501 5.4: an autologout timer of at least 30 minutes (IDLE clients re-issue within 29).
+	if (socket instanceof net.Socket) socket.setTimeout(31 * 60_000, () => socket.destroy());
 
 	const write = (text: string | Buffer) => {
 		if (!activeSocket.destroyed && activeSocket.writable) activeSocket.write(text);
@@ -253,6 +259,8 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 				write(`${tag} OK Begin TLS negotiation now\r\n`);
 				const rawSock = activeSocket;
 				rawSock.removeAllListeners("data");
+				generation += 1;
+				buffer = Buffer.alloc(0);
 				const tlsSock = new tls.TLSSocket(rawSock, { isServer: true, cert: opts.tls.cert, key: opts.tls.key });
 				activeSocket = tlsSock;
 				isSecure = true;
@@ -600,7 +608,7 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 	};
 
 	const pump = () => {
-		while (buffer.length > 0) {
+		while (buffer.length > 0 && !awaitingLiteral) {
 			if (pendingAppend) {
 				const take = Math.min(pendingAppend.remaining, buffer.length);
 				pendingAppend.chunks.push(buffer.subarray(0, take));
@@ -632,7 +640,25 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 			if (nl < 0) break;
 			const line = buffer.subarray(0, nl).toString("utf8").replace(/\r$/, "");
 			buffer = buffer.subarray(nl + 1);
-			processing = processing.then(() => handleLine(line));
+			const gen = generation;
+			// A line announcing a literal ({N}, or LITERAL+ {N+}) is handled before more bytes are read
+			// as lines: its handler decides whether those bytes are the literal.
+			const literalAhead = /\{\d+\+?\}$/.test(line);
+			if (literalAhead) awaitingLiteral = true;
+			processing = processing
+				.then(() => (gen === generation ? handleLine(line) : undefined))
+				.catch(() => undefined)
+				.then(() => {
+					if (!literalAhead) return;
+					awaitingLiteral = false;
+					pump();
+				});
+			if (literalAhead) break;
+		}
+		// A command line (literals aside, which are counted above) is never this long.
+		if (!pendingAppend && !awaitingLiteral && buffer.length > 64 * 1024) {
+			write("* BYE Line too long\r\n");
+			activeSocket.destroy();
 		}
 	};
 
@@ -642,7 +668,10 @@ export function attachImapSession(socket: Duplex, opts: ImapServerOptions, initi
 			pump();
 		});
 		sock.on("close", stopIdle);
-		sock.on("error", stopIdle);
+		sock.on("error", () => {
+			stopIdle();
+			sock.destroy();
+		});
 	};
 
 	bindSocketEvents(activeSocket);

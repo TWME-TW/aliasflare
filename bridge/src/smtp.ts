@@ -17,6 +17,10 @@ export type SmtpServerOptions = {
 };
 
 const MAX_MESSAGE_BYTES = 10 * 1024 * 1024;
+/** Bytes a client may send without a line break before the session is closed. */
+const MAX_LINE_BYTES = 64 * 1024;
+/** An idle session is closed after this long (RFC 5321 4.5.3.2 suggests 5 minutes per command). */
+const IDLE_TIMEOUT_MS = 10 * 60_000;
 
 function extractBracketedAddress(arg: string): string | null {
 	const match = arg.match(/<([^<>\s]+@[^<>\s]+)>/);
@@ -39,6 +43,9 @@ export function attachSmtpSession(socket: Duplex, opts: SmtpServerOptions, initi
 	let dataBytes = 0;
 	let buffer = "";
 	let processing = Promise.resolve();
+	// Raised by STARTTLS: lines that arrived in the clear behind it are dropped, not run under TLS.
+	let generation = 0;
+	if (socket instanceof net.Socket) socket.setTimeout(IDLE_TIMEOUT_MS, () => socket.destroy());
 
 	const write = (text: string) => {
 		if (!activeSocket.destroyed && activeSocket.writable) activeSocket.write(text);
@@ -139,6 +146,8 @@ export function attachSmtpSession(socket: Duplex, opts: SmtpServerOptions, initi
 			write("220 2.0.0 Ready to start TLS\r\n");
 			const rawSock = activeSocket;
 			rawSock.removeAllListeners("data");
+			generation += 1;
+			buffer = "";
 			const tlsSock = new tls.TLSSocket(rawSock, { isServer: true, cert: opts.tls.cert, key: opts.tls.key });
 			activeSocket = tlsSock;
 			isSecure = true;
@@ -240,9 +249,16 @@ export function attachSmtpSession(socket: Duplex, opts: SmtpServerOptions, initi
 			while ((nl = buffer.indexOf("\n")) >= 0) {
 				const line = buffer.slice(0, nl).replace(/\r$/, "");
 				buffer = buffer.slice(nl + 1);
-				processing = processing.then(() => handleLine(line));
+				const gen = generation;
+				processing = processing.then(() => (gen === generation ? handleLine(line) : undefined)).catch(() => undefined);
+			}
+			if (buffer.length > MAX_LINE_BYTES) {
+				write("500 5.5.6 Line too long\r\n");
+				sock.destroy();
 			}
 		});
+		// Without a listener, one reset connection would crash the whole bridge.
+		sock.on("error", () => sock.destroy());
 	};
 
 	bindSocketEvents(activeSocket);

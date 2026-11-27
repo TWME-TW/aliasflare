@@ -409,4 +409,85 @@ describe("Mail Gateway API (/mail-api/v1) and IMAP / POP3 / SMTP Bridge", () => 
 		expect(sentOutbound).toHaveLength(1);
 		expect(sentOutbound[0]).toMatchObject({ from: "shop@a.test", to: "carol@x.test", subject: "Sent via Bridge SMTP" });
 	});
+
+	it("keeps POP3 reads and deletes to the folders POP3 exposes", async () => {
+		const settings = { ...DEFAULT_SETTINGS, aliasDomains: ["a.test"], pop3Enabled: true, pop3Folders: ["INBOX"] as "INBOX"[], pop3DeleteAction: "expunge" as const };
+		await saveSettings(db, settings);
+		const { password } = await createMailPassword(db, { name: "Pop", username: "pop", allowImap: false, allowPop3: true, allowSmtp: false });
+		const creds = { user: "pop", pass: password };
+		const hidden = await storeMailboxMessage(env, baseConfig, settings, {
+			folder: "Sent",
+			fromAddress: "shop@a.test",
+			toAddress: "bob@x.test",
+			subject: "Not for POP3",
+			raw: rawEml("shop@a.test", "bob@x.test", "Not for POP3", "Body"),
+		});
+		expect((await callGateway(`/pop3/messages/${hidden!.id}/raw`, creds)).status).toBe(404);
+		expect((await callGateway(`/pop3/messages/${hidden!.id}`, creds, { method: "DELETE" })).status).toBe(404);
+		expect(await db.prepare("SELECT folder FROM mailbox_messages WHERE id = ?").bind(hidden!.id).first()).toMatchObject({ folder: "Sent" });
+	});
+
+	it("answers SMTP with success once a copy went out, recording the recipients that failed", async () => {
+		const settings = { ...DEFAULT_SETTINGS, aliasDomains: ["a.test"], smtpEnabled: true, storeFailed: true };
+		await saveSettings(db, settings);
+		const { password } = await createMailPassword(db, { name: "Smtp", username: "smtp", allowImap: false, allowPop3: false, allowSmtp: true });
+		const send = env.EMAIL.send;
+		env.EMAIL.send = (async (payload: any) => {
+			if ((typeof payload.to === "string" ? payload.to : payload.to.email ?? payload.to) === "bad@x.test") throw new Error("rejected");
+			return send(payload);
+		}) as never;
+		const res = await callGateway("/smtp/send", { user: "smtp", pass: password }, {
+			method: "POST",
+			body: JSON.stringify({ mailFrom: "shop@a.test", rcptTo: ["bob@x.test", "bad@x.test"], raw: Buffer.from(rawEml("shop@a.test", "bob@x.test", "Two", "Hi")).toString("base64") }),
+		});
+		expect(res.status).toBe(200);
+		expect(sentOutbound.map((m) => m.to)).toEqual(["bob@x.test"]);
+		const failed = await db.prepare("SELECT reason_detail FROM mailbox_messages WHERE folder = 'Failed'").first<{ reason_detail: string }>();
+		expect(failed?.reason_detail).toMatch(/bad@x\.test: rejected/);
+
+		// With nothing sent, the client is told to try again.
+		const none = await callGateway("/smtp/send", { user: "smtp", pass: password }, {
+			method: "POST",
+			body: JSON.stringify({ mailFrom: "shop@a.test", rcptTo: ["bad@x.test"], raw: Buffer.from(rawEml("shop@a.test", "bad@x.test", "One", "Hi")).toString("base64") }),
+		});
+		expect(none.status).toBe(502);
+	});
+
+	it("refuses SMTP from an alias whose domain is deactivated", async () => {
+		await saveSettings(db, { ...DEFAULT_SETTINGS, aliasDomains: ["a.test"], smtpEnabled: true });
+		const { password } = await createMailPassword(db, { name: "Smtp", username: "smtp", allowImap: false, allowPop3: false, allowSmtp: true });
+		await db.prepare("INSERT INTO domains (domain, active, created_at, updated_at) VALUES ('a.test', 0, 1, 1)").run();
+		const res = await callGateway("/smtp/send", { user: "smtp", pass: password }, {
+			method: "POST",
+			body: JSON.stringify({ mailFrom: "shop@a.test", rcptTo: ["bob@x.test"], raw: Buffer.from(rawEml("shop@a.test", "bob@x.test", "Hi", "Hi")).toString("base64") }),
+		});
+		expect(res.status).toBe(403);
+		expect(sentOutbound).toHaveLength(0);
+	});
+
+	it("bridge: closes a session that sends an endless line, and takes LITERAL+ APPEND", async () => {
+		await saveSettings(db, { ...DEFAULT_SETTINGS, aliasDomains: ["a.test"], imapEnabled: true, smtpEnabled: true });
+		const { password } = await createMailPassword(db, { name: "All", username: "u", allowImap: true, allowPop3: false, allowSmtp: true });
+		const gateway = new MailGatewayClient("https://alias.test", async (input, init) => app.fetch(input instanceof Request ? input : new Request(String(input), init), env));
+
+		// A client that never ends its line is cut off instead of growing the buffer without end.
+		const { client, server } = createPair();
+		let flood = "";
+		client.on("data", (chunk: Buffer) => (flood += chunk.toString("utf8")));
+		attachSmtpSession(server, { gateway }, true);
+		client.write("A".repeat(70 * 1024));
+		await new Promise((r) => setTimeout(r, 50));
+		expect(server.destroyed).toBe(true);
+		expect(flood).not.toContain("530");
+
+		const message = "From: u@a.test\r\nSubject: Literal plus\r\n\r\nHello\r\n";
+		const out = await runTranscript(
+			(s) => attachImapSession(s, { gateway }, true),
+			[`a1 LOGIN u ${password}`, `a2 APPEND Sent {${Buffer.byteLength(message)}+}\r\n${message}`, "a3 LOGOUT"],
+		);
+		expect(out).toContain("a2 OK APPEND completed");
+		expect(out).not.toContain("BAD");
+		const stored = await db.prepare("SELECT subject FROM mailbox_messages WHERE folder = 'Sent'").first<{ subject: string }>();
+		expect(stored?.subject).toBe("Literal plus");
+	});
 });
