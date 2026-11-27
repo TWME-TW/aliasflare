@@ -76,7 +76,7 @@ const PUBLIC_ROUTES: [RegExp, string][] = [
 	[/^POST \/logout$/, "signing out"],
 	[/^(?:GET|POST) \/(?:unsubscribe|action)\/[^/]+$/, "signed links in forwarded mail"],
 	[/^POST \/webhook$/, "Mailflare, signed"],
-	[/^(?:GET|POST|PUT|PATCH|DELETE|ALL|OPTIONS) \/(?:api|mcp)(?:\/|$)/, "client APIs and MCP, keyed"],
+	[/^(?:GET|POST|PUT|PATCH|DELETE|ALL|OPTIONS) \/(?:api|mcp|mail-api)(?:\/|$)/, "client APIs, MCP, and Mail Gateway, keyed"],
 ];
 
 describe("3. every route is either public on purpose or needs a session", () => {

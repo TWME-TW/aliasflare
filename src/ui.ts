@@ -10,14 +10,18 @@ import { LOCALE_LIST, LOCALE_NAMES, textDirection, THEMES, type MessageKey, type
 import type { ApiKeyRow } from "./apikeys";
 import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
+import { MAILBOX_FOLDERS } from "./mailbox";
+import type { MailPasswordRow } from "./mail-passwords";
 import type { PasskeyRow } from "./passkeys";
 import type { SessionRow } from "./sessions";
 import {
 	ALIAS_SEPARATORS,
 	BANNER_LOCATIONS,
 	FORWARD_METHODS,
+	POP3_DELETE_ACTIONS,
 	QUOTA_POLICIES,
 	RANDOM_ALIAS_FORMATS,
+	SMTP_FROM_POLICIES,
 	SPAM_WARNING_BEHAVIOURS,
 	UNSUBSCRIBE_BEHAVIORS,
 	UNSUBSCRIBE_FALLBACKS,
@@ -946,6 +950,25 @@ ${STORAGE_BACKENDS.map((b) => html`<option value="${b}" ${settings.mailboxStorag
 <select id="mailboxQuotaPolicy" name="mailboxQuotaPolicy">
 ${QUOTA_POLICIES.map((p) => html`<option value="${p}" ${settings.mailboxQuotaPolicy === p ? "selected" : ""}>${t(`mb.quota.${p}`)}</option>`)}
 </select>
+
+<h3 id="mail-protocols">${t("proto.title")}</h3>
+<p class="help">${t("proto.help")} <a href="/api-keys#mail-passwords">${t("proto.managePasswords")} <span class="arrow" aria-hidden="true">→</span></a></p>
+${checkbox("imapEnabled", settings.imapEnabled, t("proto.imapEnable"), t("proto.imapHelp"))}
+${checkbox("pop3Enabled", settings.pop3Enabled, t("proto.pop3Enable"), t("proto.pop3Help"))}
+<fieldset class="domain-list"><legend class="help">${t("proto.pop3Folders")}</legend>
+${MAILBOX_FOLDERS.map((f) => html`<label class="check"><input type="checkbox" name="pop3Folder:${f}" value="1" ${settings.pop3Folders.includes(f) ? "checked" : ""} /><span>${t(`mb.folder.${f}`)}</span></label>`)}
+</fieldset>
+<label for="pop3DeleteAction">${t("proto.pop3Delete")}</label>
+<select id="pop3DeleteAction" name="pop3DeleteAction">
+${POP3_DELETE_ACTIONS.map((a) => html`<option value="${a}" ${settings.pop3DeleteAction === a ? "selected" : ""}>${t(`proto.pop3Del.${a}`)}</option>`)}
+</select>
+${checkbox("smtpEnabled", settings.smtpEnabled, t("proto.smtpEnable"), t("proto.smtpHelp"))}
+<label for="smtpFromPolicy">${t("proto.smtpFromPolicy")}</label>
+<select id="smtpFromPolicy" name="smtpFromPolicy">
+${SMTP_FROM_POLICIES.map((p) => html`<option value="${p}" ${settings.smtpFromPolicy === p ? "selected" : ""}>${t(`proto.smtpFrom.${p}`)}</option>`)}
+</select>
+<label for="smtpRateLimitPerHour">${t("proto.smtpRateLimit")}</label>
+<input id="smtpRateLimitPerHour" name="smtpRateLimitPerHour" type="number" min="1" max="1000" value="${String(settings.smtpRateLimitPerHour)}" />
 </section>
 
 <section id="unsubscribe">
@@ -1432,9 +1455,19 @@ export function messagePage(t: Translate, title: string, body: Html, path = "/")
 
 export function apiKeysPage(
 	t: Translate,
-	input: { keys: ApiKeyRow[]; enabled: { simplelogin: boolean; addy: boolean; mcp: boolean }; origin: string; newKey?: string; notice?: Notice },
+	input: {
+		keys: ApiKeyRow[];
+		mailPasswords?: MailPasswordRow[];
+		enabled: { simplelogin: boolean; addy: boolean; mcp: boolean };
+		mailProtocols?: { imap: boolean; pop3: boolean; smtp: boolean };
+		origin: string;
+		newKey?: string;
+		newMailPassword?: { username: string; password: string };
+		notice?: Notice;
+	},
 ): Html {
-	const { keys, enabled, origin, newKey, notice } = input;
+	const { keys, mailPasswords = [], enabled, mailProtocols = { imap: false, pop3: false, smtp: false }, origin, newKey, newMailPassword, notice } = input;
+	const anyMailProto = mailProtocols.imap || mailProtocols.pop3 || mailProtocols.smtp;
 	return page(
 		t("keys.title"),
 		html`<main>
@@ -1442,6 +1475,11 @@ ${noticeBox(notice)}
 ${newKey
 	? html`<section><h2>${t("keys.createdTitle")}</h2><p class="notice" role="status">${t("keys.created")}</p>
 <div class="row mt12"><input type="text" readonly value="${newKey}" aria-label="${t("keys.colKey")}" data-select spellcheck="false" class="mono" />${copyButton(t, newKey)}</div></section>`
+	: ""}
+${newMailPassword
+	? html`<section><h2>${t("proto.pwCreatedTitle")}</h2><p class="notice" role="status">${t("proto.pwCreated")}</p>
+<p>${t("proto.colUser")}: <span class="alias-cell"><code>${newMailPassword.username}</code>${copyButton(t, newMailPassword.username)}</span></p>
+<div class="row mt12"><input type="text" readonly value="${newMailPassword.password}" aria-label="${t("proto.pwTitle")}" data-select spellcheck="false" class="mono" />${copyButton(t, newMailPassword.password)}</div></section>`
 	: ""}
 <section>
 <h2>${t("keys.title")}</h2>
@@ -1473,6 +1511,48 @@ ${keys.map(
 </div>
 ${errorBox(t)}
 </form>
+</section>
+<section id="mail-passwords">
+<h2>${t("proto.pwTitle")}</h2>
+<p class="help">${t("proto.pwHelp")}</p>
+${anyMailProto
+	? html`<p>${t("proto.gatewayUrl")}: <span class="alias-cell"><code>${origin}/mail-api/v1</code>${copyButton(t, `${origin}/mail-api/v1`)}</span></p>
+<p class="muted">${mailProtocols.imap ? html`<span class="pill ok">IMAP</span> ` : ""}${mailProtocols.pop3 ? html`<span class="pill ok">POP3</span> ` : ""}${mailProtocols.smtp ? html`<span class="pill ok">SMTP</span>` : ""}</p>`
+	: html`<p class="notice">${t("proto.allOff")} <a href="/settings#mail-protocols">${t("nav.settings")} <span class="arrow" aria-hidden="true">→</span></a></p>`}
+${mailPasswords.length
+	? html`<div class="table-wrap"><table class="rt"><thead><tr><th>${t("keys.colName")}</th><th>${t("proto.colUser")}</th><th>${t("proto.colProtocols")}</th><th>${t("keys.colKey")}</th><th>${t("keys.colUsed")}</th><th></th></tr></thead><tbody>
+${mailPasswords.map(
+	(pw) => html`<tr>
+<td data-label="${t("keys.colName")}">${pw.name}</td>
+<td data-label="${t("proto.colUser")}"><code>${pw.username}</code></td>
+<td data-label="${t("proto.colProtocols")}">${pw.allow_imap ? html`<span class="pill ok">IMAP</span> ` : ""}${pw.allow_pop3 ? html`<span class="pill ok">POP3</span> ` : ""}${pw.allow_smtp ? html`<span class="pill ok">SMTP</span>` : ""}</td>
+<td data-label="${t("keys.colKey")}"><code>${pw.prefix}…</code></td>
+<td data-label="${t("keys.colUsed")}">${timeTag(pw.last_used_at, t.locale)}</td>
+<td><form class="inline" method="post" action="/mail-passwords/${pw.id}/delete"><button class="danger" aria-label="${t("keys.revoke")}: ${pw.name}">${t("keys.revoke")}</button></form></td>
+</tr>`,
+)}
+</tbody></table></div>`
+	: html`<p class="muted">${t("proto.pwNone")}</p>`}
+<form class="mt12" method="post" action="/mail-passwords" data-reauth>
+<div class="row">
+<input name="name" type="text" maxlength="60" placeholder="${t("proto.pwNamePlaceholder")}" aria-label="${t("keys.name")}" required />
+<input name="username" type="text" maxlength="120" value="aliasflare" placeholder="aliasflare" aria-label="${t("proto.colUser")}" required />
+</div>
+<div class="row mt12">
+<label class="check"><input type="checkbox" name="allowImap" value="1" checked /> <span>IMAP</span></label>
+<label class="check"><input type="checkbox" name="allowPop3" value="1" /> <span>POP3</span></label>
+<label class="check"><input type="checkbox" name="allowSmtp" value="1" checked /> <span>SMTP</span></label>
+<button class="primary">${t("proto.pwCreate")}</button>
+</div>
+${errorBox(t)}
+</form>
+<details class="mt12"><summary>${t("proto.bridgeGuide")}</summary>
+<p class="help">${t("proto.bridgeGuideHelp")}</p>
+<pre class="mono mb-pre">ALIASFLARE_URL=${origin}
+ENABLE_IMAP=${mailProtocols.imap ? "true" : "false"}
+ENABLE_POP3=${mailProtocols.pop3 ? "true" : "false"}
+ENABLE_SMTP=${mailProtocols.smtp ? "true" : "false"}</pre>
+</details>
 </section>
 </main>`,
 		{ t, nav: true, script: true, current: "/api-keys", path: "/api-keys" },

@@ -1,0 +1,32 @@
+services:
+  aliasflare-bridge:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Base URL of your deployed aliasflare Worker (required)
+      ALIASFLARE_URL: "https://alias.example.com"
+      # Enable only the protocols you need (must also be enabled in aliasflare Settings)
+      ENABLE_IMAP: "true"
+      ENABLE_POP3: "false"
+      ENABLE_SMTP: "true"
+      # Optional TLS certificate & private key for IMAPS (993), POP3S (995), SMTPS (465) and STARTTLS
+      # TLS_CERT_FILE: "/certs/fullchain.pem"
+      # TLS_KEY_FILE: "/certs/privkey.pem"
+      # Set ALLOW_PLAINTEXT_AUTH=true ONLY when running behind localhost/Tailscale/VPN without TLS
+      ALLOW_PLAINTEXT_AUTH: "false"
+      BIND_HOST: "0.0.0.0"
+      IMAP_PORT: "143"
+      IMAPS_PORT: "993"
+      POP3_PORT: "110"
+      POP3S_PORT: "995"
+      SMTP_PORT: "587"
+      SMTPS_PORT: "465"
+    ports:
+      - "127.0.0.1:1143:143"
+      - "127.0.0.1:1993:993"
+      - "127.0.0.1:1110:110"
+      - "127.0.0.1:1995:995"
+      - "127.0.0.1:1587:587"
+      - "127.0.0.1:1465:465"
+    # volumes:
+    #   - ./certs:/certs:ro
