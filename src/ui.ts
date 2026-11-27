@@ -945,13 +945,31 @@ ${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.app
 }
 
 /** What the Cloudflare token needs, as the token form names it, with the scope each one is granted on. */
-const TOKEN_PERMISSIONS: ["zone" | "account", string, string][] = [
+const TOKEN_PERMISSIONS: ["zone" | "account", string, string, MessageKey?][] = [
 	["zone", "Zone", "Read"],
 	["zone", "Zone Settings", "Edit"],
 	["zone", "DNS", "Edit"],
 	["zone", "Email Routing Rules", "Edit"],
 	["account", "Email Sending", "Edit"],
+	// Only for the optional openpgpkey.<domain> host (WKD).
+	["account", "Workers Scripts", "Edit", "cf.forWkd"],
 ];
+
+/** The browser build of OpenPGP.js, copied into public/ at build time (scripts/vendor-openpgp.mjs). */
+export const OPENPGP_BROWSER = "/vendor/openpgp.min.mjs";
+
+/**
+ * Makes a key pair in the browser for the form it sits in: the public key goes into its key field,
+ * the private key is saved as a file and is never sent. Shown only once the page script runs.
+ */
+function keyGenerator(t: Translate, email?: string): Html {
+	return html`<div class="mt12" data-pgp-gen hidden>
+<label for="pgpPassphrase">${t("pgp.genPassphrase")}</label>
+<input id="pgpPassphrase" type="password" autocomplete="new-password" data-pgp-passphrase />
+<p class="help">${t("pgp.genHelp")}</p>
+<button type="button" data-pgp-generate="${OPENPGP_BROWSER}" data-email="${email ?? ""}" data-msg-done="${t("pgp.genDone")}" data-msg-failed="${t("pgp.genFailed")}">${t("pgp.generate")}</button>
+</div>`;
+}
 
 /** The fields of each provider that needs more than a key; the chosen one's are shown. */
 function providerFields(t: Translate, options: OutboundOptions, provider: OutboundProvider, fixed: boolean): Html {
@@ -1043,10 +1061,11 @@ ${cloudflare.domains.length
 </fieldset>
 ${secretField("cloudflareApiToken", t("cf.token"), cloudflare.hasToken, t("cf.tokenHelp"))}
 <ul class="perms">${TOKEN_PERMISSIONS.map(
-	([scope, name, level]) => html`<li><span class="pill scope ${scope}">${t(scope === "zone" ? "cf.scopeZone" : "cf.scopeAccount")}</span><span class="perm-name">${name}</span><span class="perm-level">${level}</span></li>`,
+	([scope, name, level, note]) => html`<li><span class="pill scope ${scope}">${t(scope === "zone" ? "cf.scopeZone" : "cf.scopeAccount")}</span><span class="perm-name">${name}${note ? html` <span class="muted">${t(note)}</span>` : ""}</span><span class="perm-level">${level}</span></li>`,
 )}</ul>
 <p class="help">${t("cf.tokenScope")}</p>
 ${checkbox("replaceCatchAll", false, t("cf.replaceCatchAll"), t("cf.replaceCatchAllHelp"))}
+${checkbox("wkdHost", false, t("cf.wkdHost"), t("cf.wkdHostHelp"))}
 <label for="workerName">${t("cf.workerName")}</label>
 <input id="workerName" name="workerName" type="text" value="${cloudflare.workerName}" autocapitalize="none" spellcheck="false" ${disabled("workerName")} />
 <p class="help">${t("cf.workerNameHelp")}</p>${fixedNote("workerName")}
@@ -1295,9 +1314,11 @@ ${wkd
 <form class="mt12" method="post" action="${base}/wkd">
 <label for="wkdKey">${t(wkd ? "wkd.replace" : "pgp.key")}</label>
 <textarea id="wkdKey" name="key" rows="5" required spellcheck="false" autocapitalize="none" placeholder="${t("pgp.keyPlaceholder")}"></textarea>
+${keyGenerator(t, alias.address)}
 <button class="primary mt12">${t("wkd.publish")}</button>
 </form>
 <details class="mt12"><summary>${t("wkd.setupTitle")}</summary>
+<p class="help">${t("wkd.setupAuto", { host: `openpgpkey.${aliasDomain}` })} <a href="/connection#cloudflare">${t("nav.connection")} <span class="arrow" aria-hidden="true">→</span></a></p>
 <p class="help">${t("wkd.setup", { host: `openpgpkey.${aliasDomain}` })}</p>
 <ol class="help"><li>${t("wkd.setupDns", { host: `openpgpkey.${aliasDomain}` })}</li><li>${t("wkd.setupRoute", { route: `openpgpkey.${aliasDomain}/*` })}</li></ol>
 </details>
@@ -1669,6 +1690,7 @@ ${freePlan ? html`<p class="notice bad" role="alert">${t("pgp.freeWarning")}</p>
 <input id="pgpEmail" name="email" type="email" required autocapitalize="none" spellcheck="false" />
 <label for="pgpKey">${t("pgp.key")}</label>
 <textarea id="pgpKey" name="key" rows="6" required spellcheck="false" autocapitalize="none" placeholder="${t("pgp.keyPlaceholder")}"></textarea>
+${keyGenerator(t)}
 <button class="primary mt12">${t("pgp.save")}</button>
 </form>
 ${keys.length === 0

@@ -637,6 +637,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "Klucz dla {alias} nie jest już publikowany.",
 	"notice.wkdOtherAddress": "Ten klucz wymienia adres inny niż {alias}. Utwórz klucz, w którym ten alias jest jedynym adresem.",
 	"notice.wkdKeyInUse": "Ten klucz jest już używany dla innego aliasu lub adresu przekazywania. Utwórz nowy klucz dla {alias}.",
+	"pgp.generate": "Wygeneruj parę kluczy",
+	"pgp.genPassphrase": "Hasło do klucza prywatnego (opcjonalne)",
+	"pgp.genHelp": "Tworzy nową parę kluczy w tej przeglądarce. Klucz publiczny zostanie wpisany powyżej; klucz prywatny zostanie zapisany jako plik na tym urządzeniu i nigdy nie zostanie tutaj wysłany. Zaimportuj ten plik do swojej aplikacji pocztowej (Thunderbird, pęk kluczy GnuPG, …), aby czytać zaszyfrowane wiadomości, i zachowaj kopię: bez niej tych wiadomości nie da się odczytać. Hasło chroni plik, jeśli ktoś inny go zdobędzie.",
+	"pgp.genDone": "Para kluczy utworzona. Klucz prywatny zapisano jako plik: zaimportuj go do aplikacji pocztowej, a następnie zapisz tutaj.",
+	"pgp.genFailed": "Nie udało się utworzyć pary kluczy w tej przeglądarce.",
+	"cf.forWkd": "(tylko dla hosta WKD)",
+	"cf.wkdHost": "Skonfiguruj też openpgpkey.<domain> dla WKD",
+	"cf.wkdHostHelp": "Dołącza openpgpkey.a.com do tego Workera jako Custom Domain, dzięki czemu aliasy mogą publikować klucze przez WKD. Cloudflare tworzy rekord DNS i certyfikat; na tym hoście odpowiadają tylko zapytania o klucze, a pozostałe rekordy domeny nie są zmieniane. Wymaga uprawnienia Workers Scripts poniżej. Host, który ma już rekord CNAME, zostanie odrzucony. Jeśli Twoja konfiguracja Wrangler zawiera własne custom domains, wdrożenie zastąpi tę domenę: dodaj tam także ten host.",
+	"cf.step.wkd": "Host WKD",
+	"wkd.setupAuto": "Strona połączenia może to zrobić za Ciebie: zaznacz opcję WKD w konfiguracji Cloudflare. Możesz też ręcznie skonfigurować {host}:",
 };
 
 export default dictionary;

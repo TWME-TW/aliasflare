@@ -15,9 +15,14 @@
  * is why reverse aliases use plus addressing and alias domains must be a zone apex here. An
  * alias domain on a subdomain can still be received by Mailflare instead.
  *
+ * 7. optionally, attach openpgpkey.a.com to this Worker as a Custom Domain, so aliases can publish
+ *    keys by WKD (Cloudflare makes its DNS record and certificate; only WKD paths answer there).
+ *
  * Token permissions, for each zone: Zone: Read, Zone Settings: Edit, DNS: Edit (Email Routing's
- * MX and SPF records), Email Routing Rules: Edit; and for the account: Email Sending: Edit.
+ * MX and SPF records), Email Routing Rules: Edit; and for the account: Email Sending: Edit, plus
+ * Workers Scripts: Edit for step 7.
  */
+import { WKD_SUBDOMAIN } from "./wkd";
 import { reverseDomainFor } from "./domains";
 import { REVERSE_BASE } from "./format";
 import { readTextLimited } from "./streams";
@@ -62,7 +67,7 @@ async function cf<T>(token: string, path: string, init: RequestInit = {}): Promi
 	return body.result;
 }
 
-export type SetupStepName = "zone" | "catchall" | "routing" | "subaddress" | "rule" | "sending";
+export type SetupStepName = "zone" | "catchall" | "routing" | "subaddress" | "rule" | "sending" | "wkd";
 export type SetupStep = { step: SetupStepName; ok: boolean; detail: string };
 export type DomainSetup = { domain: string; steps: SetupStep[] };
 
@@ -77,9 +82,11 @@ export function zoneCandidates(domain: string): string[] {
 	return out;
 }
 
-async function findZone(token: string, domain: string): Promise<{ id: string; name: string } | null> {
+type Zone = { id: string; name: string; account?: { id?: string } };
+
+async function findZone(token: string, domain: string): Promise<Zone | null> {
 	for (const name of zoneCandidates(domain)) {
-		const zones = await cf<{ id: string; name: string }[]>(token, `/zones?name=${encodeURIComponent(name)}&status=active`);
+		const zones = await cf<Zone[]>(token, `/zones?name=${encodeURIComponent(name)}&status=active`);
 		if (zones[0]) return zones[0];
 	}
 	return null;
@@ -157,7 +164,26 @@ async function enableSending(token: string, zoneId: string, domain: string): Pro
 	}
 }
 
-export async function setUpDomain(input: { token: string; domain: string; workerName: string; replaceCatchAll?: boolean }): Promise<DomainSetup> {
+type WorkerDomain = { id: string; hostname: string; service: string };
+
+/**
+ * Attaches openpgpkey.<domain> to the Worker as a Custom Domain. One already on this Worker is
+ * done; one on another Worker is left alone. Cloudflare refuses a host that already has a CNAME.
+ */
+async function attachWkdHost(token: string, zone: Zone, domain: string, workerName: string): Promise<string> {
+	const account = zone.account?.id;
+	if (!account) throw new Error("The zone's account is not known to this token.");
+	const hostname = `${WKD_SUBDOMAIN}.${domain}`;
+	const path = `/accounts/${encodeURIComponent(account)}/workers/domains`;
+	const existing = (await cf<WorkerDomain[]>(token, `${path}?hostname=${encodeURIComponent(hostname)}`)).find((entry) => entry.hostname === hostname);
+	if (existing && existing.service !== workerName) {
+		throw new Error(`${hostname} already belongs to the Worker ${existing.service}; it was left unchanged.`);
+	}
+	if (!existing) await cf(token, path, { method: "PUT", body: JSON.stringify({ hostname, service: workerName, zone_id: zone.id }) });
+	return `${hostname} → ${workerName}`;
+}
+
+export async function setUpDomain(input: { token: string; domain: string; workerName: string; replaceCatchAll?: boolean; wkdHost?: boolean }): Promise<DomainSetup> {
 	const { token, workerName } = input;
 	const domain = input.domain.trim().toLowerCase().replace(/\.$/, "");
 	const reverseDomain = reverseDomainFor(domain);
@@ -170,7 +196,7 @@ export async function setUpDomain(input: { token: string; domain: string; worker
 		}
 	};
 
-	let zone: { id: string; name: string } | null = null;
+	let zone: Zone | null = null;
 	try {
 		zone = await findZone(token, domain);
 		steps.push(zone ? { step: "zone", ok: true, detail: zone.name } : { step: "zone", ok: false, detail: `No zone found for ${domain} with this token.` });
@@ -239,11 +265,13 @@ export async function setUpDomain(input: { token: string; domain: string; worker
 		await enableSending(token, found.id, domain);
 		return `${reverseDomain}, ${domain}`;
 	});
+
+	if (input.wkdHost) await attempt("wkd", () => attachWkdHost(token, found, domain, workerName));
 	return { domain, steps };
 }
 
-export async function setUpCloudflare(input: { token: string; domains: string[]; workerName: string; replaceCatchAll?: boolean }): Promise<DomainSetup[]> {
+export async function setUpCloudflare(input: { token: string; domains: string[]; workerName: string; replaceCatchAll?: boolean; wkdHost?: boolean }): Promise<DomainSetup[]> {
 	const results: DomainSetup[] = [];
-	for (const domain of input.domains) results.push(await setUpDomain({ token: input.token, domain, workerName: input.workerName, replaceCatchAll: input.replaceCatchAll }));
+	for (const domain of input.domains) results.push(await setUpDomain({ ...input, domain }));
 	return results;
 }

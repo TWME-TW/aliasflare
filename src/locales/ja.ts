@@ -631,6 +631,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "{alias} の鍵は公開されなくなりました。",
 	"notice.wkdOtherAddress": "その鍵は {alias} 以外のアドレスを含んでいます。このエイリアスを唯一のアドレスとする鍵を作成してください。",
 	"notice.wkdKeyInUse": "その鍵は既に別のエイリアスまたは転送先アドレスで使われています。{alias} 用の新しい鍵を作成してください。",
+	"pgp.generate": "鍵ペアを生成",
+	"pgp.genPassphrase": "秘密鍵のパスフレーズ（任意）",
+	"pgp.genHelp": "このブラウザで新しい鍵ペアを作成します。公開鍵は上の欄に入力され、秘密鍵はこのデバイスにファイルとして保存され、ここには送信されません。暗号化されたメールを読むには、そのファイルをメールアプリ（Thunderbird、GnuPG のキーリングなど）にインポートしてください。また、コピーを保管してください。これがないと、そのメールは読めなくなります。パスフレーズは、ファイルが他人の手に渡った場合の保護になります。",
+	"pgp.genDone": "鍵ペアを作成しました。秘密鍵はファイルとして保存されています。メールアプリにインポートしてから、ここで保存してください。",
+	"pgp.genFailed": "このブラウザでは鍵ペアを作成できませんでした。",
+	"cf.forWkd": "（WKD ホストの場合のみ）",
+	"cf.wkdHost": "WKD 用の openpgpkey.<domain> も設定する",
+	"cf.wkdHostHelp": "openpgpkey.a.com をこの Worker に Custom Domain として追加し、エイリアスが WKD で鍵を公開できるようにします。Cloudflare が DNS レコードと証明書を作成します。このホストでは鍵の検索への応答のみ行われ、ドメインの他のレコードには影響しません。下記の Workers Scripts 権限が必要です。既に CNAME レコードがあるホストは拒否されます。Wrangler の設定に独自の custom domain が記載されている場合、デプロイでこの設定が置き換わるため、そちらにもこのホストを追加してください。",
+	"cf.step.wkd": "WKD ホスト",
+	"wkd.setupAuto": "接続ページでこの設定を自動で行えます。Cloudflare のセットアップで WKD オプションにチェックを入れてください。または手動で {host} を設定してください:",
 };
 
 export default dictionary;

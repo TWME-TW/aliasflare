@@ -652,6 +652,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "Ufunguo wa {alias} hauchapishwi tena.",
 	"notice.wkdOtherAddress": "Ufunguo huo unataja anwani tofauti na {alias}. Tengeneza ufunguo wenye lakabu hii kama anwani yake pekee.",
 	"notice.wkdKeyInUse": "Ufunguo huo tayari unatumika kwa lakabu nyingine au anwani ya kutuma. Tengeneza ufunguo mpya kwa {alias}.",
+	"pgp.generate": "Tengeneza jozi ya funguo",
+	"pgp.genPassphrase": "Nenosiri la ufunguo wa faragha (si lazima)",
+	"pgp.genHelp": "Huunda jozi mpya ya funguo kwenye kivinjari hiki. Ufunguo wa umma umejazwa hapo juu; ufunguo wa faragha unahifadhiwa kama faili kwenye kifaa hiki na hautumwi hapa kamwe. Ingiza faili hilo kwenye programu yako ya barua (Thunderbird, kifungu cha GnuPG, …) ili kusoma barua zilizosimbwa, na uhifadhi nakala: bila hiyo, barua hizo haziwezi kusomwa. Nenosiri hulinda faili endapo mtu mwingine atalipata.",
+	"pgp.genDone": "Jozi ya funguo imetengenezwa. Ufunguo wa faragha umehifadhiwa kama faili: ingiza kwenye programu yako ya barua, kisha uhifadhi hapa.",
+	"pgp.genFailed": "Jozi ya funguo haikuweza kutengenezwa kwenye kivinjari hiki.",
+	"cf.forWkd": "(kwa mwenyeji wa WKD pekee)",
+	"cf.wkdHost": "Weka pia openpgpkey.<domain> kwa WKD",
+	"cf.wkdHostHelp": "Inaambatisha openpgpkey.a.com kwenye Worker hii kama Custom Domain, ili aliases ziweze kuchapisha funguo kupitia WKD. Cloudflare huunda rekodi yake ya DNS na cheti; ni ombi la funguo pekee ndilo hujibiwa hapo, na rekodi nyingine za kikoa hazibadilishwi. Inahitaji ruhusa ya Workers Scripts hapo chini. Mwenyeji ambaye tayari ana rekodi ya CNAME hukataliwa. Ikiwa usanidi wako wa Wrangler una custom domains zake, deploy itabadilisha hii: ongeza mwenyeji huo humo pia.",
+	"cf.step.wkd": "Mwenyeji wa WKD",
+	"wkd.setupAuto": "Ukurasa wa muunganisho unaweza kufanya hili kwa ajili yako: weka tiki kwenye chaguo la WKD katika usanidi wa Cloudflare. Au weka {host} kwa mkono:",
 };
 
 export default dictionary;

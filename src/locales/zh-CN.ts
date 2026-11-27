@@ -631,6 +631,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "{alias} 的密钥已不再发布。",
 	"notice.wkdOtherAddress": "该密钥包含了 {alias} 以外的地址。请创建一个以此别名为唯一地址的密钥。",
 	"notice.wkdKeyInUse": "该密钥已用于其他别名或转发地址。请为 {alias} 创建新密钥。",
+	"pgp.generate": "生成密钥对",
+	"pgp.genPassphrase": "私钥的口令（可选）",
+	"pgp.genHelp": "在此浏览器中生成新的密钥对。公钥会自动填入上方；私钥会以文件形式保存在此设备上，且绝不会发送到此处。请将该文件导入你的邮件应用（Thunderbird、GnuPG 密钥环等）以读取加密邮件，并保留一份备份：没有它，这些邮件将无法读取。若文件被他人获得，口令可以保护它。",
+	"pgp.genDone": "密钥对已生成。私钥已保存为文件：请将其导入邮件应用，然后在此保存。",
+	"pgp.genFailed": "无法在此浏览器中生成密钥对。",
+	"cf.forWkd": "（仅适用于 WKD 主机）",
+	"cf.wkdHost": "同时为 WKD 设置 openpgpkey.<domain>",
+	"cf.wkdHostHelp": "将 openpgpkey.a.com 作为自定义域绑定到此 Worker，使别名能通过 WKD 发布密钥。Cloudflare 会为其创建 DNS 记录和证书；该域名上只响应密钥查询，域名的其他记录不受影响。需要下方的 Workers Scripts 权限。已有 CNAME 记录的主机会被拒绝。如果你的 Wrangler 配置中列有自己的自定义域，部署会替换此设置：请同时把该主机添加到那里。",
+	"cf.step.wkd": "WKD 主机",
+	"wkd.setupAuto": "连接页面可以为你完成此操作：在 Cloudflare 设置中勾选 WKD 选项。或者手动设置 {host}：",
 };
 
 export default dictionary;

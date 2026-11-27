@@ -439,6 +439,41 @@ export const APP_SCRIPT = `(() => {
       }
     });
   }
+  // A key pair made in this browser: the public key goes into the form's key field, the private
+  // key is saved as a file and never leaves the device. OpenPGP.js loads only when asked for.
+  for (const box of document.querySelectorAll("[data-pgp-gen]")) {
+    const button = box.querySelector("button[data-pgp-generate]");
+    const form = box.closest("form");
+    if (!button || !form || !window.Blob || !URL.createObjectURL) continue;
+    box.hidden = false;
+    button.addEventListener("click", async () => {
+      const emailInput = form.querySelector("input[name=email]");
+      const email = (button.dataset.email || (emailInput ? emailInput.value : "")).trim().toLowerCase();
+      if (!email || (emailInput && !emailInput.checkValidity())) {
+        if (emailInput) emailInput.reportValidity();
+        return;
+      }
+      const passphrase = box.querySelector("[data-pgp-passphrase]").value;
+      button.disabled = true;
+      try {
+        const openpgp = await import(button.dataset.pgpGenerate);
+        const { privateKey, publicKey } = await openpgp.generateKey({ type: "curve25519", userIDs: [{ email }], passphrase: passphrase || undefined, format: "armored" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(new Blob([privateKey], { type: "application/pgp-keys" }));
+        link.download = email.replace(/[^a-z0-9.@_+-]/g, "_") + "-private-key.asc";
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+        form.querySelector("textarea[name=key]").value = publicKey;
+        show(button.dataset.msgDone, true);
+      } catch {
+        show(button.dataset.msgFailed, false);
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
   const autosaveForms = [];
   for (const form of document.querySelectorAll("form[data-autosave]")) {
     let latest = 0;

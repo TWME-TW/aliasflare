@@ -637,6 +637,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "Khóa cho {alias} không còn được công bố nữa.",
 	"notice.wkdOtherAddress": "Khóa đó ghi một địa chỉ khác {alias}. Hãy tạo khóa mà bí danh này là địa chỉ duy nhất.",
 	"notice.wkdKeyInUse": "Khóa đó đã được dùng cho bí danh khác hoặc địa chỉ chuyển tiếp. Hãy tạo khóa mới cho {alias}.",
+	"pgp.generate": "Tạo cặp khóa",
+	"pgp.genPassphrase": "Cụm mật khẩu cho khóa riêng (không bắt buộc)",
+	"pgp.genHelp": "Tạo một cặp khóa mới trong trình duyệt này. Khóa công khai được điền ở trên; khóa riêng được lưu thành tệp trên thiết bị này và không bao giờ được gửi tới đây. Hãy nhập tệp đó vào ứng dụng thư của bạn (Thunderbird, bộ khóa GnuPG, …) để đọc thư đã mã hóa, và giữ một bản sao: không có nó, các thư đó không thể đọc được. Cụm mật khẩu sẽ bảo vệ tệp nếu người khác lấy được nó.",
+	"pgp.genDone": "Đã tạo cặp khóa. Khóa riêng đã được lưu thành tệp: hãy nhập tệp vào ứng dụng thư của bạn, rồi lưu tại đây.",
+	"pgp.genFailed": "Không thể tạo cặp khóa trong trình duyệt này.",
+	"cf.forWkd": "(chỉ dành cho máy chủ WKD)",
+	"cf.wkdHost": "Cũng thiết lập openpgpkey.<domain> cho WKD",
+	"cf.wkdHostHelp": "Gắn openpgpkey.a.com vào Worker này làm Custom Domain, để các alias có thể đăng khóa qua WKD. Cloudflare tạo bản ghi DNS và chứng chỉ cho tên miền này; chỉ các yêu cầu tra cứu khóa được phản hồi tại đây, các bản ghi khác của tên miền không bị thay đổi. Cần quyền Workers Scripts bên dưới. Máy chủ đã có bản ghi CNAME sẽ bị từ chối. Nếu cấu hình Wrangler của bạn có danh sách custom domain riêng, lần deploy sẽ thay thế danh sách này: hãy thêm máy chủ này vào đó.",
+	"cf.step.wkd": "Máy chủ WKD",
+	"wkd.setupAuto": "Trang kết nối có thể làm việc này cho bạn: đánh dấu tùy chọn WKD trong thiết lập Cloudflare. Hoặc tự thiết lập {host}:",
 };
 
 export default dictionary;

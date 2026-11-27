@@ -652,6 +652,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "{alias}의 키가 더 이상 게시되지 않습니다.",
 	"notice.wkdOtherAddress": "이 키에는 {alias} 이외의 주소가 지정되어 있습니다. 이 별칭만을 주소로 지정한 키를 만드세요.",
 	"notice.wkdKeyInUse": "이 키는 이미 다른 별칭이나 전달 주소에 사용 중입니다. {alias}를 위한 새 키를 만드세요.",
+	"pgp.generate": "키 쌍 생성",
+	"pgp.genPassphrase": "개인 키의 암호 문구 (선택 사항)",
+	"pgp.genHelp": "이 브라우저에서 새 키 쌍을 만듭니다. 공개 키는 위에 자동으로 채워지며, 개인 키는 이 기기에 파일로 저장되고 여기로 전송되지 않습니다. 암호화된 메일을 읽으려면 그 파일을 메일 앱(Thunderbird, GnuPG 키링 등…)에 가져오고 사본을 보관하세요. 파일이 없으면 해당 메일을 읽을 수 없습니다. 암호 문구는 다른 사람이 파일을 얻더라도 파일을 보호합니다.",
+	"pgp.genDone": "키 쌍이 생성되었습니다. 개인 키는 파일로 저장되었습니다. 메일 앱으로 가져온 뒤 여기에서 저장하세요.",
+	"pgp.genFailed": "이 브라우저에서 키 쌍을 만들 수 없습니다.",
+	"cf.forWkd": "(WKD 호스트에만 해당)",
+	"cf.wkdHost": "WKD용 openpgpkey.<domain>도 설정",
+	"cf.wkdHostHelp": "openpgpkey.a.com을 이 Worker에 사용자 지정 도메인으로 연결하여, 별칭이 WKD를 통해 키를 게시할 수 있게 합니다. Cloudflare가 DNS 레코드와 인증서를 만들며, 이 호스트에서는 키 조회에만 응답하고 도메인의 다른 레코드는 건드리지 않습니다. 아래 Workers Scripts 권한이 필요합니다. 이미 CNAME 레코드가 있는 호스트는 거부됩니다. Wrangler 구성에 자체 사용자 지정 도메인이 있으면 배포 시 이 도메인이 대체되므로, 해당 호스트도 거기에 추가하세요.",
+	"cf.step.wkd": "WKD 호스트",
+	"wkd.setupAuto": "연결 페이지에서 자동으로 설정할 수 있습니다. Cloudflare 설정에서 WKD 옵션을 선택하세요. 또는 {host}를 직접 설정하세요:",
 };
 
 export default dictionary;

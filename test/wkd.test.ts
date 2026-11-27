@@ -61,6 +61,19 @@ describe("publishing a key for an alias", () => {
 		expect(page).toContain("openpgpkey.a.test/*");
 	});
 
+	it("offers a key pair made in the browser, and publishes the kind of key it makes", async () => {
+		const page = await (await app.fetch(new Request(`${ORIGIN}/aliases/shop%40a.test`, { headers: { cookie } }), env)).text();
+		expect(page).toContain('data-pgp-generate="/vendor/openpgp.min.mjs" data-email="shop@a.test"');
+		// The passphrase stays in the browser: its field has no name, so the form never sends it.
+		expect(page).toContain('<input id="pgpPassphrase" type="password" autocomplete="new-password" data-pgp-passphrase />');
+		// What the button makes: a user ID with the address alone ("<shop@a.test>").
+		const { publicKey } = await openpgp.generateKey({ type: "curve25519", userIDs: [{ email: "shop@a.test" }], format: "armored" });
+		expect(notice(await post("/aliases/shop%40a.test/wkd", { key: publicKey }))).toBe("notice.wkdSaved");
+		const connection = await (await app.fetch(new Request(`${ORIGIN}/connection`, { headers: { cookie } }), env)).text();
+		expect(connection).toContain('name="wkdHost"');
+		expect(connection).toContain("Workers Scripts");
+	});
+
 	it("answers the direct method on the domain itself, and nothing on other hosts or for other aliases", async () => {
 		await post("/aliases/shop%40a.test/wkd", { key: aliasKey });
 		const hash = await wkdHash("shop@a.test");
