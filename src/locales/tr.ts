@@ -637,6 +637,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "{alias} için anahtar artık yayımlanmıyor.",
 	"notice.wkdOtherAddress": "Bu anahtar {alias} dışında bir adres belirtiyor. Yalnızca bu takma adın adres olduğu bir anahtar oluşturun.",
 	"notice.wkdKeyInUse": "Bu anahtar zaten başka bir takma ad veya yönlendirme adresi için kullanılıyor. {alias} için yeni bir anahtar oluşturun.",
+	"pgp.generate": "Anahtar çifti oluştur",
+	"pgp.genPassphrase": "Özel anahtar için parola (isteğe bağlı)",
+	"pgp.genHelp": "Bu tarayıcıda yeni bir anahtar çifti oluşturur. Ortak anahtar yukarıya doldurulur; özel anahtar bu cihazda bir dosya olarak kaydedilir ve asla buraya gönderilmez. Şifreli postaları okumak için bu dosyayı posta uygulamanıza aktarın (Thunderbird, bir GnuPG anahtarlığı, …) ve bir kopyasını saklayın: o olmadan bu postalar okunamaz. Dosyayı başka biri ele geçirirse parola onu korur.",
+	"pgp.genDone": "Anahtar çifti oluşturuldu. Özel anahtar bir dosya olarak kaydedildi: bunu posta uygulamanıza aktarın, ardından burada kaydedin.",
+	"pgp.genFailed": "Bu tarayıcıda anahtar çifti oluşturulamadı.",
+	"cf.forWkd": "(yalnızca WKD sunucusu için)",
+	"cf.wkdHost": "WKD için openpgpkey.<domain> adresini de ayarla",
+	"cf.wkdHostHelp": "openpgpkey.a.com, bu Worker'a Özel Alan Adı olarak eklenir; böylece takma adlar anahtarlarını WKD üzerinden yayımlayabilir. Cloudflare kendi DNS kaydını ve sertifikasını oluşturur; yalnızca anahtar sorguları bu adreste yanıtlanır, alan adının diğer kayıtlarına dokunulmaz. Aşağıdaki Workers Scripts izni gerekir. Zaten CNAME kaydı olan bir sunucu reddedilir. Wrangler yapılandırmanız kendi özel alan adlarını listeliyorsa, bir deploy bunu değiştirir: o sunucuyu oraya da ekleyin.",
+	"cf.step.wkd": "WKD sunucusu",
+	"wkd.setupAuto": "Bağlantı sayfası bunu sizin yerinize yapabilir: Cloudflare kurulumunda WKD seçeneğini işaretleyin. Ya da {host} adresini elle ayarlayın:",
 };
 
 export default dictionary;

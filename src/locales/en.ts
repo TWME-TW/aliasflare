@@ -654,6 +654,16 @@ export const en = {
 	"notice.wkdDeleted": "The key for {alias} is no longer published.",
 	"notice.wkdOtherAddress": "That key names an address other than {alias}. Make a key with this alias as its only address.",
 	"notice.wkdKeyInUse": "That key is already used for another alias or a forwarding address. Make a new key for {alias}.",
+	"pgp.generate": "Generate a key pair",
+	"pgp.genPassphrase": "Passphrase for the private key (optional)",
+	"pgp.genHelp": "Makes a new key pair in this browser. The public key is filled in above; the private key is saved as a file on this device and is never sent here. Import that file into your mail app (Thunderbird, a GnuPG keyring, …) to read the encrypted mail, and keep a copy: without it, that mail cannot be read. A passphrase protects the file if someone else gets it.",
+	"pgp.genDone": "Key pair made. The private key was saved as a file: import it into your mail app, then save here.",
+	"pgp.genFailed": "The key pair could not be made in this browser.",
+	"cf.forWkd": "(only for the WKD host)",
+	"cf.wkdHost": "Also set up openpgpkey.<domain> for WKD",
+	"cf.wkdHostHelp": "Attaches openpgpkey.a.com to this Worker as a Custom Domain, so aliases can publish keys by WKD. Cloudflare makes its DNS record and certificate; only key lookups answer there, and the domain's other records are not touched. Needs the Workers Scripts permission below. A host that already has a CNAME record is refused. If your Wrangler configuration lists custom domains of its own, a deploy replaces this one: add the host there too.",
+	"cf.step.wkd": "WKD host",
+	"wkd.setupAuto": "The connection page can do this for you: tick the WKD option in the Cloudflare setup. Or set up {host} by hand:",
 };
 
 export type MessageKey = keyof typeof en;

@@ -1,6 +1,7 @@
 # Static files are served by Cloudflare without running the Worker, so they get its plain
-# headers here. Only the manifest and the icons are served from here: nothing in them runs
-# script, and they are never framed.
+# headers here. Served from here: the manifest, the icons, and vendor/openpgp.min.mjs (copied in at
+# build time), which the dashboard imports as a module; this CSP does not apply to a script the
+# page imports, only to documents, and none of these is framed.
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: same-origin

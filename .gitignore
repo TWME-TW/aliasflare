@@ -8,3 +8,4 @@ wrangler.local.jsonc
 .vitest/
 .dry/
 *.log
+public/vendor/

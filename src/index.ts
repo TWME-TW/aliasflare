@@ -879,7 +879,7 @@ app.post("/connection/cloudflare", async (c) => {
 		return redirectWithNotice(c, "/connection", "notice.freeSetupLimit", { count: String(FREE_PLAN_SETUP_DOMAINS) });
 	}
 	if (!token) return redirectWithNotice(c, "/connection", "notice.needCloudflareToken");
-	const setup = await setUpCloudflare({ token, domains, workerName: config.workerName, replaceCatchAll: form.replaceCatchAll === "1" });
+	const setup = await setUpCloudflare({ token, domains, workerName: config.workerName, replaceCatchAll: form.replaceCatchAll === "1", wkdHost: form.wkdHost === "1" });
 	return renderConnection(c, config, setup);
 });
 

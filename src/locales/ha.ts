@@ -652,6 +652,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "Ba a ƙara buga maɓallin {alias} ba.",
 	"notice.wkdOtherAddress": "Wannan maɓallin yana ambaton adireshi banda {alias}. Yi maɓalli wanda wannan laƙabi shi ne adireshinsa kaɗai.",
 	"notice.wkdKeyInUse": "Ana amfani da wannan maɓallin don wani laƙabi ko adireshin tura saƙo. Yi sabon maɓalli don {alias}.",
+	"pgp.generate": "Ƙirƙiri nau'in maɓalli",
+	"pgp.genPassphrase": "Jimlar sirri don maɓallin sirri (zaɓi)",
+	"pgp.genHelp": "Yana ƙirƙirar sabon nau'in maɓalli a wannan burauza. Ana cika maɓallin jama'a a sama; ana adana maɓallin sirri a matsayin fayil a wannan na'ura kuma ba a aika shi nan ba. Shigo da wannan fayil ɗin cikin aikace-aikacen imel ɗinka (Thunderbird, GnuPG keyring, …) don karanta imel ɗin da aka ɓoye, kuma ka ajiye kwafi: ba tare da shi ba, ba za a iya karanta wannan imel ɗin ba. Jimlar sirri tana kare fayil ɗin idan wani ya samu.",
+	"pgp.genDone": "An ƙirƙiri nau'in maɓalli. An adana maɓallin sirri a matsayin fayil: shigo da shi cikin aikace-aikacen imel ɗinka, sannan ka adana a nan.",
+	"pgp.genFailed": "Ba a iya ƙirƙirar nau'in maɓalli a wannan burauza ba.",
+	"cf.forWkd": "(don mai masaukin WKD kawai)",
+	"cf.wkdHost": "Kuma saita openpgpkey.<domain> don WKD",
+	"cf.wkdHostHelp": "Yana haɗa openpgpkey.a.com da wannan Worker a matsayin Custom Domain, don sunayen laƙabi su wallafa maɓalli ta WKD. Cloudflare tana yin rikodin DNS da takardar shaida; a wannan mai masaukin ana amsa binciken maɓalli kawai, sauran rikodin yankin ba a taɓa su ba. Yana buƙatar izinin Workers Scripts da ke ƙasa. Mai masaukin da ke da rikodin CNAME tuni ana ƙi shi. Idan tsarin Wrangler ɗinka yana da nasa custom domains, turawa za ta maye gurbin wannan: ƙara wannan mai masaukin a can ma.",
+	"cf.step.wkd": "Mai masaukin WKD",
+	"wkd.setupAuto": "Shafin haɗi zai iya yin wannan a gare ka: duba zaɓin WKD a saitin Cloudflare. Ko saita {host} da hannu:",
 };
 
 export default dictionary;

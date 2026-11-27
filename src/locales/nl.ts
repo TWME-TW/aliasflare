@@ -637,6 +637,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "De sleutel voor {alias} wordt niet meer gepubliceerd.",
 	"notice.wkdOtherAddress": "Die sleutel noemt een ander adres dan {alias}. Maak een sleutel met dit alias als enige adres.",
 	"notice.wkdKeyInUse": "Die sleutel wordt al gebruikt voor een ander alias of doorstuuradres. Maak een nieuwe sleutel voor {alias}.",
+	"pgp.generate": "Sleutelpaar genereren",
+	"pgp.genPassphrase": "Wachtwoordzin voor de privésleutel (optioneel)",
+	"pgp.genHelp": "Maakt een nieuw sleutelpaar in deze browser. De publieke sleutel wordt hierboven ingevuld; de privésleutel wordt als bestand op dit apparaat opgeslagen en nooit hierheen gestuurd. Importeer dat bestand in je mailapp (Thunderbird, een GnuPG-sleutelring, …) om versleutelde mail te lezen, en bewaar een kopie: zonder dit bestand kan die mail niet worden gelezen. Een wachtwoordzin beschermt het bestand als iemand anders het krijgt.",
+	"pgp.genDone": "Sleutelpaar gemaakt. De privésleutel is als bestand opgeslagen: importeer het in je mailapp en sla het daarna hier op.",
+	"pgp.genFailed": "Het sleutelpaar kon niet in deze browser worden gemaakt.",
+	"cf.forWkd": "(alleen voor de WKD-host)",
+	"cf.wkdHost": "Ook openpgpkey.<domain> voor WKD instellen",
+	"cf.wkdHostHelp": "Koppelt openpgpkey.a.com als Custom Domain aan deze Worker, zodat aliassen sleutels via WKD kunnen publiceren. Cloudflare maakt het DNS-record en het certificaat aan; alleen sleutelopvragingen krijgen op die host een antwoord, en de andere records van het domein blijven ongemoeid. Vereist de Workers Scripts-machtiging hieronder. Een host die al een CNAME-record heeft, wordt geweigerd. Als je Wrangler-configuratie eigen custom domains vermeldt, vervangt een deploy deze: voeg de host daar ook toe.",
+	"cf.step.wkd": "WKD-host",
+	"wkd.setupAuto": "De verbindingspagina kan dit voor je doen: vink de WKD-optie aan in de Cloudflare-installatie. Of stel {host} handmatig in:",
 };
 
 export default dictionary;

@@ -7,6 +7,8 @@
 	// The app icons and manifest (installing the dashboard as an app). Cloudflare serves these
 	// files itself, without running the Worker.
 	"assets": { "directory": "public" },
+	// Copies the browser build of OpenPGP.js into public/vendor (key pairs made in the dashboard).
+	"build": { "command": "node scripts/vendor-openpgp.mjs" },
 	// Query strings (searches, addresses in notices) are left out of logs and traces.
 	"observability": { "enabled": true, "redact_query_string": true },
 	// Alias domains and the optional Mailflare connection are set up on the dashboard after

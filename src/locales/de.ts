@@ -637,6 +637,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "Der Schlüssel für {alias} wird nicht mehr veröffentlicht.",
 	"notice.wkdOtherAddress": "Dieser Schlüssel nennt eine andere Adresse als {alias}. Erstelle einen Schlüssel, bei dem dieser Alias die einzige Adresse ist.",
 	"notice.wkdKeyInUse": "Dieser Schlüssel wird bereits für einen anderen Alias oder eine Weiterleitungsadresse verwendet. Erstelle einen neuen Schlüssel für {alias}.",
+	"pgp.generate": "Schlüsselpaar erzeugen",
+	"pgp.genPassphrase": "Passphrase für den privaten Schlüssel (optional)",
+	"pgp.genHelp": "Erzeugt in diesem Browser ein neues Schlüsselpaar. Der öffentliche Schlüssel wird oben eingetragen; der private Schlüssel wird als Datei auf diesem Gerät gespeichert und nie hierher gesendet. Importiere diese Datei in dein Mail-Programm (Thunderbird, einen GnuPG-Schlüsselbund, …), um verschlüsselte E-Mails zu lesen, und bewahre eine Kopie auf: Ohne sie lassen sich diese E-Mails nicht lesen. Eine Passphrase schützt die Datei, falls sie jemand anderes erhält.",
+	"pgp.genDone": "Schlüsselpaar erzeugt. Der private Schlüssel wurde als Datei gespeichert: Importiere ihn in dein Mail-Programm und speichere dann hier.",
+	"pgp.genFailed": "Das Schlüsselpaar konnte in diesem Browser nicht erzeugt werden.",
+	"cf.forWkd": "(nur für den WKD-Host)",
+	"cf.wkdHost": "openpgpkey.<domain> auch für WKD einrichten",
+	"cf.wkdHostHelp": "Hängt openpgpkey.a.com als Custom Domain an diesen Worker an, damit Aliase Schlüssel per WKD veröffentlichen können. Cloudflare erstellt dafür den DNS-Eintrag und das Zertifikat; dort werden nur Schlüsselabfragen beantwortet, die übrigen Einträge der Domain bleiben unverändert. Benötigt die unten genannte Berechtigung Workers Scripts. Ein Host, der bereits einen CNAME-Eintrag hat, wird abgelehnt. Wenn deine Wrangler-Konfiguration eigene Custom Domains auflistet, ersetzt ein Deploy diese hier: Trage den Host dort ebenfalls ein.",
+	"cf.step.wkd": "WKD-Host",
+	"wkd.setupAuto": "Die Verbindungsseite kann das für dich erledigen: Aktiviere die WKD-Option im Cloudflare-Setup. Oder richte {host} manuell ein:",
 };
 
 export default dictionary;

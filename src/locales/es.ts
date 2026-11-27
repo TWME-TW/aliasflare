@@ -652,6 +652,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "La clave de {alias} ya no está publicada.",
 	"notice.wkdOtherAddress": "Esa clave nombra una dirección distinta de {alias}. Crea una clave con este alias como única dirección.",
 	"notice.wkdKeyInUse": "Esa clave ya se usa para otro alias o una dirección de reenvío. Crea una clave nueva para {alias}.",
+	"pgp.generate": "Generar un par de claves",
+	"pgp.genPassphrase": "Frase de contraseña para la clave privada (opcional)",
+	"pgp.genHelp": "Crea un nuevo par de claves en este navegador. La clave pública se rellena arriba; la clave privada se guarda como archivo en este dispositivo y nunca se envía aquí. Importa ese archivo en tu aplicación de correo (Thunderbird, un llavero de GnuPG, …) para leer el correo cifrado y guarda una copia: sin ella, ese correo no se podrá leer. Una frase de contraseña protege el archivo si alguien más lo obtiene.",
+	"pgp.genDone": "Par de claves creado. La clave privada se guardó como archivo: impórtala en tu aplicación de correo y luego guarda aquí.",
+	"pgp.genFailed": "No se pudo crear el par de claves en este navegador.",
+	"cf.forWkd": "(solo para el host de WKD)",
+	"cf.wkdHost": "Configurar también openpgpkey.<domain> para WKD",
+	"cf.wkdHostHelp": "Añade openpgpkey.a.com a este Worker como dominio personalizado, para que los alias publiquen claves mediante WKD. Cloudflare crea su registro DNS y certificado; en ese host solo se responden búsquedas de claves y los demás registros del dominio no se modifican. Requiere el permiso Workers Scripts indicado abajo. Un host que ya tenga un registro CNAME será rechazado. Si tu configuración de Wrangler enumera dominios personalizados propios, un despliegue reemplaza este: añade también el host allí.",
+	"cf.step.wkd": "Host de WKD",
+	"wkd.setupAuto": "La página de conexión puede hacerlo por ti: marca la opción WKD en la configuración de Cloudflare. O configura {host} manualmente:",
 };
 
 export default dictionary;

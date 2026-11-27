@@ -652,6 +652,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "La clé pour {alias} n'est plus publiée.",
 	"notice.wkdOtherAddress": "Cette clé nomme une adresse autre que {alias}. Créez une clé dont cet alias est la seule adresse.",
 	"notice.wkdKeyInUse": "Cette clé est déjà utilisée pour un autre alias ou une adresse de transfert. Créez une nouvelle clé pour {alias}.",
+	"pgp.generate": "Générer une paire de clés",
+	"pgp.genPassphrase": "Phrase secrète de la clé privée (facultatif)",
+	"pgp.genHelp": "Crée une nouvelle paire de clés dans ce navigateur. La clé publique est remplie ci-dessus ; la clé privée est enregistrée sous forme de fichier sur cet appareil et n'est jamais envoyée ici. Importez ce fichier dans votre application de messagerie (Thunderbird, un trousseau GnuPG, …) pour lire les e-mails chiffrés, et gardez une copie : sans elle, ces e-mails ne pourront pas être lus. Une phrase secrète protège le fichier s'il tombe entre d'autres mains.",
+	"pgp.genDone": "Paire de clés créée. La clé privée a été enregistrée sous forme de fichier : importez-la dans votre application de messagerie, puis enregistrez ici.",
+	"pgp.genFailed": "La paire de clés n'a pas pu être créée dans ce navigateur.",
+	"cf.forWkd": "(uniquement pour l'hôte WKD)",
+	"cf.wkdHost": "Configurer aussi openpgpkey.<domain> pour WKD",
+	"cf.wkdHostHelp": "Associe openpgpkey.a.com à ce Worker comme domaine personnalisé, afin que les alias publient leurs clés via WKD. Cloudflare crée l'enregistrement DNS et le certificat ; seules les recherches de clés reçoivent une réponse sur cet hôte, et les autres enregistrements du domaine ne sont pas modifiés. Nécessite l'autorisation Workers Scripts ci-dessous. Un hôte qui possède déjà un enregistrement CNAME est refusé. Si votre configuration Wrangler liste ses propres domaines personnalisés, un déploiement remplace celui-ci : ajoutez aussi cet hôte là-bas.",
+	"cf.step.wkd": "Hôte WKD",
+	"wkd.setupAuto": "La page de connexion peut le faire pour vous : cochez l'option WKD dans la configuration Cloudflare. Ou configurez {host} manuellement :",
 };
 
 export default dictionary;

@@ -637,6 +637,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "Kunci untuk {alias} tidak lagi diterbitkan.",
 	"notice.wkdOtherAddress": "Kunci itu menamakan alamat selain {alias}. Buat kunci dengan alias ini sebagai satu-satunya alamat.",
 	"notice.wkdKeyInUse": "Kunci itu sudah digunakan untuk alias lain atau alamat pemajuan. Buat kunci baharu untuk {alias}.",
+	"pgp.generate": "Jana pasangan kunci",
+	"pgp.genPassphrase": "Frasa laluan untuk kunci persendirian (pilihan)",
+	"pgp.genHelp": "Mencipta pasangan kunci baharu dalam pelayar ini. Kunci awam diisi di atas; kunci persendirian disimpan sebagai fail pada peranti ini dan tidak pernah dihantar ke sini. Import fail itu ke dalam aplikasi e-mel anda (Thunderbird, gelang kunci GnuPG, …) untuk membaca e-mel yang disulitkan, dan simpan salinan: tanpanya, e-mel itu tidak boleh dibaca. Frasa laluan melindungi fail jika orang lain memperolehnya.",
+	"pgp.genDone": "Pasangan kunci dicipta. Kunci persendirian disimpan sebagai fail: import ke dalam aplikasi e-mel anda, kemudian simpan di sini.",
+	"pgp.genFailed": "Pasangan kunci tidak dapat dicipta dalam pelayar ini.",
+	"cf.forWkd": "(hanya untuk hos WKD)",
+	"cf.wkdHost": "Tetapkan juga openpgpkey.<domain> untuk WKD",
+	"cf.wkdHostHelp": "Melampirkan openpgpkey.a.com pada Worker ini sebagai Custom Domain, supaya alias boleh menerbitkan kunci melalui WKD. Cloudflare mencipta rekod DNS dan sijil; hanya carian kunci dijawab di hos itu, dan rekod lain domain tidak disentuh. Memerlukan kebenaran Workers Scripts di bawah. Hos yang sudah mempunyai rekod CNAME ditolak. Jika konfigurasi Wrangler anda menyenaraikan custom domain sendiri, deploy akan menggantikan yang ini: tambahkan hos ini di sana juga.",
+	"cf.step.wkd": "Hos WKD",
+	"wkd.setupAuto": "Halaman sambungan boleh melakukannya untuk anda: tandakan pilihan WKD dalam persediaan Cloudflare. Atau tetapkan {host} secara manual:",
 };
 
 export default dictionary;

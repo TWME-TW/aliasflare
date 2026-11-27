@@ -652,6 +652,16 @@ const dictionary: Dictionary = {
 	"notice.wkdDeleted": "A chave de {alias} já não está publicada.",
 	"notice.wkdOtherAddress": "Essa chave indica um endereço diferente de {alias}. Crie uma chave com este alias como único endereço.",
 	"notice.wkdKeyInUse": "Essa chave já está a ser usada para outro alias ou endereço de reencaminhamento. Crie uma nova chave para {alias}.",
+	"pgp.generate": "Gerar um par de chaves",
+	"pgp.genPassphrase": "Palavra-passe para a chave privada (opcional)",
+	"pgp.genHelp": "Cria um novo par de chaves neste browser. A chave pública é preenchida acima; a chave privada é guardada como ficheiro neste dispositivo e nunca é enviada para aqui. Importe esse ficheiro para a sua aplicação de correio (Thunderbird, um porta-chaves GnuPG, …) para ler o correio cifrado, e guarde uma cópia: sem ele, esse correio não pode ser lido. Uma palavra-passe protege o ficheiro se outra pessoa o obtiver.",
+	"pgp.genDone": "Par de chaves criado. A chave privada foi guardada como ficheiro: importe-a para a sua aplicação de correio e, depois, guarde aqui.",
+	"pgp.genFailed": "Não foi possível criar o par de chaves neste browser.",
+	"cf.forWkd": "(apenas para o anfitrião WKD)",
+	"cf.wkdHost": "Configurar também openpgpkey.<domain> para WKD",
+	"cf.wkdHostHelp": "Associa openpgpkey.a.com a este Worker como Custom Domain, para que os alias possam publicar chaves através de WKD. A Cloudflare cria o registo DNS e o certificado; neste anfitrião só respondem as consultas de chaves, e os restantes registos do domínio não são alterados. Requer a permissão Workers Scripts abaixo. Um anfitrião que já tenha um registo CNAME é recusado. Se a sua configuração do Wrangler listar custom domains próprios, uma implementação substitui este: adicione lá também o anfitrião.",
+	"cf.step.wkd": "Anfitrião WKD",
+	"wkd.setupAuto": "A página de ligação pode fazer isto por si: marque a opção WKD na configuração da Cloudflare. Ou configure {host} manualmente:",
 };
 
 export default dictionary;
