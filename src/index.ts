@@ -891,8 +891,9 @@ app.get("/mailbox/:id/html", async (c) => {
 	c.header("X-Frame-Options", "SAMEORIGIN");
 	c.header("Cache-Control", "no-store");
 	// A meta-refresh or <base> would navigate the preview (even inside the sandbox) to an
-	// attacker-controlled page: strip both, as webmail providers do.
-	return c.html(parsed.html.replace(/<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "").replace(/<base\b[^>]*>/gi, ""));
+	// attacker-controlled page. Matching whole tags is fooled by a ">" inside an attribute value;
+	// renaming the tag is not: an unknown <x-meta> or <x-base> element does nothing.
+	return c.html(parsed.html.replace(/<(\/?)(meta|base)(?=[\s/>])/gi, "<$1x-$2"));
 });
 
 app.get("/mailbox/:id/raw", async (c) => {
@@ -2128,7 +2129,11 @@ app.post("/aliases/bulk", async (c) => {
 									timestamp,
 								)
 							: action === "restore"
-								? statement("UPDATE aliases SET deleted_at = NULL, updated_at = ? WHERE address = ? AND deleted_at IS NOT NULL", timestamp)
+								? // Deleting turned forwarding off; restoring turns it back on, as the API's restore does.
+									statement(
+										"UPDATE aliases SET deleted_at = NULL, forward_mode = CASE WHEN forward_mode = 'none' THEN 'all' ELSE forward_mode END, forward_enabled = 1, updated_at = ? WHERE address = ? AND deleted_at IS NOT NULL",
+										timestamp,
+									)
 								: // Permanently deleting is only offered for deleted aliases, and only removes those,
 									// with everything recorded about them: contacts, forwards and other activity.
 									ids.flatMap((id) => forgetStatements(db, id));

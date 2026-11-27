@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiKey } from "../src/apikeys";
 import worker, { app } from "../src/index";
-import { cleanupMailbox, LOCAL_MAILBOX_ADDRESS, readMailboxRaw } from "../src/mailbox";
+import { cleanupMailbox, emptyMailboxFolder, LOCAL_MAILBOX_ADDRESS, readMailboxRaw } from "../src/mailbox";
 import { loadSettings, saveSettings } from "../src/settings";
 import { signS3Request, testS3Connection } from "../src/storage";
 import { testDb } from "./helpers/d1";
@@ -240,7 +240,7 @@ describe("dashboard Webmail UI, sandboxed HTML preview & compose", () => {
 			.run();
 		await deliver("off@a.test", {
 			subject: "HTML Test",
-			html: '<base href="https://evil.test/"><meta http-equiv="refresh" content="0; url=https://evil.test/"><p>Hello</p><script>alert(1)</script>',
+			html: '<base href="https://evil.test/"><meta http-equiv="refresh" content="0; url=https://evil.test/"><META content="a>b" http-equiv=Refresh><p>Hello</p><script>alert(1)</script>',
 		});
 
 		const listRes = await app.fetch(new Request(`${ORIGIN}/mailbox?folder=Skipped&q=subject:HTML+is:unread`, { headers: { cookie } }), env);
@@ -308,5 +308,31 @@ describe("compose recipient search", () => {
 		const page = await (await app.fetch(new Request(`${ORIGIN}/mailbox/compose`, { headers: { cookie } }), env)).text();
 		expect(page).toContain('list="composeToList"');
 		expect(page).toContain('data-recipient-search="/mailbox/recipients"');
+	});
+});
+
+describe("emptying a large folder", () => {
+	it("removes every message, its D1 blob and its R2 object, in grouped statements", async () => {
+		const r2Deleted: string[] = [];
+		const bucketEnv = { ...env, MAILBOX_BUCKET: { delete: async (keys: string | string[]) => void r2Deleted.push(...[keys].flat()) } } as unknown as Env;
+		const rows: D1PreparedStatement[] = [];
+		for (let i = 0; i < 1200; i += 1) {
+			const r2 = i % 2 === 0;
+			rows.push(
+				db
+					.prepare("INSERT INTO mailbox_messages (id, folder, uid, storage_kind, storage_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, 1)")
+					.bind(`m${i}`, i < 1100 ? "Trash" : "INBOX", i + 1, r2 ? "r2" : "d1", r2 ? `k${i}` : null),
+			);
+			if (!r2) rows.push(db.prepare("INSERT INTO mailbox_blobs (message_id, raw_base64, stored_bytes) VALUES (?, 'x', 1)").bind(`m${i}`));
+		}
+		await db.batch(rows);
+		const prepared = vi.spyOn(db, "prepare");
+
+		expect(await emptyMailboxFolder(bucketEnv, { workersPlan: "paid" } as never, "Trash")).toBe(1100);
+		expect(r2Deleted).toHaveLength(550);
+		expect(await db.prepare("SELECT folder, COUNT(*) AS n FROM mailbox_messages GROUP BY folder").all()).toMatchObject({ results: [{ folder: "INBOX", n: 100 }] });
+		expect((await db.prepare("SELECT COUNT(*) AS n FROM mailbox_blobs").first<{ n: number }>())!.n).toBe(50);
+		// 3 selects and 22 grouped deletes, far from one request's D1 query limit.
+		expect(prepared.mock.calls.length).toBeLessThan(40);
 	});
 });
