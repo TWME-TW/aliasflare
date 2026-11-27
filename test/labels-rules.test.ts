@@ -117,11 +117,11 @@ describe("rules", () => {
 
 	it("refuse a rule with anything they cannot apply as given, rather than leave part of it out", () => {
 		const sender = { type: "sender", match: "ends with", values: ["@corp.test"] };
-		// Leaving the regular expression out would block all of corp.test's mail.
-		expect(() => cleanRule({ name: "x", operator: "AND", conditions: [sender, { type: "subject", match: "matches regex", values: ["^invoice"] }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
+		// Leaving an unsafe regular expression out would block all of corp.test's mail.
+		expect(() => cleanRule({ name: "x", operator: "AND", conditions: [sender, { type: "subject", match: "matches regex", values: ["(a+)+$"] }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
 		expect(() => cleanRule({ name: "x", conditions: [{ type: "sender", match: "is not", values: Array.from({ length: 21 }, (_, i) => `a${i}@x.test`) }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
 		expect(() => cleanRule({ name: "x", conditions: [{ type: "subject", match: "contains", values: ["x".repeat(201)] }], actions: [{ type: "block" }] })).toThrow(/unsupported/);
-		expect(() => cleanRule({ name: "x", conditions: [sender], actions: [{ type: "block" }, { type: "encryption", value: "false" }] })).toThrow(/unsupported/);
+		expect(() => cleanRule({ name: "x", conditions: [sender], actions: [{ type: "block" }, { type: "unknownAction", value: "false" }] })).toThrow(/unsupported/);
 		expect(() => cleanRule({ name: "x", conditions: Array.from({ length: 11 }, () => sender), actions: [{ type: "block" }] })).toThrow(/unsupported/);
 		// A value with a comma stays one value.
 		expect(cleanRule({ name: "x", conditions: [{ type: "subject", match: "contains", values: ["hello, world"] }], actions: [{ type: "block" }] }).conditions[0]!.values).toEqual(["hello, world"]);
@@ -129,7 +129,7 @@ describe("rules", () => {
 
 	it("refuse a rule without a name, condition or supported action", () => {
 		expect(() => cleanRule({ name: "", conditions: [{ type: "sender", match: "contains", values: ["x"] }], actions: [{ type: "block" }] })).toThrow();
-		expect(() => cleanRule({ name: "x", conditions: [{ type: "sender", match: "matches regex", values: ["x"] }], actions: [{ type: "block" }] })).toThrow();
+		expect(() => cleanRule({ name: "x", conditions: [{ type: "sender", match: "matches regex", values: ["(a+)+$"] }], actions: [{ type: "block" }] })).toThrow();
 		expect(() => cleanRule({ name: "x", conditions: [{ type: "sender", match: "contains", values: ["x"] }], actions: [{ type: "webhook", value: "https://x" }] })).toThrow();
 	});
 

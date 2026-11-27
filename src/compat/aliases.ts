@@ -7,7 +7,7 @@
 import { now, type AliasRow, type ContactRow } from "../db";
 import { isOwnAddress } from "../domains";
 import { cleanDisplayName, MAX_NOTE_LENGTH, normalizeEmail } from "../format";
-import type { RandomAliasFormat, Settings } from "../settings";
+import type { AliasSeparator, RandomAliasFormat, Settings } from "../settings";
 
 export type AliasStats = {
 	nb_forward: number;
@@ -35,11 +35,11 @@ const STATS_COLUMNS = `
 	a.imported_forwarded + (SELECT COALESCE(SUM(c.forward_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_forward,
 	a.imported_replied + (SELECT COALESCE(SUM(c.reply_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_reply,
 	a.imported_blocked + (SELECT COUNT(*) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped') AS nb_block,
-	a.imported_sent AS nb_sent,
+	a.imported_sent + (SELECT COALESCE(SUM(c.sent_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_sent,
 	NULLIF(MAX(COALESCE((SELECT MAX(c.last_forward_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_forward_at, 0)), 0) AS last_forward_at,
 	NULLIF(MAX(COALESCE((SELECT MAX(c.last_reply_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_reply_at, 0)), 0) AS last_reply_at,
 	NULLIF(MAX(COALESCE((SELECT MAX(f.created_at) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped'), 0), COALESCE(a.imported_last_block_at, 0)), 0) AS last_block_at,
-	a.imported_last_sent_at AS last_sent_at`;
+	NULLIF(MAX(COALESCE((SELECT MAX(c.last_sent_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_sent_at, 0)), 0) AS last_sent_at`;
 
 export type AliasQuery = {
 	deleted?: "without" | "with" | "only";
@@ -94,8 +94,15 @@ function whereClause(query: Omit<AliasQuery, "limit" | "offset" | "sort">): { sq
 		params.push(query.label);
 	}
 	if (query.destination) {
-		conditions.push(query.destination.isDefault ? "(a.destination = ? OR a.destination IS NULL OR a.destination = '')" : "a.destination = ?");
-		params.push(query.destination.email);
+		if (query.destination.isDefault) {
+			conditions.push(
+				"(a.destination = ? OR EXISTS (SELECT 1 FROM alias_recipients ar WHERE ar.alias_address = a.address AND ar.recipient_email = ?) OR ((a.destination IS NULL OR a.destination = '') AND NOT EXISTS (SELECT 1 FROM alias_recipients ar WHERE ar.alias_address = a.address)))",
+			);
+			params.push(query.destination.email, query.destination.email);
+		} else {
+			conditions.push("(a.destination = ? OR EXISTS (SELECT 1 FROM alias_recipients ar WHERE ar.alias_address = a.address AND ar.recipient_email = ?))");
+			params.push(query.destination.email, query.destination.email);
+		}
 	}
 	if (query.search?.trim()) {
 		conditions.push("(a.address LIKE ? ESCAPE '\\' OR COALESCE(a.note, '') LIKE ? ESCAPE '\\' OR COALESCE(a.name, '') LIKE ? ESCAPE '\\')");
@@ -166,7 +173,7 @@ export async function latestContacts(db: D1Database, addresses: string[]): Promi
 	return map;
 }
 
-export async function totals(db: D1Database): Promise<{ aliases: number; active: number; deleted: number; pinned: number; forwarded: number; replied: number; blocked: number }> {
+export async function totals(db: D1Database): Promise<{ aliases: number; active: number; deleted: number; pinned: number; forwarded: number; replied: number; sent: number; blocked: number; activeRules: number }> {
 	const row = await db
 		.prepare(
 			`SELECT
@@ -176,7 +183,9 @@ export async function totals(db: D1Database): Promise<{ aliases: number; active:
 				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL AND pinned = 1) AS pinned,
 				(SELECT COALESCE(SUM(forward_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_forwarded), 0) FROM aliases) AS forwarded,
 				(SELECT COALESCE(SUM(reply_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_replied), 0) FROM aliases) AS replied,
-				(SELECT COUNT(*) FROM forwards WHERE status = 'skipped') + (SELECT COALESCE(SUM(imported_blocked), 0) FROM aliases) AS blocked`,
+				(SELECT COALESCE(SUM(sent_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_sent), 0) FROM aliases) AS sent,
+				(SELECT COUNT(*) FROM forwards WHERE status = 'skipped') + (SELECT COALESCE(SUM(imported_blocked), 0) FROM aliases) AS blocked,
+				(SELECT COUNT(*) FROM rules WHERE active = 1) AS active_rules`,
 		)
 		.first<Record<string, number>>();
 	return {
@@ -186,7 +195,9 @@ export async function totals(db: D1Database): Promise<{ aliases: number; active:
 		pinned: Number(row?.pinned ?? 0),
 		forwarded: Number(row?.forwarded ?? 0),
 		replied: Number(row?.replied ?? 0),
+		sent: Number(row?.sent ?? 0),
 		blocked: Number(row?.blocked ?? 0),
+		activeRules: Number(row?.active_rules ?? 0),
 	};
 }
 
@@ -208,16 +219,34 @@ export async function destinationIds(email: string): Promise<{ numId: number; ui
 }
 
 export async function listDestinations(db: D1Database, settings: Settings): Promise<Destination[]> {
-	const { results } = await db
-		.prepare("SELECT destination, COUNT(*) AS n FROM aliases WHERE deleted_at IS NULL GROUP BY destination")
-		.all<{ destination: string | null; n: number }>();
-	const counts = new Map<string, number>();
-	for (const row of results) {
-		const email = row.destination?.toLowerCase() || settings.defaultDestination;
-		if (email && !isOwnAddress(email, settings.aliasDomains)) counts.set(email, (counts.get(email) ?? 0) + Number(row.n));
+	const [aliasRes, recRes, attachRes] = await db.batch([
+		db.prepare("SELECT address, destination FROM aliases WHERE deleted_at IS NULL"),
+		db.prepare("SELECT email FROM recipients"),
+		db.prepare("SELECT ar.alias_address, ar.recipient_email FROM alias_recipients ar JOIN aliases a ON a.address = ar.alias_address WHERE a.deleted_at IS NULL"),
+	]);
+	const attached = new Map<string, string[]>();
+	for (const row of (attachRes?.results ?? []) as { alias_address: string; recipient_email: string }[]) {
+		const list = attached.get(row.alias_address) ?? [];
+		list.push(row.recipient_email.toLowerCase());
+		attached.set(row.alias_address, list);
 	}
-	if (settings.defaultDestination && !isOwnAddress(settings.defaultDestination, settings.aliasDomains) && !counts.has(settings.defaultDestination)) {
-		counts.set(settings.defaultDestination, 0);
+	const counts = new Map<string, number>();
+	const add = (email: string, delta: number) => {
+		const normalized = email.toLowerCase();
+		if (normalized && !isOwnAddress(normalized, settings.aliasDomains)) {
+			counts.set(normalized, (counts.get(normalized) ?? 0) + delta);
+		}
+	};
+	for (const row of (recRes?.results ?? []) as { email: string }[]) add(row.email, 0);
+	if (settings.defaultDestination) add(settings.defaultDestination, 0);
+	for (const row of (aliasRes?.results ?? []) as { address: string; destination: string | null }[]) {
+		const list = attached.get(row.address);
+		if (list && list.length > 0) {
+			for (const email of list) add(email, 1);
+		} else {
+			const email = row.destination?.toLowerCase() || settings.defaultDestination;
+			if (email) add(email, 1);
+		}
 	}
 	const out: Destination[] = [];
 	for (const [email, aliasCount] of counts) {
@@ -264,10 +293,11 @@ function randomChars(length: number): string {
 	return Array.from({ length }, () => alphabet[randomInt(alphabet.length)]).join("");
 }
 
-export function randomLocalPart(format: RandomAliasFormat | "word" | "random_string" | string): string {
+export function randomLocalPart(format: RandomAliasFormat | "word" | "random_string" | string, separator: AliasSeparator = "."): string {
 	if (format === "uuid") return crypto.randomUUID();
 	if (format === "random_characters" || format === "random_string") return randomChars(10);
-	return `${WORDS[randomInt(WORDS.length)]}.${WORDS[randomInt(WORDS.length)]}${randomInt(1000)}`;
+	if (format === "random_noun") return `${WORDS[randomInt(WORDS.length)]}${separator}${randomChars(5)}`;
+	return `${WORDS[randomInt(WORDS.length)]}${separator}${WORDS[randomInt(WORDS.length)]}${randomInt(1000)}`;
 }
 
 
@@ -282,7 +312,15 @@ export function cleanPrefix(prefix: string): string {
 		.slice(0, 50);
 }
 
-export type CreateAliasInput = { localPart: string; domain: string; note?: string | null; name?: string | null; destination?: string | null; allowRestore?: boolean };
+export type CreateAliasInput = {
+	localPart: string;
+	domain: string;
+	note?: string | null;
+	name?: string | null;
+	destination?: string | null;
+	attachedRecipientsOnly?: boolean;
+	allowRestore?: boolean;
+};
 
 /** Creates an alias, or restores a deleted one with the same address (unless allowRestore is false). */
 export async function createAlias(db: D1Database, settings: Settings, input: CreateAliasInput): Promise<AliasView> {
@@ -291,18 +329,26 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 	if (!settings.aliasDomains.includes(domain)) {
 		throw new ClientError(400, "This domain cannot be used for new aliases. Add it under Alias domains in the aliasflare settings.");
 	}
+	const domainRow = await db
+		.prepare("SELECT active, default_attached_recipients_only FROM domains WHERE domain = ?")
+		.bind(domain)
+		.first<{ active: number; default_attached_recipients_only: number }>();
+	if (domainRow && domainRow.active === 0) {
+		throw new ClientError(400, "This domain is currently deactivated.");
+	}
 	if (!LOCAL_PART.test(localPart) || localPart.includes("..")) throw new ClientError(400, "The alias contains characters that are not allowed.");
 	const address = normalizeEmail(`${localPart}@${domain}`);
 	if (address.length > 254) throw new ClientError(400, "The alias address is too long.");
 	const name = cleanDisplayName(input.name);
 	const note = input.note?.trim().slice(0, MAX_NOTE_LENGTH) || null;
+	const attachedOnly = input.attachedRecipientsOnly !== undefined ? (input.attachedRecipientsOnly ? 1 : 0) : (domainRow?.default_attached_recipients_only ? 1 : 0);
 	const existing = await db.prepare("SELECT * FROM aliases WHERE address = ?").bind(address).first<AliasRow>();
 	const timestamp = now();
 	if (existing && (!existing.deleted_at || input.allowRestore === false)) throw new ClientError(409, "This alias already exists.");
 	if (existing) {
 		await db
-			.prepare("UPDATE aliases SET deleted_at = NULL, forward_mode = 'all', forward_enabled = 1, note = ?, name = ?, destination = ?, updated_at = ? WHERE address = ?")
-			.bind(note, name, input.destination ?? null, timestamp, address)
+			.prepare("UPDATE aliases SET deleted_at = NULL, forward_mode = 'all', forward_enabled = 1, note = ?, name = ?, destination = ?, attached_recipients_only = ?, updated_at = ? WHERE address = ?")
+			.bind(note, name, input.destination ?? null, attachedOnly, timestamp, address)
 			.run();
 	} else {
 		// Replies need a Mailflare mailbox; until the alias first receives mail, borrow the one of
@@ -315,10 +361,10 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 		const insert = () =>
 			db
 				.prepare(
-					`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, num_id, uid, created_at, updated_at)
-					 VALUES (?, ?, 1, 'all', ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'aliases'), 0)) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
+					`INSERT INTO aliases (address, mailbox_id, forward_enabled, forward_mode, destination, note, name, attached_recipients_only, num_id, uid, created_at, updated_at)
+					 VALUES (?, ?, 1, 'all', ?, ?, ?, ?, (SELECT MAX(COALESCE(MAX(num_id), 0), COALESCE((SELECT value FROM num_id_floor WHERE tbl = 'aliases'), 0)) + 1 FROM aliases), ?, ?, ?) ON CONFLICT DO NOTHING`,
 				)
-				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, note, name, crypto.randomUUID(), timestamp, timestamp)
+				.bind(address, sibling?.mailbox_id ?? "", input.destination ?? null, note, name, attachedOnly, crypto.randomUUID(), timestamp, timestamp)
 				.run();
 		for (let attempt = 0; ; attempt += 1) {
 			if ((await insert()).meta.changes > 0) break;
@@ -335,17 +381,18 @@ export async function createAlias(db: D1Database, settings: Settings, input: Cre
 export async function createRandomAlias(
 	db: D1Database,
 	settings: Settings,
-	input: { domain?: string; format?: string; note?: string | null; destination?: string | null },
+	input: { domain?: string; format?: string; note?: string | null; destination?: string | null; attachedRecipientsOnly?: boolean },
 ): Promise<AliasView> {
 	const domain = input.domain || settings.aliasDomains[0];
 	if (!domain) throw new ClientError(400, "No alias domain is set up. Add one under Alias domains in the aliasflare settings.");
 	for (let attempt = 0; attempt < 5; attempt += 1) {
 		try {
 			return await createAlias(db, settings, {
-				localPart: randomLocalPart(input.format || settings.randomAliasFormat),
+				localPart: randomLocalPart(input.format || settings.randomAliasFormat, settings.aliasSeparator),
 				domain,
 				note: input.note,
 				destination: input.destination,
+				attachedRecipientsOnly: input.attachedRecipientsOnly,
 				allowRestore: false,
 			});
 		} catch (error) {
@@ -360,7 +407,7 @@ export async function createRandomAlias(
 export async function updateAlias(
 	db: D1Database,
 	address: string,
-	fields: { note?: string | null; name?: string | null; pinned?: boolean; enabled?: boolean; destination?: string | null },
+	fields: { note?: string | null; name?: string | null; pinned?: boolean; enabled?: boolean; destination?: string | null; attachedRecipientsOnly?: boolean },
 ): Promise<void> {
 	await updateAliases(db, [address], fields);
 }
@@ -369,7 +416,7 @@ export async function updateAlias(
 export async function updateAliases(
 	db: D1Database,
 	addresses: string[],
-	fields: { note?: string | null; name?: string | null; pinned?: boolean; enabled?: boolean; destination?: string | null },
+	fields: { note?: string | null; name?: string | null; pinned?: boolean; enabled?: boolean; destination?: string | null; attachedRecipientsOnly?: boolean },
 ): Promise<void> {
 	if (!addresses.length) return;
 	const sets: string[] = [];
@@ -377,6 +424,7 @@ export async function updateAliases(
 	if (fields.note !== undefined) sets.push("note = ?"), params.push(fields.note?.trim().slice(0, MAX_NOTE_LENGTH) || null);
 	if (fields.name !== undefined) sets.push("name = ?"), params.push(cleanDisplayName(fields.name));
 	if (fields.pinned !== undefined) sets.push("pinned = ?"), params.push(fields.pinned ? 1 : 0);
+	if (fields.attachedRecipientsOnly !== undefined) sets.push("attached_recipients_only = ?"), params.push(fields.attachedRecipientsOnly ? 1 : 0);
 	if (fields.enabled !== undefined) {
 		// Re-enabling keeps "Block promotions" if that was chosen before; disabling is "Forward nothing".
 		sets.push(fields.enabled ? "forward_mode = CASE WHEN forward_mode = 'none' THEN 'all' ELSE forward_mode END" : "forward_mode = 'none'");

@@ -42,7 +42,7 @@ describe("importing from addy.io", () => {
 			if (pathname === "/api/v1/labels") return json([{ id: "x", name: "Shopping", colour: "#06b6d4" }, { id: "y", name: "Work", colour: "#ef4444" }]);
 			if (pathname === "/api/v1/rules") {
 				return json([
-					{ name: "Regex", order: 0, operator: "AND", conditions: [{ type: "sender", match: "matches regex", values: [".*"] }], actions: [{ type: "block" }] },
+					{ name: "Regex", order: 0, operator: "AND", conditions: [{ type: "sender", match: "matches regex", values: ["(a+)+$"] }], actions: [{ type: "block" }] },
 					{ name: "Tag news", order: 1, operator: "AND", conditions: [{ type: "sender", match: "ends with", values: ["@news.test"] }], actions: [{ type: "subject", value: "[News]" }], forwards: true, active: true },
 				]);
 			}

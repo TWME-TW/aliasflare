@@ -41,19 +41,28 @@ export function testDb(): D1Database {
 		};
 		return self;
 	};
+	// Real D1 serializes batches on one database; queue concurrent batch() calls on this in-memory connection.
+	let batchChain = Promise.resolve();
 	return {
 		prepare: (sql: string) => statement(sql),
-		batch: async (statements: { run: () => Promise<unknown> }[]) => {
-			sqlite.exec("BEGIN");
-			try {
-				const results = [];
-				for (const item of statements) results.push(await item.run());
-				sqlite.exec("COMMIT");
-				return results;
-			} catch (error) {
-				sqlite.exec("ROLLBACK");
-				throw error;
-			}
+		batch: (statements: { run: () => Promise<unknown> }[]) => {
+			const next = batchChain.then(async () => {
+				sqlite.exec("BEGIN");
+				try {
+					const results = [];
+					for (const item of statements) results.push(await item.run());
+					sqlite.exec("COMMIT");
+					return results;
+				} catch (error) {
+					sqlite.exec("ROLLBACK");
+					throw error;
+				}
+			});
+			batchChain = next.then(
+				() => undefined,
+				() => undefined,
+			);
+			return next;
 		},
 		exec: async (sql: string) => {
 			sqlite.exec(sql);

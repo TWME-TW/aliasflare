@@ -803,6 +803,8 @@ app.post("/settings", async (c) => {
 	if (rules.some((rule) => (rule.behavior === "redirect_contact" || rule.fallback === "redirect_contact") && !rule.redirect && !generalRedirect)) {
 		return reply("notice.unsubRedirectMissing", false);
 	}
+	const bannerLocation =
+		typeof form.bannerLocation === "string" ? form.bannerLocation : form.showBanner === "1" ? "top" : "off";
 	const settings = normalizeSettings({
 		simpleloginApi: form.simpleloginApi === "1",
 		addyApi: form.addyApi === "1",
@@ -810,6 +812,7 @@ app.post("/settings", async (c) => {
 		forwardMethod: form.forwardMethod,
 		aliasDomains,
 		randomAliasFormat: form.randomAliasFormat,
+		aliasSeparator: form.aliasSeparator,
 		appSettings: form.appSettings === "1",
 		senderFormat: form.senderFormat,
 		reverseAliasReplacement: form.reverseAliasReplacement === "1",
@@ -821,7 +824,12 @@ app.post("/settings", async (c) => {
 		// no box yet, so it starts on.
 		aliasesFromMailOff: aliasDomains.filter((domain) => form[`fromMailShown:${domain}`] === "1" && form[`fromMail:${domain}`] !== "1"),
 		removeTrackers: form.removeTrackers === "1",
-		showBanner: form.showBanner === "1",
+		bannerLocation,
+		showBanner: bannerLocation !== "off",
+		defaultFromName: typeof form.defaultFromName === "string" ? form.defaultFromName : "",
+		defaultEmailSubject: typeof form.defaultEmailSubject === "string" ? form.defaultEmailSubject : "",
+		spamWarningBehaviour: form.spamWarningBehaviour,
+		wkdAutoEncrypt: form.wkdAutoEncrypt === "1",
 		unsubscribeBehavior: form.unsubscribeBehavior,
 		unsubscribeFallback: form.unsubscribeFallback,
 		unsubscribeRedirect: generalRedirect,
@@ -1054,6 +1062,12 @@ app.post("/encryption/:email/:field{encrypt|subject|delete}", async (c) => {
 			: c.env.DB.prepare(`UPDATE pgp_keys SET ${field === "encrypt" ? "encrypt" : "hide_subject"} = ?, updated_at = ? WHERE email = ?`).bind(on, now(), email);
 	const result = await statement.run();
 	if (!result.meta.changes) return redirectWithNotice(c, "/encryption", "notice.pgpMissing");
+	if (field === "delete") {
+		await c.env.DB.prepare("UPDATE recipients SET should_encrypt = 0, inline_encryption = 0, protected_headers = 0, updated_at = ? WHERE email = ?").bind(now(), email).run();
+	} else {
+		const recCol = field === "encrypt" ? "should_encrypt" : "protected_headers";
+		await c.env.DB.prepare(`UPDATE recipients SET ${recCol} = ?, updated_at = ? WHERE email = ?`).bind(on, now(), email).run();
+	}
 	await syncPgpRecipients(c.env.DB);
 	const done: MessageKey = field === "delete" ? "notice.pgpDeleted" : field === "subject" ? "notice.pgpSubject" : on ? "notice.pgpOn" : "notice.pgpOff";
 	return redirectWithNotice(c, "/encryption", done, { email });
@@ -1103,7 +1117,10 @@ function ruleFromForm(form: Record<string, unknown>, existing: Rule | null) {
 		const values = typeof form[`cond_values_${i}`] === "string" ? (form[`cond_values_${i}`] as string) : "";
 		if (values.trim()) conditions.push({ type: form[`cond_type_${i}`], match: form[`cond_match_${i}`], values });
 		const type = form[`act_type_${i}`];
-		if (typeof type === "string" && type) actions.push({ type, value: type === "banner" ? "off" : form[`act_value_${i}`] });
+		if (typeof type === "string" && type) {
+			const val = form[`act_value_${i}`];
+			actions.push({ type, value: type === "banner" ? (typeof val === "string" && val.trim() ? val.trim() : "off") : val });
+		}
 	}
 	// The editor has one box for replies and new messages; an app may have set them apart, which
 	// stays so while the box is left as it was.

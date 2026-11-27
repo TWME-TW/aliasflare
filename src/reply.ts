@@ -25,6 +25,8 @@ import { FREE_PLAN_REWRITE_BYTES, LOOP_HEADER } from "./forward";
 import { readLimited } from "./streams";
 import { attachmentSearchText, carriesAddresses, MAX_NESTED_EML_PARSES, rewriteAttachment, rewriteContentId, scrubAttachedMessage, scrubContentId } from "./attachments";
 import { listDestinations } from "./compat/aliases";
+import { getDomainRow } from "./domain-settings";
+import { effectiveAliasDestinations, recipientPolicy } from "./recipients";
 import { ruleForwardAddresses, runRules } from "./rules";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
 
@@ -261,11 +263,17 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	const settings = preloaded ?? (await loadSettings(db));
-	// The owner writes from the alias's address, or from the one this sender's mail goes to.
-	// A rule may forward the alias's mail to another of the owner's known mailboxes, so those count too.
+	const domainRow = await getDomainRow(db, aliasDomain);
+	if (domainRow && domainRow.active === 0) {
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: "Not sent: this domain is deactivated" });
+		message.setReject("Not sent: this domain is deactivated");
+		return;
+	}
+	// The owner writes from one of the alias's destination addresses (or contact.destination / rule target unless attached_recipients_only).
 	const knownDestinations = new Set((await listDestinations(db, settings)).map((d) => normalizeEmail(d.email)));
-	const ruleOwners = (await ruleForwardAddresses(db)).filter((address) => knownDestinations.has(normalizeEmail(address)));
-	const owners = [...new Set([alias.destination || settings.defaultDestination, contact.destination, ...ruleOwners].filter((value): value is string => !!value))];
+	const attachedTargets = await effectiveAliasDestinations(db, alias, settings, domainRow?.default_recipient);
+	const ruleOwners = alias.attached_recipients_only ? [] : (await ruleForwardAddresses(db)).filter((address) => knownDestinations.has(normalizeEmail(address)));
+	const owners = [...new Set([...attachedTargets, ...(alias.attached_recipients_only ? [] : [contact.destination]), ...ruleOwners].filter((value): value is string => !!value))];
 
 	// A reply always has to be rewritten (it goes out as the alias), so on the Free plan, with
 	// 10 ms of CPU, a large one is refused with a clear reason rather than cut off midway.
@@ -299,6 +307,14 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject("Only the owner of this alias can send through this address");
 		return;
 	}
+	// Check recipient's can_reply_send and active permissions.
+	const senderPolicy = await recipientPolicy(db, destination);
+	if (!senderPolicy.active || !senderPolicy.canReplySend) {
+		const why = !senderPolicy.active ? "the recipient is deactivated" : "this recipient is not allowed to reply or send";
+		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Not sent: ${why}` });
+		message.setReject(`Not sent: ${why}`);
+		return;
+	}
 	// Drop automatic replies silently (no bounce, per RFC 3834) to prevent vacation/auto-responder loops.
 	const incomingAutoReply = isAutoReply(headerOnly?.headers ?? []);
 	const automatic = automaticReason(headerOnly?.headers, settings.sendAutoReplies);
@@ -324,10 +340,24 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		message.setReject(`Not sent: ${why}`);
 		return;
 	}
-	// Rules for replies: the sender they test is the correspondent, the one the reply goes to.
-	const rules = await runRules(db, "replies", { sender: contact.email, subject: headerOnly?.subject ?? "", alias: contact.alias_address });
+	// Distinguish a fresh outbound send from a reply: a reply either has In-Reply-To / References,
+	// starts with "Re:", or answers a contact who has already emailed this alias.
+	const isReply =
+		!!headerOnly?.inReplyTo ||
+		!!headerOnly?.references ||
+		/^re\s*:/i.test((headerOnly?.subject ?? "").trim()) ||
+		contact.forward_count > 0;
+	const outboundKind: "replies" | "sends" = isReply ? "replies" : "sends";
+	// Rules for replies/sends: the sender they test is the correspondent, the one the message goes to.
+	const rules = await runRules(db, outboundKind, {
+		sender: contact.email,
+		subject: headerOnly?.subject ?? "",
+		alias: contact.alias_address,
+		aliasDescription: alias.note,
+		recipient: destination,
+	});
 	if (rules.block) {
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Not sent: the rule ${rules.block}` });
+		await recordEvent(db, { kind: isReply ? "reply" : "send", contactId: contact.id, aliasAddress: contact.alias_address, status: "rejected", detail: `Not sent: the rule ${rules.block}` });
 		message.setReject(`Not sent: blocked by the rule ${rules.block}`);
 		return;
 	}
@@ -440,7 +470,8 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	const subject = cleanSubjectLine(scrubText(rules.subject ?? email.subject ?? "")) || "(no subject)";
-	const name = alias.name?.replace(/[\u0000-\u001f\u007f"\\<>]/g, "").trim() || "";
+	const rawName = alias.name || domainRow?.from_name || settings.defaultFromName || "";
+	const name = rawName.replace(/[\u0000-\u001f\u007f"\\<>]/g, "").trim() || "";
 
 	try {
 		if (viaMailflare) {
@@ -492,11 +523,11 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	// delivery and the correspondent would get the reply twice.
 	try {
 		const repliedAt = now();
-		await db.batch([
-			db.prepare("UPDATE contacts SET reply_count = reply_count + 1, last_reply_at = ? WHERE id = ?").bind(repliedAt, contact.id),
-			db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(repliedAt, contact.alias_address),
-		]);
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "sent" });
+		const contactUpdate = isReply
+			? db.prepare("UPDATE contacts SET reply_count = reply_count + 1, last_reply_at = ? WHERE id = ?").bind(repliedAt, contact.id)
+			: db.prepare("UPDATE contacts SET sent_count = sent_count + 1, last_sent_at = ? WHERE id = ?").bind(repliedAt, contact.id);
+		await db.batch([contactUpdate, db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(repliedAt, contact.alias_address)]);
+		await recordEvent(db, { kind: isReply ? "reply" : "send", contactId: contact.id, aliasAddress: contact.alias_address, status: "sent" });
 	} catch (error) {
 		console.error("Reply sent, but recording it failed", contact.id, error instanceof Error ? error.message : error);
 	}

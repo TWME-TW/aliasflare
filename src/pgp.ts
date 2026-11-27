@@ -1,7 +1,7 @@
 /**
  * PGP encryption of forwarded mail (as addy.io does it): each forwarding address can have a public
- * key, and mail to an address with encryption on goes out as PGP/MIME (RFC 3156), which
- * Thunderbird, Proton, Mailvelope, FlowCrypt and others decrypt. It is off until it is turned on.
+ * key, and mail to an address with encryption on goes out as PGP/MIME (RFC 3156) or PGP/Inline
+ * (when inline_encryption is enabled). It is off until it is turned on.
  *
  * openpgp is loaded only when a key is read or a message encrypted, so a Worker that never
  * encrypts never pays for it.
@@ -19,6 +19,9 @@ export type PgpKeyRow = {
 	fingerprint: string;
 	encrypt: number;
 	hide_subject: number;
+	inline_encryption?: number;
+	remove_pgp_keys?: number;
+	remove_pgp_signatures?: number;
 	created_at: number;
 	updated_at: number;
 };
@@ -65,6 +68,11 @@ export async function encryptionKeyFor(db: D1Database, email: string): Promise<P
 	return await db.prepare("SELECT * FROM pgp_keys WHERE email = ? AND encrypt = 1").bind(normalizeEmail(email)).first<PgpKeyRow>();
 }
 
+/** The key of a forwarding address regardless of its encrypt flag (for rule-forced encryption). */
+export async function anyPgpKeyFor(db: D1Database, email: string): Promise<PgpKeyRow | null> {
+	return await db.prepare("SELECT * FROM pgp_keys WHERE email = ?").bind(normalizeEmail(email)).first<PgpKeyRow>();
+}
+
 /** The whole message, encrypted to the key, as raw PGP/MIME, with its Message-ID. */
 export async function encryptMessage(message: EncryptedMessage, key: Pick<PgpKeyRow, "public_key" | "hide_subject">, entity?: Entity): Promise<{ raw: string; messageId: string }> {
 	const { createMessage, encrypt, readKey } = await openpgp();
@@ -76,6 +84,18 @@ export async function encryptMessage(message: EncryptedMessage, key: Pick<PgpKey
 	});
 	const messageId = newMessageId(message.from);
 	return { raw: buildEncryptedMime(message, messageId, armored as string, !!key.hide_subject), messageId };
+}
+
+/** Encrypts plain text as an inline ASCII-armored OpenPGP message (addy.io's inline_encryption). */
+export async function encryptInlineText(text: string, publicKeyArmored: string): Promise<string> {
+	const { createMessage, encrypt, readKey } = await openpgp();
+	const encryptionKeys = await readKey({ armoredKey: publicKeyArmored });
+	const armored = await encrypt({
+		message: await createMessage({ text }),
+		encryptionKeys,
+		format: "armored",
+	});
+	return armored as string;
 }
 
 /**
@@ -118,6 +138,84 @@ export async function sendEncrypted(env: Env, message: Outgoing, key: PgpKeyRow,
 	return await sendRaw(env, message, raw, messageId);
 }
 
+const HIDDEN_ELEMENTS = new Set(["script", "style", "head", "title"]);
+const LINE_BREAK_ELEMENTS = new Set(["br", "p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"]);
+
+/**
+ * A readable text version of an HTML body, for inline PGP (which carries text only). One pass over
+ * the markup: text outside tags is kept, tags are dropped (some as line breaks), and the contents
+ * of script, style, head and title are skipped. The result is text, never rendered as HTML.
+ */
+export function htmlToPlainText(html: string): string {
+	const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+	const lower = html.toLowerCase();
+	let text = "";
+	let skipUntil: string | null = null;
+	let i = 0;
+	while (i < html.length) {
+		if (skipUntil) {
+			// Inside script or style a "<" is not a tag: only the element's own end tag ends it.
+			const end = lower.indexOf(`</${skipUntil}`, i);
+			const after = end < 0 ? -1 : html.indexOf(">", end);
+			i = after < 0 ? html.length : after + 1;
+			skipUntil = null;
+			continue;
+		}
+		const open = html.indexOf("<", i);
+		if (open < 0) {
+			text += html.slice(i);
+			break;
+		}
+		text += html.slice(i, open);
+		if (html.startsWith("<!--", open)) {
+			const end = html.indexOf("-->", open + 4);
+			i = end < 0 ? html.length : end + 3;
+			continue;
+		}
+		const close = html.indexOf(">", open + 1);
+		if (close < 0) break;
+		const tag = /^<\s*(\/?)\s*([a-zA-Z0-9]+)/.exec(html.slice(open, close + 1));
+		const name = tag?.[2]?.toLowerCase() ?? "";
+		const closing = tag?.[1] === "/";
+		if (!closing && HIDDEN_ELEMENTS.has(name) && !html.slice(open, close).endsWith("/")) {
+			skipUntil = name;
+		} else if (LINE_BREAK_ELEMENTS.has(name) && (closing || name === "br")) {
+			text += "\n";
+		}
+		i = close + 1;
+	}
+	return text
+		.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
+			if (name[0] === "#") {
+				const code = name[1] === "x" || name[1] === "X" ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
+				return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+			}
+			return entities[name.toLowerCase()] ?? whole;
+		})
+		.replace(/[ \t\f\v\r]+/g, " ")
+		.replace(/ *\n */g, "\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
+/**
+ * Sends a forwarded message as Inline PGP: one encrypted text body. The caller sends anything with
+ * attachments as PGP/MIME instead, since inline PGP has no place for them.
+ */
+export async function sendInlineEncrypted(env: Env, message: Outgoing, key: PgpKeyRow): Promise<{ messageId?: string }> {
+	const plain = message.text || (message.html ? htmlToPlainText(message.html) : "");
+	const armored = await encryptInlineText(plain, key.public_key);
+	const result = (await env.EMAIL.send({
+		from: message.from,
+		to: message.to,
+		replyTo: message.replyTo,
+		subject: message.subject,
+		headers: message.headers,
+		text: armored,
+	})) as { messageId?: string } | undefined;
+	return { messageId: result?.messageId };
+}
+
 /**
  * Sends mail that is PGP encrypted or signed already with its own body exactly as it came, under
  * our headers: rebuilding it would break the encryption's structure or the signature.
@@ -125,6 +223,22 @@ export async function sendEncrypted(env: Env, message: Outgoing, key: PgpKeyRow,
 export async function sendKept(env: Env, message: Outgoing, entity: Entity): Promise<{ messageId?: string }> {
 	const messageId = newMessageId(message.from);
 	return await sendRaw(env, message, new Response(buildWithEntity(message, messageId, entity)).body!, messageId);
+}
+
+/** True when an attachment is an attached OpenPGP public key. */
+export function isPgpKeyAttachment(attachment: { filename?: string | null; mimeType?: string | null }): boolean {
+	const type = (attachment.mimeType ?? "").trim().toLowerCase();
+	if (type === "application/pgp-keys") return true;
+	const name = (attachment.filename ?? "").trim().toLowerCase();
+	return name.endsWith(".asc") && (name.includes("openpgp") || name.includes("pubkey") || name.includes("publickey") || name.startsWith("0x"));
+}
+
+/** True when an attachment is an OpenPGP detached signature. */
+export function isPgpSignatureAttachment(attachment: { filename?: string | null; mimeType?: string | null }): boolean {
+	const type = (attachment.mimeType ?? "").trim().toLowerCase();
+	if (type === "application/pgp-signature") return true;
+	const name = (attachment.filename ?? "").trim().toLowerCase();
+	return name === "signature.asc" || name.endsWith(".sig");
 }
 
 type Outgoing = EncryptedMessage & { to: { name: string; email: string } };

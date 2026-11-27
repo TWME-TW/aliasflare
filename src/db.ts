@@ -27,6 +27,8 @@ export type AliasRow = {
 	/** Display name on replies sent from the alias. */
 	name: string | null;
 	pinned: number;
+	/** When 1, only recipients attached to this alias (or its default) may reply/send through it. */
+	attached_recipients_only?: number;
 	/** Set when a client deleted the alias: it stops forwarding and is hidden. */
 	deleted_at: number | null;
 	created_at: number;
@@ -58,8 +60,10 @@ export type ContactRow = {
 	destination: string | null;
 	forward_count: number;
 	reply_count: number;
+	sent_count?: number;
 	last_forward_at: number | null;
 	last_reply_at: number | null;
+	last_sent_at?: number | null;
 	/** Integer id for SimpleLogin clients. */
 	num_id: number;
 	created_at: number;
@@ -272,7 +276,7 @@ export async function setForwardMode(db: D1Database, address: string, mode: Forw
 	return (result.meta.changes ?? 0) > 0;
 }
 
-export type BlocklistRow = { id: string; kind: "address" | "domain"; value: string; hits: number; created_at: number };
+export type BlocklistRow = { id: string; kind: "address" | "domain"; value: string; hits: number; last_blocked_at?: number | null; created_at: number };
 
 /** Candidate blocklist values for a sender: the address, its domain and every parent domain. */
 export function blocklistCandidates(email: string): string[] {
@@ -292,6 +296,6 @@ export async function matchBlocklist(db: D1Database, email: string): Promise<Blo
 		.prepare(`SELECT * FROM blocklist WHERE value IN (${placeholders}) ORDER BY kind = 'address' DESC, length(value) DESC LIMIT 1`)
 		.bind(...candidates)
 		.first<BlocklistRow>();
-	if (row) await db.prepare("UPDATE blocklist SET hits = hits + 1 WHERE id = ?").bind(row.id).run();
+	if (row) await db.prepare("UPDATE blocklist SET hits = hits + 1, last_blocked_at = ? WHERE id = ?").bind(now(), row.id).run();
 	return row;
 }

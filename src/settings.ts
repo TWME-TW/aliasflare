@@ -1,4 +1,4 @@
-import { DOMAIN_PATTERN, extractEmail, isSenderFormat, type SenderFormat } from "./format";
+import { cleanDisplayName, cleanSubjectLine, DOMAIN_PATTERN, extractEmail, isSenderFormat, type SenderFormat } from "./format";
 import { isLocale, type Locale } from "./i18n";
 
 export type UnsubscribeBehavior = "disable_alias" | "block_contact" | "redirect_contact" | "preserve_original";
@@ -17,14 +17,37 @@ export type UnsubscribeRule = { behavior: UnsubscribeBehavior; fallback: Unsubsc
 /** Per-domain unsubscribe overrides; omitted fields inherit the general setting. */
 export type UnsubscribeDomainRule = { behavior?: UnsubscribeBehavior; fallback?: UnsubscribeFallback; redirect: string };
 
-/** How new random aliases are named: two words and digits, random characters, or a UUID. */
-export type RandomAliasFormat = "random_words" | "random_characters" | "uuid";
-export const RANDOM_ALIAS_FORMATS: RandomAliasFormat[] = ["random_words", "random_characters", "uuid"];
+/** How new random aliases are named: two words and digits, a single noun and digits, random characters, or a UUID. */
+export type RandomAliasFormat = "random_words" | "random_noun" | "random_characters" | "uuid";
+export const RANDOM_ALIAS_FORMATS: RandomAliasFormat[] = ["random_words", "random_noun", "random_characters", "uuid"];
 
 export function isRandomAliasFormat(value: unknown): value is RandomAliasFormat {
 	return RANDOM_ALIAS_FORMATS.includes(value as RandomAliasFormat);
 }
 
+/** Where the forwarding banner is placed on forwarded mail. */
+export type BannerLocation = "off" | "top" | "bottom";
+export const BANNER_LOCATIONS: BannerLocation[] = ["off", "top", "bottom"];
+
+export function isBannerLocation(value: unknown): value is BannerLocation {
+	return BANNER_LOCATIONS.includes(value as BannerLocation);
+}
+
+/** How DMARC failure / spoofed sender warnings are shown on forwarded mail. */
+export type SpamWarningBehaviour = "off" | "banner" | "subject" | "both";
+export const SPAM_WARNING_BEHAVIOURS: SpamWarningBehaviour[] = ["both", "banner", "subject", "off"];
+
+export function isSpamWarningBehaviour(value: unknown): value is SpamWarningBehaviour {
+	return SPAM_WARNING_BEHAVIOURS.includes(value as SpamWarningBehaviour);
+}
+
+/** Separator between words in random_words / random_noun aliases. */
+export type AliasSeparator = "." | "-" | "_";
+export const ALIAS_SEPARATORS: AliasSeparator[] = [".", "-", "_"];
+
+export function isAliasSeparator(value: unknown): value is AliasSeparator {
+	return ALIAS_SEPARATORS.includes(value as AliasSeparator);
+}
 
 const DOMAIN = DOMAIN_PATTERN;
 
@@ -65,7 +88,20 @@ export type Settings = {
 	/** Forwarding addresses that get mail encrypted to their PGP key (kept from the pgp_keys table). */
 	pgpRecipients: string[];
 	removeTrackers: boolean;
+	/** Legacy flag kept in sync with bannerLocation !== "off". */
 	showBanner: boolean;
+	/** Where the forwarding banner is shown: off, top, or bottom (addy.io's banner_location). */
+	bannerLocation: BannerLocation;
+	/** Account-wide default From display name for replies and sends (fallback when alias/domain have none). */
+	defaultFromName: string;
+	/** Account-wide default subject override for forwarded mail (empty = keep original subject). */
+	defaultEmailSubject: string;
+	/** How DMARC failures are highlighted on forwarded mail. */
+	spamWarningBehaviour: SpamWarningBehaviour;
+	/** Separator for generated word-based aliases. */
+	aliasSeparator: AliasSeparator;
+	/** Account-level WKD auto-encrypt preference reported to addy.io clients. */
+	wkdAutoEncrypt: boolean;
 	/** Language of the banner and link pages in forwarded mail. */
 	language: Locale;
 	/** Serve the SimpleLogin API so SimpleLogin's apps and browser extension can manage aliases. */
@@ -79,7 +115,7 @@ export type Settings = {
 	randomAliasFormat: RandomAliasFormat;
 	/**
 	 * Let apps change the settings their own settings screens show: alias format, default
-	 * domain, sender format, default mailbox and the blocklist. Connection, API and keys stay here.
+	 * domain, sender format, default mailbox, recipients, domains, rules and the blocklist.
 	 */
 	appSettings: boolean;
 };
@@ -101,6 +137,12 @@ export const DEFAULT_SETTINGS: Settings = {
 	pgpRecipients: [],
 	removeTrackers: true,
 	showBanner: false,
+	bannerLocation: "off",
+	defaultFromName: "",
+	defaultEmailSubject: "",
+	spamWarningBehaviour: "both",
+	aliasSeparator: ".",
+	wkdAutoEncrypt: false,
 	language: "en",
 	simpleloginApi: false,
 	addyApi: false,
@@ -165,6 +207,15 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 	const aliasDomains = Array.isArray(raw.aliasDomains)
 		? [...new Set(raw.aliasDomains.filter((d): d is string => typeof d === "string").map((d) => d.trim().toLowerCase()).filter((d) => DOMAIN.test(d)))].slice(0, MAX_ALIAS_DOMAINS)
 		: [];
+	let bannerLocation: BannerLocation;
+	if (isBannerLocation(raw.bannerLocation)) {
+		// Support callers that spread loaded settings (bannerLocation: "off") and only flip showBanner: true.
+		bannerLocation = raw.bannerLocation === "off" && raw.showBanner === true ? "top" : raw.bannerLocation;
+	} else if (typeof raw.showBanner === "boolean") {
+		bannerLocation = raw.showBanner ? "top" : "off";
+	} else {
+		bannerLocation = DEFAULT_SETTINGS.bannerLocation;
+	}
 	return {
 		forwardMethod: raw.forwardMethod === "direct" ? "direct" : "rewrite",
 		senderFormat: isSenderFormat(raw.senderFormat) ? raw.senderFormat : DEFAULT_SETTINGS.senderFormat,
@@ -186,7 +237,13 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		pgpRecipients: Array.isArray(raw.pgpRecipients) ? [...new Set(raw.pgpRecipients.map(cleanAddress).filter(Boolean))].slice(0, 1000) : [],
 		aliasesFromMailOff: Array.isArray(raw.aliasesFromMailOff) ? aliasDomains.filter((domain) => (raw.aliasesFromMailOff as unknown[]).includes(domain)) : [],
 		removeTrackers: typeof raw.removeTrackers === "boolean" ? raw.removeTrackers : DEFAULT_SETTINGS.removeTrackers,
-		showBanner: typeof raw.showBanner === "boolean" ? raw.showBanner : DEFAULT_SETTINGS.showBanner,
+		showBanner: bannerLocation !== "off",
+		bannerLocation,
+		defaultFromName: typeof raw.defaultFromName === "string" ? (cleanDisplayName(raw.defaultFromName, 100) ?? "") : "",
+		defaultEmailSubject: typeof raw.defaultEmailSubject === "string" ? cleanSubjectLine(raw.defaultEmailSubject).slice(0, 200) : "",
+		spamWarningBehaviour: isSpamWarningBehaviour(raw.spamWarningBehaviour) ? raw.spamWarningBehaviour : DEFAULT_SETTINGS.spamWarningBehaviour,
+		aliasSeparator: isAliasSeparator(raw.aliasSeparator) ? raw.aliasSeparator : DEFAULT_SETTINGS.aliasSeparator,
+		wkdAutoEncrypt: raw.wkdAutoEncrypt === true,
 		language: isLocale(raw.language) ? raw.language : DEFAULT_SETTINGS.language,
 		simpleloginApi: raw.simpleloginApi === true,
 		addyApi: raw.addyApi === true,
@@ -216,12 +273,19 @@ export function settingsFromRows(results: { key: string; value: string }[]): Set
 }
 
 export async function saveSettings(db: D1Database, settings: Settings): Promise<void> {
-	await saveSettingKeys(db, settings);
+	const normalized = normalizeSettings(settings as unknown as Record<string, unknown>);
+	await saveSettingKeys(db, normalized);
 }
 
 /** Updates only the given settings keys, so concurrent changes to other keys are never overwritten. */
 export async function saveSettingKeys(db: D1Database, values: Partial<Settings>): Promise<void> {
-	const entries = Object.entries(values);
+	const toSave: Partial<Settings> = { ...values };
+	if (toSave.bannerLocation !== undefined) {
+		toSave.showBanner = toSave.bannerLocation !== "off";
+	} else if (toSave.showBanner !== undefined) {
+		toSave.bannerLocation = toSave.showBanner ? "top" : "off";
+	}
+	const entries = Object.entries(toSave);
 	if (!entries.length) return;
 	const statement = db.prepare(
 		"INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
