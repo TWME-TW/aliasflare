@@ -444,7 +444,8 @@ export const APP_SCRIPT = `(() => {
   for (const box of document.querySelectorAll("[data-pgp-gen]")) {
     const button = box.querySelector("button[data-pgp-generate]");
     const form = box.closest("form");
-    if (!button || !form || !window.Blob || !URL.createObjectURL) continue;
+    const keyField = form && form.querySelector("textarea[name=key]");
+    if (!button || !form || !keyField || !window.Blob || !URL.createObjectURL) continue;
     box.hidden = false;
     button.addEventListener("click", async () => {
       const emailInput = form.querySelector("input[name=email]");
@@ -453,24 +454,33 @@ export const APP_SCRIPT = `(() => {
         if (emailInput) emailInput.reportValidity();
         return;
       }
-      const passphrase = box.querySelector("[data-pgp-passphrase]").value;
+      const passphraseInput = box.querySelector("[data-pgp-passphrase]");
+      const passphrase = passphraseInput ? passphraseInput.value : "";
+      const mod = button.dataset.pgpGenerate;
+      if (mod !== "/vendor/openpgp.min.mjs") return;
       button.disabled = true;
+      button.setAttribute("aria-busy", "true");
       try {
-        const openpgp = await import(button.dataset.pgpGenerate);
+        const openpgp = await import(mod);
         const { privateKey, publicKey } = await openpgp.generateKey({ type: "curve25519", userIDs: [{ email }], passphrase: passphrase || undefined, format: "armored" });
+        const url = URL.createObjectURL(new Blob([privateKey], { type: "application/pgp-keys" }));
+        const revoke = () => URL.revokeObjectURL(url);
         const link = document.createElement("a");
-        link.href = URL.createObjectURL(new Blob([privateKey], { type: "application/pgp-keys" }));
+        link.href = url;
         link.download = email.replace(/[^a-z0-9.@_+-]/g, "_") + "-private-key.asc";
         document.body.append(link);
         link.click();
         link.remove();
-        setTimeout(() => URL.revokeObjectURL(link.href), 60000);
-        form.querySelector("textarea[name=key]").value = publicKey;
+        setTimeout(revoke, 60000);
+        window.addEventListener("pagehide", revoke, { once: true });
+        if (passphraseInput) passphraseInput.value = "";
+        keyField.value = publicKey;
         show(button.dataset.msgDone, true);
       } catch {
         show(button.dataset.msgFailed, false);
       } finally {
         button.disabled = false;
+        button.removeAttribute("aria-busy");
       }
     });
   }

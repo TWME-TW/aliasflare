@@ -175,8 +175,8 @@ async function attachWkdHost(token: string, zone: Zone, domain: string, workerNa
 	if (!account) throw new Error("The zone's account is not known to this token.");
 	const hostname = `${WKD_SUBDOMAIN}.${domain}`;
 	const path = `/accounts/${encodeURIComponent(account)}/workers/domains`;
-	const existing = (await cf<WorkerDomain[]>(token, `${path}?hostname=${encodeURIComponent(hostname)}`)).find((entry) => entry.hostname === hostname);
-	if (existing && existing.service !== workerName) {
+	const existing = (await cf<WorkerDomain[]>(token, `${path}?hostname=${encodeURIComponent(hostname)}`)).find((entry) => entry.hostname.toLowerCase() === hostname);
+	if (existing && existing.service.toLowerCase() !== workerName.toLowerCase()) {
 		throw new Error(`${hostname} already belongs to the Worker ${existing.service}; it was left unchanged.`);
 	}
 	if (!existing) await cf(token, path, { method: "PUT", body: JSON.stringify({ hostname, service: workerName, zone_id: zone.id }) });

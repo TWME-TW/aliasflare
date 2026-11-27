@@ -1003,7 +1003,13 @@ async function setCatchAll(c: C, id: unknown, on: boolean) {
 	if (index < 0) throw new ClientError(404, "Not found");
 	const domain = settings.aliasDomains[index]!;
 	const off = settings.aliasesFromMailOff.filter((other) => other !== domain);
-	const next = await changeSettings(c, on ? { aliasesFromMailOff: off, createAliasesFromMail: true, ...(settings.createAliasesFromMail ? {} : { aliasesFromMailOff: settings.aliasDomains.filter((other) => other !== domain) }) } : { aliasesFromMailOff: [...off, domain] });
+	const nextOff = [...off, domain];
+	const update: Partial<Settings> = on
+		? { aliasesFromMailOff: settings.createAliasesFromMail ? off : settings.aliasDomains.filter((other) => other !== domain), createAliasesFromMail: true }
+		: settings.aliasDomains.every((entry) => nextOff.includes(entry))
+			? { createAliasesFromMail: false, aliasesFromMailOff: [] }
+			: { aliasesFromMailOff: nextOff };
+	const next = await changeSettings(c, update);
 	return addyDomain(next)(domain, index);
 }
 api.post("/v1/catch-all-domains", async (c) => c.json({ data: await setCatchAll(c, (await body(c)).id, true) }));
