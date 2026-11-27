@@ -20,6 +20,8 @@ import {
 } from "./auth";
 import { APP_SCRIPT, PASSKEY_SCRIPT } from "./client";
 import { createApiKey, deleteApiKey, listApiKeys } from "./apikeys";
+import { mailGateway } from "./mail-gateway";
+import { createMailPassword, deleteMailPassword, listMailPasswords } from "./mail-passwords";
 import { mcp } from "./mcp";
 import { setUpCloudflare, type DomainSetup } from "./cloudflare";
 import { api, apiThrottled } from "./compat/api";
@@ -430,6 +432,9 @@ app.route("/api", api);
 
 // MCP server for AI assistants (off until enabled in Settings; its own API keys).
 app.route("/mcp", mcp);
+
+// Mail Gateway API for the IMAP / POP3 / SMTP Bridge (off per protocol until enabled in Settings; Mail App Passwords).
+app.route("/mail-api/v1", mailGateway);
 
 // Mailflare webhook: message.inbound → forward to the alias's destination.
 app.post("/webhook", async (c) => {
@@ -1068,6 +1073,13 @@ app.post("/settings", async (c) => {
 				mailboxQuotaMb: form.mailboxQuotaMb,
 				mailboxQuotaPolicy: form.mailboxQuotaPolicy,
 				mailboxStorageBackend: form.mailboxStorageBackend,
+				imapEnabled: form.imapEnabled === "1",
+				pop3Enabled: form.pop3Enabled === "1",
+				smtpEnabled: form.smtpEnabled === "1",
+				pop3Folders: (["INBOX", "Skipped", "Failed", "Sent", "Trash"] as const).filter((f) => form[`pop3Folder:${f}`] === "1"),
+				pop3DeleteAction: form.pop3DeleteAction,
+				smtpFromPolicy: form.smtpFromPolicy,
+				smtpRateLimitPerHour: form.smtpRateLimitPerHour,
 			}
 		: {
 				mailboxEnabled: currentSettings.mailboxEnabled,
@@ -1085,6 +1097,13 @@ app.post("/settings", async (c) => {
 				mailboxQuotaMb: currentSettings.mailboxQuotaMb,
 				mailboxQuotaPolicy: currentSettings.mailboxQuotaPolicy,
 				mailboxStorageBackend: currentSettings.mailboxStorageBackend,
+				imapEnabled: currentSettings.imapEnabled,
+				pop3Enabled: currentSettings.pop3Enabled,
+				smtpEnabled: currentSettings.smtpEnabled,
+				pop3Folders: currentSettings.pop3Folders,
+				pop3DeleteAction: currentSettings.pop3DeleteAction,
+				smtpFromPolicy: currentSettings.smtpFromPolicy,
+				smtpRateLimitPerHour: currentSettings.smtpRateLimitPerHour,
 			};
 	const settings = normalizeSettings({
 		simpleloginApi: form.simpleloginApi === "1",
@@ -1637,15 +1656,25 @@ app.post("/import/:source", async (c) => {
 	return render({ result });
 });
 
-async function renderApiKeys(c: C, extra: { newKey?: string; notice?: Notice } = {}) {
-	const settings = await loadSettings(c.env.DB);
+async function renderApiKeys(
+	c: C,
+	extra: { newKey?: string; newMailPassword?: { username: string; password: string }; notice?: Notice } = {},
+) {
+	const [settings, keys, mailPasswords] = await Promise.all([
+		loadSettings(c.env.DB),
+		listApiKeys(c.env.DB),
+		listMailPasswords(c.env.DB),
+	]);
 	return c.html(
 		apiKeysPage(c.get("t"), {
-			keys: await listApiKeys(c.env.DB),
+			keys,
+			mailPasswords,
 			enabled: { simplelogin: settings.simpleloginApi, addy: settings.addyApi, mcp: settings.mcpServer },
+			mailProtocols: { imap: settings.imapEnabled, pop3: settings.pop3Enabled, smtp: settings.smtpEnabled },
 			origin: publicOrigin(c),
 			notice: extra.notice ?? noticeFrom(c),
 			newKey: extra.newKey,
+			newMailPassword: extra.newMailPassword,
 		}),
 	);
 }
@@ -1664,6 +1693,26 @@ app.post("/api-keys", async (c) => {
 
 app.post("/api-keys/:id/delete", async (c) => {
 	await deleteApiKey(c.env.DB, c.req.param("id"));
+	return redirectWithNotice(c, "/api-keys", "notice.keyRevoked");
+});
+
+app.post("/mail-passwords", async (c) => {
+	// A mail app password also outlives the session, so require fresh passkey verification.
+	if (!(await recentlyVerified(c))) return redirectWithNotice(c, "/api-keys", "notice.reauth");
+	const form = await c.req.parseBody();
+	const { password, row } = await createMailPassword(c.env.DB, {
+		name: typeof form.name === "string" ? form.name : "",
+		username: typeof form.username === "string" ? form.username : "aliasflare",
+		allowImap: form.allowImap === "1",
+		allowPop3: form.allowPop3 === "1",
+		allowSmtp: form.allowSmtp === "1",
+	});
+	c.header("Cache-Control", "no-store");
+	return renderApiKeys(c, { newMailPassword: { username: row.username, password } });
+});
+
+app.post("/mail-passwords/:id/delete", async (c) => {
+	await deleteMailPassword(c.env.DB, c.req.param("id"));
 	return redirectWithNotice(c, "/api-keys", "notice.keyRevoked");
 });
 

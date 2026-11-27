@@ -8,6 +8,20 @@ export function isQuotaPolicy(value: unknown): value is QuotaPolicy {
 	return QUOTA_POLICIES.includes(value as QuotaPolicy);
 }
 
+export type Pop3DeleteAction = "trash" | "archive" | "expunge";
+export const POP3_DELETE_ACTIONS: Pop3DeleteAction[] = ["trash", "archive", "expunge"];
+export function isPop3DeleteAction(value: unknown): value is Pop3DeleteAction {
+	return POP3_DELETE_ACTIONS.includes(value as Pop3DeleteAction);
+}
+
+export type SmtpFromPolicy = "existing_aliases" | "auto_create";
+export const SMTP_FROM_POLICIES: SmtpFromPolicy[] = ["existing_aliases", "auto_create"];
+export function isSmtpFromPolicy(value: unknown): value is SmtpFromPolicy {
+	return SMTP_FROM_POLICIES.includes(value as SmtpFromPolicy);
+}
+
+const VALID_POP3_FOLDERS = new Set(["INBOX", "Skipped", "Failed", "Sent", "Trash"]);
+
 export type UnsubscribeBehavior = "disable_alias" | "block_contact" | "redirect_contact" | "preserve_original";
 
 export const UNSUBSCRIBE_BEHAVIORS: UnsubscribeBehavior[] = ["disable_alias", "block_contact", "redirect_contact", "preserve_original"];
@@ -155,6 +169,20 @@ export type Settings = {
 	mailboxStorageBackend: StorageBackend;
 	/** When Mailflare is configured, show Mailflare inbox integration inside the Mailbox view. */
 	mailboxMailflareIntegration: boolean;
+	/** Enable IMAP protocol access via Mail Gateway API & Bridge (off by default). */
+	imapEnabled: boolean;
+	/** Enable POP3 protocol access via Mail Gateway API & Bridge (off by default). */
+	pop3Enabled: boolean;
+	/** Enable SMTP submission via Mail Gateway API & Bridge (off by default). */
+	smtpEnabled: boolean;
+	/** Which mailbox folders POP3 exposes when listing messages. */
+	pop3Folders: ("INBOX" | "Skipped" | "Failed" | "Sent" | "Trash")[];
+	/** What POP3 DELE does to a message: move to Trash, mark read/archive, or expunge permanently. */
+	pop3DeleteAction: Pop3DeleteAction;
+	/** Whether SMTP submission requires an existing alias or may auto-create aliases on configured domains. */
+	smtpFromPolicy: SmtpFromPolicy;
+	/** Maximum SMTP outbound messages per hour. */
+	smtpRateLimitPerHour: number;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -202,6 +230,13 @@ export const DEFAULT_SETTINGS: Settings = {
 	mailboxQuotaPolicy: "evict_oldest",
 	mailboxStorageBackend: "auto",
 	mailboxMailflareIntegration: true,
+	imapEnabled: false,
+	pop3Enabled: false,
+	smtpEnabled: false,
+	pop3Folders: ["INBOX", "Skipped", "Failed"],
+	pop3DeleteAction: "trash",
+	smtpFromPolicy: "existing_aliases",
+	smtpRateLimitPerHour: 60,
 };
 
 export function isUnsubscribeBehavior(value: unknown): value is UnsubscribeBehavior {
@@ -322,6 +357,15 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		mailboxQuotaPolicy: isQuotaPolicy(raw.mailboxQuotaPolicy) ? raw.mailboxQuotaPolicy : DEFAULT_SETTINGS.mailboxQuotaPolicy,
 		mailboxStorageBackend: isStorageBackend(raw.mailboxStorageBackend) ? raw.mailboxStorageBackend : DEFAULT_SETTINGS.mailboxStorageBackend,
 		mailboxMailflareIntegration: typeof raw.mailboxMailflareIntegration === "boolean" ? raw.mailboxMailflareIntegration : DEFAULT_SETTINGS.mailboxMailflareIntegration,
+		imapEnabled: raw.imapEnabled === true,
+		pop3Enabled: raw.pop3Enabled === true,
+		smtpEnabled: raw.smtpEnabled === true,
+		pop3Folders: Array.isArray(raw.pop3Folders)
+			? ([...new Set(raw.pop3Folders.filter((f): f is "INBOX" | "Skipped" | "Failed" | "Sent" | "Trash" => typeof f === "string" && VALID_POP3_FOLDERS.has(f)))] as Settings["pop3Folders"])
+			: [...DEFAULT_SETTINGS.pop3Folders],
+		pop3DeleteAction: isPop3DeleteAction(raw.pop3DeleteAction) ? raw.pop3DeleteAction : DEFAULT_SETTINGS.pop3DeleteAction,
+		smtpFromPolicy: isSmtpFromPolicy(raw.smtpFromPolicy) ? raw.smtpFromPolicy : DEFAULT_SETTINGS.smtpFromPolicy,
+		smtpRateLimitPerHour: clampInt(raw.smtpRateLimitPerHour, DEFAULT_SETTINGS.smtpRateLimitPerHour, 1, 1000),
 	};
 }
 
