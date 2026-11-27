@@ -107,20 +107,18 @@ npx wrangler d1 migrations apply DB --remote
 npx wrangler deploy
 ```
 
-### 2. Register your passkey
+### 2. Register your passkey & Quick Setup
 
 1. Open `https://aliasflare.<you>.workers.dev/`. You land on the setup page.
 2. Get the **one-time setup code**: run `npx wrangler tail aliasflare` and press *Write a new code to the logs* on the setup page; the code appears in the terminal. (It is also in the Worker's logs in the Cloudflare dashboard, under the Worker's *Observability* tab.) To use your own code instead, set a `SETUP_CODE` secret.
-3. Enter the code and register a passkey.
+3. Enter the code and register a passkey. You are taken straight to the **Quick setup** wizard (`/onboarding`):
+   - **Step 1 — Domains & forwarding:** enter your alias domains (e.g. `a.com, b.net`) and default forwarding address, and optionally paste a Cloudflare API token right there to run automatic Email Routing / Email Sending setup in one click (or save and configure DNS / Mailflare later).
+   - **Step 2 — Migrate (optional):** import aliases, notes, contacts, labels, rules and blocklist from SimpleLogin, addy.io or CSV. Leaving domains blank automatically detects your custom domains (skipping shared provider domains) and registers them as your alias domains.
+   - **Step 3 — Ready:** review the readiness checklist and jump straight into the dashboard.
 
-### 3. Settings
+### 3. Cloudflare (automatic or by hand)
 
-- **Forwarding address**: your real inbox.
-- **Alias domains**: `a.com, b.net`. Each gets the reverse-alias domain `r.a.com`, `r.b.net`.
-
-### 4. Cloudflare
-
-**Automatically.** On **Connection**, tick the domains, paste an API token and click **Set up automatically**. Create the token under *My Profile → API Tokens* with these permissions for the zones:
+You can run Cloudflare setup right inside the **Quick setup** wizard, or anytime later under **Settings → Domains & connection**. Create a token under *My Profile → API Tokens* with these permissions for the zones:
 - Zone → Zone → Read
 - Zone → Zone Settings → Edit
 - Zone → DNS → Edit
