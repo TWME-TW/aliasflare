@@ -2151,7 +2151,7 @@ ${keyField("addy", "imp.addyKeyHelp")}${serverField("https://app.addy.io")}${dom
 <ul class="check-list">
 <li><span class="pill ${settings.aliasDomains.length ? "ok" : "bad"}">${settings.aliasDomains.length ? "✓" : "!"}</span> <b>${t("onb.checkDomains")}</b> ${settings.aliasDomains.length ? settings.aliasDomains.map((d) => html`<code>${d}</code> `) : html`<a href="/onboarding?step=1">${t("dash.finishConnection")}</a>`}</li>
 <li><span class="pill ${settings.defaultDestination ? "ok" : "bad"}">${settings.defaultDestination ? "✓" : "!"}</span> <b>${t("onb.checkDestination")}</b> ${settings.defaultDestination ? html`<code>${settings.defaultDestination}</code>` : html`<a href="/onboarding?step=1">${t("dash.goToSettings")}</a>`}</li>
-<li><span class="pill ${settings.mailboxEnabled ? "ok" : ""}">${settings.mailboxEnabled ? "✓" : "—"}</span> <b>${t("onb.checkMailbox")}</b> <span class="muted">${t("onb.checkMailboxDetail")}</span></li>
+<li><span class="pill ${settings.mailboxEnabled ? "ok" : ""}">${settings.mailboxEnabled ? "✓" : "—"}</span> <b>${t("onb.checkMailbox")}</b> ${settings.mailboxEnabled ? html`<span class="muted">${t("onb.checkMailboxDetail")}</span>` : html`<a href="/settings/mailbox">${t("nav.tab.mailbox")}</a>`}</li>
 </ul>
 <div class="wizard-actions">
 <a class="btn-link primary" href="/">${t("onb.goDashboard")} <span class="arrow" aria-hidden="true">→</span></a>

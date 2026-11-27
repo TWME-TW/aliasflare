@@ -121,6 +121,15 @@ describe("Guided onboarding wizard & streamlined domain setup", () => {
 		expect((await loadSettings(db)).aliasDomains).toEqual(["mycustom.test"]);
 		const alias = await db.prepare("SELECT address FROM aliases WHERE address = 'shop@mycustom.test'").first<{ address: string }>();
 		expect(alias?.address).toBe("shop@mycustom.test");
+
+		// Naming a shared domain by hand imports its aliases but never makes it an alias domain.
+		const shared = new FormData();
+		shared.set("domains", "simplelogin.com");
+		shared.set("addDomains", "1");
+		shared.set("file", new File([csv], "aliases.csv", { type: "text/csv" }));
+		const sharedRes = await app.fetch(new Request(`${ORIGIN}/import/csv`, { method: "POST", headers: { cookie, origin: ORIGIN }, body: shared }), env);
+		expect(sharedRes.status).toBe(200);
+		expect((await loadSettings(db)).aliasDomains).toEqual(["mycustom.test"]);
 	});
 
 	it("allows entering alias domains inline on POST /connection/cloudflare without visiting /settings first", async () => {

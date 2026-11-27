@@ -58,6 +58,7 @@ import {
 	newFetchBudget,
 	defaultImportDomains,
 	detectCustomDomains,
+	isSharedProviderDomain,
 	fetchAddy,
 	fetchAddyExtras,
 	importAddyExtras,
@@ -1743,7 +1744,8 @@ async function executeImport(c: C, sourceName: string, options: { allowAutoDetec
 		const nextDomains = [...settings.aliasDomains];
 		for (const d of importedDomains) {
 			if (nextDomains.length >= MAX_ALIAS_DOMAINS) break;
-			if (nextDomains.includes(d) || !DOMAIN_PATTERN.test(d)) continue;
+			// A shared SimpleLogin/addy.io domain keeps its mail at that service: never an alias domain here.
+			if (nextDomains.includes(d) || !DOMAIN_PATTERN.test(d) || isSharedProviderDomain(d)) continue;
 			const trial = [...nextDomains, d];
 			if (clashingDomain(trial)) continue;
 			if (settings.defaultDestination && isOwnAddress(settings.defaultDestination, trial)) continue;
