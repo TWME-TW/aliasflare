@@ -16,12 +16,14 @@ import {
 	ALIAS_SEPARATORS,
 	BANNER_LOCATIONS,
 	FORWARD_METHODS,
+	QUOTA_POLICIES,
 	RANDOM_ALIAS_FORMATS,
 	SPAM_WARNING_BEHAVIOURS,
 	UNSUBSCRIBE_BEHAVIORS,
 	UNSUBSCRIBE_FALLBACKS,
 	type Settings,
 } from "./settings";
+import { STORAGE_BACKENDS, type S3Options } from "./storage";
 import { APP_SCRIPT, OPENPGP_BROWSER, PASSKEY_SCRIPT } from "./client";
 import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from "./outbound";
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
@@ -208,6 +210,8 @@ button.copy[data-copied] .check-i { display:block; }
 ol.steps { padding-inline-start:20px; margin:8px 0 0; } ol.steps li { margin:6px 0; }
 ul.results { list-style:none; padding:0; margin:12px 0; display:grid; gap:8px; } ul.results .muted { word-break:break-word; }
 details { margin-top:16px; } summary { cursor:pointer; color:var(--primary); font-weight:500; }
+.mb-frame { width:100%; min-height:420px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+.mb-pre { white-space:pre-wrap; overflow-wrap:anywhere; }
 
 /* Language menu and footer */
 .lang { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
@@ -363,6 +367,7 @@ export const PASSKEY_SCRIPT_VERSION = contentVersion(PASSKEY_SCRIPT);
 /** Lucide icons (ISC license), inlined so the page needs no extra requests. */
 const ICONS = {
 	aliases: `<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>`,
+	mailbox: `<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>`,
 	blocklist: `<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>`,
 	labels: `<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>`,
 	rules: `<path d="M3 4h18l-7 8v6l-4 2v-8z"/>`,
@@ -460,7 +465,7 @@ ${themeToggle(t, options.path)}
 <form class="inline" method="post" action="/logout"><button class="ghost" title="${t("nav.signOut")}">${icon("signOut")}<span>${t("nav.signOut")}</span></button></form></header>
 <div class="shell">
 <nav class="sidebar" aria-label="aliasflare">
-${link("/", "nav.aliases", "aliases")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/labels", "nav.labels", "labels")}${link("/rules", "nav.rules", "rules")}${link("/encryption", "nav.encryption", "encryption")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
+${link("/", "nav.aliases", "aliases")}${link("/mailbox", "nav.mailbox", "mailbox")}${link("/activity", "nav.activity", "activity")}${link("/import", "nav.import", "import")}${link("/blocklist", "nav.blocklist", "blocklist")}${link("/labels", "nav.labels", "labels")}${link("/rules", "nav.rules", "rules")}${link("/encryption", "nav.encryption", "encryption")}${link("/settings", "nav.settings", "settings")}${link("/connection", "nav.connection", "connection")}${link("/passkeys", "nav.passkeys", "passkeys")}${link("/api-keys", "nav.apiKeys", "apiKeys")}
 <p class="powered">aliasflare · <a href="https://github.com/TWME-TW/aliasflare">GitHub</a></p>
 </nav>
 <div class="content">${body}</div>
@@ -531,7 +536,7 @@ function checkbox(name: string, checked: boolean, label: string, help: string): 
 	return html`<label class="check"><input type="checkbox" name="${name}" value="1" ${checked ? "checked" : ""} /><span>${label}${help ? html`<span class="help">${help}</span>` : ""}</span></label>`;
 }
 
-function noticeBox(notice?: Notice): Html | string {
+export function noticeBox(notice?: Notice): Html | string {
 	if (!notice) return "";
 	const text = typeof notice === "string" ? notice : notice.text;
 	const bad = typeof notice === "object" && !!notice.bad;
@@ -832,7 +837,7 @@ export function settingsPage(t: Translate, input: { settings: Settings; origin: 
 		html`<main>
 ${noticeBox(notice)}
 <nav class="jump" aria-label="${t("settings.title")}">
-<a href="#language-settings">${t("settings.display")}</a><a href="#forwarding">${t("settings.section")}</a><a href="#unsubscribe">${t("settings.unsubscribe")}</a><a href="#clients">${t("set.clients")}</a>
+<a href="#language-settings">${t("settings.display")}</a><a href="#forwarding">${t("settings.section")}</a><a href="#mailbox-settings">${t("mb.title")}</a><a href="#unsubscribe">${t("settings.unsubscribe")}</a><a href="#clients">${t("set.clients")}</a>
 </nav>
 <form class="sections" method="post" action="/settings" data-autosave data-msg-failed="${t("link.error")}">
 <section id="language-settings">
@@ -905,6 +910,42 @@ ${settings.aliasDomains.map((domain) => html`<label class="check"><input type="h
 </fieldset>`
 	: ""}
 ${checkbox("autoForwardNewAliases", settings.autoForwardNewAliases, t("settings.autoForward"), t("settings.autoForwardHelp"))}
+</section>
+
+<section id="mailbox-settings">
+<h2>${t("mb.title")}</h2>
+<p class="help">${t("mb.settingsHelp")}</p>
+<input type="hidden" name="mailboxSettingsShown" value="1" />
+${checkbox("mailboxEnabled", settings.mailboxEnabled, t("mb.enable"), t("mb.enableHelp"))}
+${checkbox("storeFailed", settings.storeFailed, t("mb.storeFailed"), t("mb.storeFailedHelp"))}
+${checkbox("storeSkippedAliasOff", settings.storeSkippedAliasOff, t("mb.storeSkippedAliasOff"), "")}
+${checkbox("storeSkippedPromotions", settings.storeSkippedPromotions, t("mb.storeSkippedPromotions"), "")}
+${checkbox("storeSkippedRuleBlock", settings.storeSkippedRuleBlock, t("mb.storeSkippedRuleBlock"), "")}
+${checkbox("storeSkippedBlockedSender", settings.storeSkippedBlockedSender, t("mb.storeSkippedBlockedSender"), "")}
+${checkbox("storeSkippedUnknownAlias", settings.storeSkippedUnknownAlias, t("mb.storeSkippedUnknownAlias"), t("mb.storeSkippedUnknownAliasHelp"))}
+${checkbox("storeForwardedCopy", settings.storeForwardedCopy, t("mb.storeForwardedCopy"), t("mb.storeForwardedCopyHelp"))}
+${checkbox("storeSentCopy", settings.storeSentCopy, t("mb.storeSentCopy"), "")}
+${checkbox("mailboxMailflareIntegration", settings.mailboxMailflareIntegration, t("mb.mailflareIntegration"), "")}
+
+<label for="mailboxStorageBackend">${t("mb.storageBackend")}</label>
+<select id="mailboxStorageBackend" name="mailboxStorageBackend">
+${STORAGE_BACKENDS.map((b) => html`<option value="${b}" ${settings.mailboxStorageBackend === b ? "selected" : ""}>${t(`mb.backend.${b}`)}</option>`)}
+</select>
+
+<label for="mailboxRetentionDays">${t("mb.retentionDays")}</label>
+<input id="mailboxRetentionDays" name="mailboxRetentionDays" type="number" min="0" max="3650" value="${String(settings.mailboxRetentionDays)}" />
+<p class="help">${t("mb.retentionHelp")}</p>
+
+<label for="mailboxMaxMessageKb">${t("mb.maxMessageKb")}</label>
+<input id="mailboxMaxMessageKb" name="mailboxMaxMessageKb" type="number" min="64" max="25600" value="${String(settings.mailboxMaxMessageKb)}" />
+
+<label for="mailboxQuotaMb">${t("mb.quotaMb")}</label>
+<input id="mailboxQuotaMb" name="mailboxQuotaMb" type="number" min="10" max="102400" value="${String(settings.mailboxQuotaMb)}" />
+
+<label for="mailboxQuotaPolicy">${t("mb.quotaPolicy")}</label>
+<select id="mailboxQuotaPolicy" name="mailboxQuotaPolicy">
+${QUOTA_POLICIES.map((p) => html`<option value="${p}" ${settings.mailboxQuotaPolicy === p ? "selected" : ""}>${t(`mb.quota.${p}`)}</option>`)}
+</select>
 </section>
 
 <section id="unsubscribe">
@@ -1047,10 +1088,12 @@ ${input("customIdPath", t("conn.customIdPath"), t("conn.customIdPathHelp"), off,
 export function connectionPage(
 	t: Translate,
 	input: {
-		values: { mailflareUrl: string; publicUrl: string; outboundProvider: OutboundProvider; workersPlan: WorkersPlan; outboundOptions: OutboundOptions };
+		values: { mailflareUrl: string; publicUrl: string; outboundProvider: OutboundProvider; workersPlan: WorkersPlan; outboundOptions: OutboundOptions; mailboxS3?: S3Options };
 		hasOutboundKey: boolean;
 		hasApiKey: boolean;
 		hasWebhookSecret: boolean;
+		hasS3Secret?: boolean;
+		hasR2?: boolean;
 		mailflare: boolean;
 		fixed: Set<string>;
 		webhookUrl: string;
@@ -1059,7 +1102,8 @@ export function connectionPage(
 		notice?: Notice;
 	},
 ): Html {
-	const { values, hasOutboundKey, hasApiKey, hasWebhookSecret, mailflare, fixed, webhookUrl, missing, cloudflare, notice } = input;
+	const { values, hasOutboundKey, hasApiKey, hasWebhookSecret, hasS3Secret = false, hasR2 = false, mailflare, fixed, webhookUrl, missing, cloudflare, notice } = input;
+	const s3 = values.mailboxS3 ?? { endpoint: "", bucket: "", region: "auto", accessKeyId: "", secretAccessKey: "", pathStyle: true, prefix: "aliasflare/" };
 	const fixedNote = (key: string) => (fixed.has(key) ? html`<p class="help">${t("conn.fixed")}</p>` : "");
 	const disabled = (key: string) => (fixed.has(key) ? "disabled" : "");
 	const secretField = (key: string, label: string, isSet: boolean, help: string | Html) => html`
@@ -1146,6 +1190,29 @@ ${providerFields(t, values.outboundOptions, values.outboundProvider, fixed.has("
 ${secretField("mailflareApiKey", t("conn.apiKey"), hasApiKey, t("conn.apiKeyHelp"))}
 ${secretField("webhookSecret", t("conn.webhookSecret"), hasWebhookSecret, html`${t("conn.webhookSecretHelp", { url: webhookUrl })} ${copyButton(t, webhookUrl)}`)}
 <p><button class="primary">${t("conn.saveButton")}</button></p>
+</section>
+<section id="storage">
+<h2>${t("conn.storageTitle")} ${hasR2 ? html`<span class="pill ok">R2</span>` : s3.endpoint && s3.bucket && hasS3Secret ? html`<span class="pill ok">S3</span>` : html`<span class="pill">D1</span>`}</h2>
+<p class="help">${t("conn.storageHelp")}</p>
+<label for="mailboxS3Endpoint">${t("conn.s3Endpoint")}</label>
+<input id="mailboxS3Endpoint" name="mailboxS3Endpoint" type="url" value="${s3.endpoint}" placeholder="https://s3.us-west-004.backblazeb2.com" ${disabled("mailboxS3Endpoint")} />
+${fixedNote("mailboxS3Endpoint")}
+<label for="mailboxS3Bucket">${t("conn.s3Bucket")}</label>
+<input id="mailboxS3Bucket" name="mailboxS3Bucket" type="text" value="${s3.bucket}" placeholder="aliasflare-mailbox" ${disabled("mailboxS3Bucket")} />
+${fixedNote("mailboxS3Bucket")}
+<label for="mailboxS3Region">${t("conn.s3Region")}</label>
+<input id="mailboxS3Region" name="mailboxS3Region" type="text" value="${s3.region}" placeholder="auto" ${disabled("mailboxS3Region")} />
+${fixedNote("mailboxS3Region")}
+<label for="mailboxS3AccessKeyId">${t("conn.s3AccessKey")}</label>
+<input id="mailboxS3AccessKeyId" name="mailboxS3AccessKeyId" type="text" value="${s3.accessKeyId}" autocomplete="off" ${disabled("mailboxS3AccessKeyId")} />
+${fixedNote("mailboxS3AccessKeyId")}
+${secretField("mailboxS3SecretAccessKey", t("conn.s3SecretKey"), hasS3Secret, "")}
+<label for="mailboxS3Prefix">${t("conn.s3Prefix")}</label>
+<input id="mailboxS3Prefix" name="mailboxS3Prefix" type="text" value="${s3.prefix}" placeholder="aliasflare/" ${disabled("mailboxS3Prefix")} />
+${fixedNote("mailboxS3Prefix")}
+<input type="hidden" name="mailboxS3PathStyleShown" value="1" />
+${checkbox("mailboxS3PathStyle", s3.pathStyle, t("conn.s3PathStyle"), t("conn.s3PathStyleHelp"))}
+<p class="row"><button class="primary">${t("conn.saveButton")}</button></p>
 </section>
 </form>
 </main>`,
@@ -1605,7 +1672,8 @@ function conditionText(t: Translate, condition: Condition): string {
 }
 
 function actionText(t: Translate, action: Action): string {
-	if (action.type === "block" || action.type === "removeAttachments" || action.type === "banner") return t(`rules.action.${action.type}`);
+	if (action.type === "block" || action.type === "removeAttachments" || action.type === "store" || action.type === "quarantine") return t(`rules.action.${action.type}`);
+	if (action.type === "banner") return `${t("rules.action.banner")} (${action.value})`;
 	// Only the host: a webhook address often carries a token of its own.
 	if (action.type === "webhook") return `${t("rules.action.webhook")} (${URL.canParse(action.value) ? new URL(action.value).host : "?"})`;
 	return `${t(`rules.action.${action.type}`)} “${action.value}”`;

@@ -6,6 +6,7 @@
 import { hostnameOf, randomToken } from "./format";
 import type { MessageKey } from "./i18n";
 import { isOutboundProvider, normalizeOutboundOptions, type OutboundOptions, type OutboundProvider } from "./outbound";
+import { DEFAULT_S3_OPTIONS, normalizeS3Prefix, validS3Endpoint, type S3Options } from "./storage";
 
 export type AppConfig = {
 	mailflareUrl: string;
@@ -33,6 +34,8 @@ export type AppConfig = {
 	 */
 	workersPlan: WorkersPlan;
 	mailflareService?: Fetcher;
+	/** Optional S3-compatible object storage for the built-in mailbox (AWS S3, Backblaze B2, MinIO, R2 S3 API...). */
+	mailboxS3: S3Options;
 };
 
 export const WORKERS_PLANS = ["free", "paid"] as const;
@@ -58,7 +61,14 @@ type StoredKey =
 	| "outboundProvider"
 	| "outboundApiKey"
 	| "outboundOptions"
-	| "workersPlan";
+	| "workersPlan"
+	| "mailboxS3Endpoint"
+	| "mailboxS3Bucket"
+	| "mailboxS3Region"
+	| "mailboxS3AccessKeyId"
+	| "mailboxS3SecretAccessKey"
+	| "mailboxS3PathStyle"
+	| "mailboxS3Prefix";
 
 const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	mailflareUrl: "MAILFLARE_URL",
@@ -72,6 +82,13 @@ const ENV_OVERRIDES: Record<StoredKey, keyof Env> = {
 	outboundApiKey: "OUTBOUND_API_KEY",
 	outboundOptions: "OUTBOUND_OPTIONS",
 	workersPlan: "WORKERS_PLAN",
+	mailboxS3Endpoint: "MAILBOX_S3_ENDPOINT",
+	mailboxS3Bucket: "MAILBOX_S3_BUCKET",
+	mailboxS3Region: "MAILBOX_S3_REGION",
+	mailboxS3AccessKeyId: "MAILBOX_S3_ACCESS_KEY_ID",
+	mailboxS3SecretAccessKey: "MAILBOX_S3_SECRET_ACCESS_KEY",
+	mailboxS3PathStyle: "MAILBOX_S3_PATH_STYLE",
+	mailboxS3Prefix: "MAILBOX_S3_PREFIX",
 };
 
 /** Which values come from the environment, so the dashboard can show them as fixed. */
@@ -175,6 +192,17 @@ export async function loadConfig(env: Env, rows?: { key: string; value: string }
 	}
 	const mailflareUrl = validOrigin(pick("mailflareUrl")) ?? "";
 	const publicUrl = validOrigin(pick("publicUrl")) ?? "";
+	const rawS3Endpoint = pick("mailboxS3Endpoint");
+	const s3PathStyleRaw = pick("mailboxS3PathStyle").toLowerCase();
+	const mailboxS3: S3Options = {
+		endpoint: validS3Endpoint(rawS3Endpoint) ?? "",
+		bucket: pick("mailboxS3Bucket").replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 128),
+		region: pick("mailboxS3Region").replace(/[^a-zA-Z0-9-]/g, "").slice(0, 40) || DEFAULT_S3_OPTIONS.region,
+		accessKeyId: pick("mailboxS3AccessKeyId").replace(/[\u0000-\u001f]/g, "").slice(0, 128),
+		secretAccessKey: pick("mailboxS3SecretAccessKey").replace(/[\u0000-\u001f]/g, "").slice(0, 256),
+		pathStyle: s3PathStyleRaw ? s3PathStyleRaw !== "false" && s3PathStyleRaw !== "0" : DEFAULT_S3_OPTIONS.pathStyle,
+		prefix: pick("mailboxS3Prefix") ? normalizeS3Prefix(pick("mailboxS3Prefix")) : DEFAULT_S3_OPTIONS.prefix,
+	};
 	return {
 		mailflareUrl,
 		mailflareApiKey: pick("mailflareApiKey"),
@@ -191,6 +219,7 @@ export async function loadConfig(env: Env, rows?: { key: string; value: string }
 		// Free unless told otherwise: the stricter limits work on both plans.
 		workersPlan: pick("workersPlan").toLowerCase() === "paid" ? "paid" : "free",
 		mailflareService: env.MAILFLARE_SERVICE,
+		mailboxS3,
 	};
 }
 

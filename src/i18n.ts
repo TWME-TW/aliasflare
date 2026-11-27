@@ -218,6 +218,9 @@ const ERROR_NOTICE_KEYS = new Set<MessageKey>([
 	"notice.pgpMissing",
 	"notice.wkdOtherAddress",
 	"notice.wkdKeyInUse",
+	"notice.badS3",
+	"notice.mbResendFailed",
+	"notice.mbSendFailed",
 ]);
 
 /** True when a redirect notice reports a validation or action failure rather than success. */

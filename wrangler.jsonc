@@ -32,4 +32,7 @@
 			"migrations_dir": "migrations"
 		}
 	]
+	// Optional: Cloudflare R2 bucket for built-in mailbox raw message storage (up to 25 MB/message).
+	// Without R2 (or an S3-compatible service configured on Connection), messages compress into D1.
+	// ,"r2_buckets": [{ "binding": "MAILBOX_BUCKET", "bucket_name": "aliasflare-mailbox" }]
 }
