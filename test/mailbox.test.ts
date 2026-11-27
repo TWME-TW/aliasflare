@@ -308,6 +308,16 @@ describe("compose recipient search", () => {
 		const page = await (await app.fetch(new Request(`${ORIGIN}/mailbox/compose`, { headers: { cookie } }), env)).text();
 		expect(page).toContain('list="composeToList"');
 		expect(page).toContain('data-recipient-search="/mailbox/recipients"');
+		expect(page).toContain('list="composeFromList"');
+		expect(page).toContain('<option value="shop@a.test"></option>');
+
+		// From searches every alias on address, name or note; deleted aliases are left out.
+		await db.prepare("UPDATE aliases SET note = 'Online shopping' WHERE address = 'shop@a.test'").run();
+		const senders = async (q: string) =>
+			((await (await app.fetch(new Request(`${ORIGIN}/mailbox/senders?q=${encodeURIComponent(q)}`, { headers: { cookie } }), env)).json()) as any).aliases;
+		expect(await senders("shopping")).toEqual([{ email: "shop@a.test", name: "Online shopping" }]);
+		expect(await senders("gone")).toEqual([]);
+		expect(await senders("_")).toEqual([]);
 	});
 });
 
