@@ -220,11 +220,10 @@ ${noticeBox(notice)}
 <h2>${t("mb.compose")}</h2>
 <form class="compose" method="post" action="/mailbox/compose">
 <div><label for="composeFrom">${t("mb.colFrom")}</label>
-<select id="composeFrom" name="from" required>
-${aliases.map((addr) => html`<option value="${addr}" ${addr === from ? "selected" : ""}>${addr}</option>`)}
-</select></div>
+<input id="composeFrom" name="from" type="email" value="${from}" required list="composeFromList" autocomplete="off" spellcheck="false" data-recipient-search="/mailbox/senders" />
+<datalist id="composeFromList">${aliases.map((addr) => html`<option value="${addr}"></option>`)}</datalist></div>
 <div><label for="composeTo">${t("mb.colTo")}</label>
-<input id="composeTo" name="to" type="email" value="${to}" required placeholder="recipient@example.com" list="composeToList" autocomplete="off" data-recipient-search="/mailbox/recipients" data-from-select="composeFrom" />
+<input id="composeTo" name="to" type="email" value="${to}" required placeholder="recipient@example.com" list="composeToList" autocomplete="off" data-recipient-search="/mailbox/recipients" data-focus-search data-from-select="composeFrom" />
 <datalist id="composeToList"></datalist></div>
 <div class="wide"><label for="composeSubject">${t("mb.colSubject")}</label>
 <input id="composeSubject" name="subject" type="text" value="${subject}" maxlength="500" required /></div>

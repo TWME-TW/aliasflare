@@ -795,6 +795,21 @@ app.get("/mailbox/recipients", async (c) => {
 	return c.json({ recipients });
 });
 
+/** From suggestions for Compose: every alias (not only the most recent), matched on address, name or note. */
+app.get("/mailbox/senders", async (c) => {
+	const q = (c.req.query("q") ?? "").trim().toLowerCase().slice(0, 100);
+	const like = `%${q.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+	const { results } = await c.env.DB.prepare(
+		`SELECT address, name, note FROM aliases
+		 WHERE deleted_at IS NULL AND (address LIKE ?1 ESCAPE '\\' OR LOWER(COALESCE(name, '')) LIKE ?1 ESCAPE '\\' OR LOWER(COALESCE(note, '')) LIKE ?1 ESCAPE '\\')
+		 ORDER BY created_at DESC LIMIT 20`,
+	)
+		.bind(like)
+		.all<{ address: string; name: string | null; note: string | null }>();
+	c.header("Cache-Control", "no-store");
+	return c.json({ aliases: results.map((row) => ({ email: row.address, name: row.name || row.note || null })) });
+});
+
 app.get("/mailbox/compose", async (c) => {
 	const { results } = await c.env.DB.prepare("SELECT address FROM aliases WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 200").all<{ address: string }>();
 	const aliases = results.map((r) => r.address);

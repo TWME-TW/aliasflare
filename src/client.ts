@@ -147,8 +147,8 @@ export const APP_SCRIPT = `(() => {
     select.addEventListener("change", () => select.form && select.form.requestSubmit());
   }
 
-  // Compose: search the people the aliases have mail with as the address is typed. Picking one
-  // also picks the alias that person knows, when it is in the From list.
+  // Compose: To searches the people the aliases have mail with, and picking one also picks the
+  // alias that person knows; From searches every alias. Both refine their list as you type.
   for (const input of document.querySelectorAll("input[data-recipient-search]")) {
     const list = input.list;
     const fromSelect = document.getElementById(input.dataset.fromSelect || "");
@@ -166,23 +166,26 @@ export const APP_SCRIPT = `(() => {
         const data = await response.json();
         list.replaceChildren();
         aliasFor.clear();
-        for (const r of data.recipients || []) {
+        for (const r of data.recipients || data.aliases || []) {
           const option = document.createElement("option");
           option.value = r.email;
-          option.label = (r.name ? r.name + " · " : "") + r.alias;
+          const label = [r.name, r.alias].filter(Boolean).join(" · ");
+          if (label) option.label = label;
           list.append(option);
-          aliasFor.set(r.email, r.alias);
+          if (r.alias) aliasFor.set(r.email, r.alias);
         }
       } catch {
         // Suggestions are a convenience: typing an address still works without them.
       }
     };
-    input.addEventListener("focus", search, { once: true });
+    // From starts with the recent aliases in its list and a value already chosen; To starts empty.
+    if (input.hasAttribute("data-focus-search")) input.addEventListener("focus", search, { once: true });
+    else asked = input.value.trim();
     input.addEventListener("input", () => {
       clearTimeout(timer);
       timer = setTimeout(search, 150);
       const alias = aliasFor.get(input.value.trim());
-      if (alias && fromSelect && [...fromSelect.options].some((o) => o.value === alias)) fromSelect.value = alias;
+      if (alias && fromSelect) fromSelect.value = alias;
     });
   }
 
