@@ -147,6 +147,45 @@ export const APP_SCRIPT = `(() => {
     select.addEventListener("change", () => select.form && select.form.requestSubmit());
   }
 
+  // Compose: search the people the aliases have mail with as the address is typed. Picking one
+  // also picks the alias that person knows, when it is in the From list.
+  for (const input of document.querySelectorAll("input[data-recipient-search]")) {
+    const list = input.list;
+    const fromSelect = document.getElementById(input.dataset.fromSelect || "");
+    if (!list) continue;
+    const aliasFor = new Map();
+    let timer = 0;
+    let asked = "";
+    const search = async () => {
+      const q = input.value.trim();
+      if (q === asked) return;
+      asked = q;
+      try {
+        const response = await fetch(input.dataset.recipientSearch + "?q=" + encodeURIComponent(q), { headers: { Accept: "application/json" } });
+        if (!response.ok || asked !== q) return;
+        const data = await response.json();
+        list.replaceChildren();
+        aliasFor.clear();
+        for (const r of data.recipients || []) {
+          const option = document.createElement("option");
+          option.value = r.email;
+          option.label = (r.name ? r.name + " · " : "") + r.alias;
+          list.append(option);
+          aliasFor.set(r.email, r.alias);
+        }
+      } catch {
+        // Suggestions are a convenience: typing an address still works without them.
+      }
+    };
+    input.addEventListener("focus", search, { once: true });
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(search, 150);
+      const alias = aliasFor.get(input.value.trim());
+      if (alias && fromSelect && [...fromSelect.options].some((o) => o.value === alias)) fromSelect.value = alias;
+    });
+  }
+
   // The sending provider's own fields and plan/provider notices stay in sync as options change.
   const provider = document.getElementById("outboundProvider");
   const workersPlan = document.getElementById("workersPlan");

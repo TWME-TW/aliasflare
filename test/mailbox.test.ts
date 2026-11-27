@@ -268,3 +268,33 @@ describe("dashboard Webmail UI, sandboxed HTML preview & compose", () => {
 		expect(sentRow).toEqual({ folder: "Sent", subject: "Hi from webmail" });
 	});
 });
+
+describe("compose recipient search", () => {
+	it("suggests the people the aliases have mail with, newest first, with the alias each knows", async () => {
+		const cookie = await signIn(db);
+		await db.batch([
+			db.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at) VALUES ('shop@a.test', 1, 'u1', 'all', 1, 1, 1)"),
+			db.prepare("INSERT INTO aliases (address, num_id, uid, forward_mode, forward_enabled, created_at, updated_at, deleted_at) VALUES ('gone@a.test', 2, 'u2', 'all', 1, 1, 1, 5)"),
+			db.prepare("INSERT INTO contacts (id, alias_address, email, name, reverse_local, created_at, last_forward_at) VALUES ('c1', 'shop@a.test', 'alice@x.test', 'Alice Wonder', 'r1', 1, 100)"),
+			db.prepare("INSERT INTO contacts (id, alias_address, email, name, reverse_local, created_at, last_forward_at) VALUES ('c2', 'shop@a.test', 'bob@x.test', 'Bob', 'r2', 1, 200)"),
+			db.prepare("INSERT INTO contacts (id, alias_address, email, name, reverse_local, created_at, blocked) VALUES ('c3', 'shop@a.test', 'spam@x.test', 'Spammer', 'r3', 1, 1)"),
+			db.prepare("INSERT INTO contacts (id, alias_address, email, name, reverse_local, created_at) VALUES ('c4', 'gone@a.test', 'old@x.test', 'Old', 'r4', 1)"),
+		]);
+		const search = async (q: string) =>
+			((await (await app.fetch(new Request(`${ORIGIN}/mailbox/recipients?q=${encodeURIComponent(q)}`, { headers: { cookie } }), env)).json()) as any).recipients;
+
+		expect(await search("")).toEqual([
+			{ email: "bob@x.test", name: "Bob", alias: "shop@a.test" },
+			{ email: "alice@x.test", name: "Alice Wonder", alias: "shop@a.test" },
+		]);
+		expect((await search("wonder")).map((r: any) => r.email)).toEqual(["alice@x.test"]);
+		expect(await search("%")).toEqual([]);
+
+		// Signed out, nothing is listed.
+		expect((await app.fetch(new Request(`${ORIGIN}/mailbox/recipients?q=a`), env)).status).not.toBe(200);
+
+		const page = await (await app.fetch(new Request(`${ORIGIN}/mailbox/compose`, { headers: { cookie } }), env)).text();
+		expect(page).toContain('list="composeToList"');
+		expect(page).toContain('data-recipient-search="/mailbox/recipients"');
+	});
+});

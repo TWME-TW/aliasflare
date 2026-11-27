@@ -215,6 +215,12 @@ ol.steps { padding-inline-start:20px; margin:8px 0 0; } ol.steps li { margin:6px
 ul.results { list-style:none; padding:0; margin:12px 0; display:grid; gap:8px; } ul.results .muted { word-break:break-word; }
 details { margin-top:16px; } summary { cursor:pointer; color:var(--primary); font-weight:500; }
 .mb-frame { width:100%; min-height:420px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+.compose { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); column-gap:16px; }
+.compose > div, .compose > .wide { min-width:0; }
+.compose .wide { grid-column:1 / -1; }
+.compose input, .compose select, .compose textarea { max-width:none; }
+.compose textarea { min-height:max(240px, 45vh); }
+@media (max-width: 720px) { .compose { grid-template-columns:minmax(0, 1fr); } }
 .mb-pre { white-space:pre-wrap; overflow-wrap:anywhere; }
 
 /* Language menu and footer */

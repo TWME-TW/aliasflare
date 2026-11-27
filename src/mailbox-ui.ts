@@ -218,18 +218,19 @@ export function mailboxComposePage(
 ${noticeBox(notice)}
 <section>
 <h2>${t("mb.compose")}</h2>
-<form method="post" action="/mailbox/compose">
-<label for="composeFrom">${t("mb.colFrom")}</label>
+<form class="compose" method="post" action="/mailbox/compose">
+<div><label for="composeFrom">${t("mb.colFrom")}</label>
 <select id="composeFrom" name="from" required>
 ${aliases.map((addr) => html`<option value="${addr}" ${addr === from ? "selected" : ""}>${addr}</option>`)}
-</select>
-<label for="composeTo">${t("mb.colTo")}</label>
-<input id="composeTo" name="to" type="email" value="${to}" required placeholder="recipient@example.com" />
-<label for="composeSubject">${t("mb.colSubject")}</label>
-<input id="composeSubject" name="subject" type="text" value="${subject}" maxlength="500" required />
-<label for="composeBody">${t("mb.body")}</label>
-<textarea id="composeBody" name="text" rows="10" required>${text}</textarea>
-<p class="mt12"><button class="primary">${t("mb.send")}</button></p>
+</select></div>
+<div><label for="composeTo">${t("mb.colTo")}</label>
+<input id="composeTo" name="to" type="email" value="${to}" required placeholder="recipient@example.com" list="composeToList" autocomplete="off" data-recipient-search="/mailbox/recipients" data-from-select="composeFrom" />
+<datalist id="composeToList"></datalist></div>
+<div class="wide"><label for="composeSubject">${t("mb.colSubject")}</label>
+<input id="composeSubject" name="subject" type="text" value="${subject}" maxlength="500" required /></div>
+<div class="wide"><label for="composeBody">${t("mb.body")}</label>
+<textarea id="composeBody" name="text" rows="10" required>${text}</textarea></div>
+<p class="mt12 wide"><button class="primary">${t("mb.send")}</button></p>
 </form>
 </section>
 </main>`,
