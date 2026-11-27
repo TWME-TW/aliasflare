@@ -24,7 +24,7 @@ import { pgpKind, topEntity } from "./mime";
  * neither plain words nor two blocks sandwiching readable text can switch the owner's encryption off.
  */
 const INLINE_PGP_ARMOR =
-	/^-----BEGIN PGP MESSAGE-----\r?\n(?:(?:Version|Comment|Charset|MessageID|Hash):[ \t][^\r\n]{0,200}\r?\n){0,8}\r?\n([A-Za-z0-9+/]+={0,2}[ \t]*\r?\n(?:[A-Za-z0-9+/]+={0,2}[ \t]*\r?\n)*)(?:=[A-Za-z0-9+/]{4}[ \t]*\r?\n)?-----END PGP MESSAGE-----$/;
+	/^-----BEGIN PGP MESSAGE-----\r?\n(?:(?:Version|Comment|Charset|MessageID|Hash):[ \t][^\r\n]{0,200}\r?\n){0,8}\r?\n((?:[A-Za-z0-9+/]+[ \t]*\r?\n)*[A-Za-z0-9+/]+={0,2}[ \t]*\r?\n)(?:=[A-Za-z0-9+/]{4}[ \t]*\r?\n)?-----END PGP MESSAGE-----$/;
 
 /** OpenPGP leading packet header bytes for encrypted messages (tags 1, 3, 9, 18; old and new formats). */
 const ENCRYPTED_PACKET_TAGS = new Set([1, 3, 9, 18]);
@@ -431,15 +431,32 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
 			// Mail to an address with encryption on is never passed on in the clear.
-			// Mail that is PGP encrypted already can go as it is.
-			if (settings.pgpRecipients.includes(normalizeEmail(target)) && pgpKind(`Content-Type: ${headers.get("Content-Type") ?? ""}`) !== "encrypted") {
-				await finish(db, forwardId, {
-					status: "failed",
-					error: direct
-						? "not sent: this forwarding address has PGP encryption on, and receive-only mode cannot encrypt"
-						: `not sent: this forwarding address has PGP encryption on, and a message larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB cannot be encrypted on the Workers Free plan`,
-				});
-				return { status: 200, result: "not sent: cannot encrypt" };
+			// Mail that is PGP encrypted already can go as it is only once the body itself is
+			// verified to be RFC 3156 PGP/MIME — never on an unverified Content-Type header alone.
+			if (settings.pgpRecipients.includes(normalizeEmail(target))) {
+				let verifiedEncrypted = false;
+				if (!tooLarge && pgpKind(`Content-Type: ${headers.get("Content-Type") ?? ""}`) === "encrypted") {
+					try {
+						const rawLoaded = await input.load();
+						const rawPgp = pgpKind(fullHeaderSection(rawLoaded.raw));
+						const rawKept = rawPgp === "encrypted" ? topEntity(rawLoaded.raw) : null;
+						if (rawKept) {
+							const parsed = await PostalMime.parse(rawLoaded.raw, { attachmentEncoding: "arraybuffer" });
+							verifiedEncrypted = isValidPgpMimeEncrypted(parsed);
+						}
+					} catch {
+						verifiedEncrypted = false;
+					}
+				}
+				if (!verifiedEncrypted) {
+					await finish(db, forwardId, {
+						status: "failed",
+						error: direct
+							? "not sent: this forwarding address has PGP encryption on, and receive-only mode cannot encrypt"
+							: `not sent: this forwarding address has PGP encryption on, and a message larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB cannot be encrypted on the Workers Free plan`,
+					});
+					return { status: 200, result: "not sent: cannot encrypt" };
+				}
 			}
 			const contact = await ensureContact(db, aliasAddress, primarySender, null, settings.includeSenderInReverseAlias);
 			await passThrough(target);

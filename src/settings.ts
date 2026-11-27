@@ -183,7 +183,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		autoForwardNewAliases:
 			typeof raw.autoForwardNewAliases === "boolean" ? raw.autoForwardNewAliases : DEFAULT_SETTINGS.autoForwardNewAliases,
 		createAliasesFromMail: typeof raw.createAliasesFromMail === "boolean" ? raw.createAliasesFromMail : DEFAULT_SETTINGS.createAliasesFromMail,
-		pgpRecipients: Array.isArray(raw.pgpRecipients) ? [...new Set(raw.pgpRecipients.map(cleanAddress).filter(Boolean))].slice(0, 100) : [],
+		pgpRecipients: Array.isArray(raw.pgpRecipients) ? [...new Set(raw.pgpRecipients.map(cleanAddress).filter(Boolean))].slice(0, 1000) : [],
 		aliasesFromMailOff: Array.isArray(raw.aliasesFromMailOff) ? aliasDomains.filter((domain) => (raw.aliasesFromMailOff as unknown[]).includes(domain)) : [],
 		removeTrackers: typeof raw.removeTrackers === "boolean" ? raw.removeTrackers : DEFAULT_SETTINGS.removeTrackers,
 		showBanner: typeof raw.showBanner === "boolean" ? raw.showBanner : DEFAULT_SETTINGS.showBanner,

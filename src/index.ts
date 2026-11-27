@@ -29,7 +29,7 @@ import { customValues, fillTemplate, isOutboundProvider, normalizeOutboundOption
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
-import { domainOf, extractEmail, hostnameOf, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
+import { domainOf, extractEmail, hostnameOf, isPublicHost, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
 import { handleDirectInbound, handleInbound, type InboundEvent } from "./forward";
 import { exportAliases } from "./export";
 import {
@@ -64,7 +64,7 @@ import { deviceLabel, listSessions, sessionHandle } from "./sessions";
 import { handleReverseAliasMail } from "./reply";
 import { createLabel, deleteLabel, LabelError, labelsOf, listLabels, MAX_LABELS, setAliasLabels, toggleAliasLabels, updateLabel } from "./labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, MAX_CONDITIONS, MAX_RULES, MAX_VALUE_LENGTH, MAX_VALUES, moveRule, RuleError, setRuleActive, updateRule, webhookKey, type Rule } from "./rules";
-import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettingKeys, saveSettings, settingsFromRows, type Settings } from "./settings";
+import { isRandomAliasFormat, loadSettings, MAX_ALIAS_DOMAINS, normalizeSettings, saveSettingKeys, settingsFromRows, type Settings } from "./settings";
 import {
 	aliasPage,
 	apiKeysPage,
@@ -121,11 +121,16 @@ const NO_STORE = /^\/(?:unsubscribe|action|setup|login)(?:\/|$)/;
 
 /** Static files: they need neither the configuration (a D1 read) nor a language. */
 const STATIC_PATHS = new Set(["/assets/passkey.js", "/assets/app.js", "/assets/app.css", "/favicon.svg"]);
+/** Paths allowed on a dedicated WKD host (openpgpkey.<aliasDomain>): advanced WKD lookups only. */
+const WKD_ADVANCED_PATH = /^\/\.well-known\/openpgpkey\/[^/]+\/(?:hu\/[^/]+|policy)$/;
+const normalizeHost = (value: string) => value.toLowerCase().replace(/\.$/, "");
 /** A year, for a versioned asset URL; an unversioned one is kept briefly so a deploy shows soon. */
 const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
 
 app.use("*", async (c, next) => {
-	if ((c.req.method === "GET" || c.req.method === "HEAD") && STATIC_PATHS.has(c.req.path)) return next();
+	const reqHost = normalizeHost(new URL(c.req.url).hostname);
+	// Never bypass WKD host isolation on openpgpkey.<domain> for static assets.
+	if ((c.req.method === "GET" || c.req.method === "HEAD") && STATIC_PATHS.has(c.req.path) && !reqHost.startsWith(`${WKD_SUBDOMAIN}.`)) return next();
 	const chosen = getCookie(c, LANG_COOKIE);
 	const chosenTheme = getCookie(c, THEME_COOKIE);
 	const locale = await loadLocale(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language")));
@@ -157,13 +162,12 @@ app.use("*", async (c, next) => {
 		const row = session?.results[0] as { seen?: number | null; verified?: number | null } | undefined;
 		if (claimed) c.set("session", { id: claimed, live: !!row, seen: row?.seen ?? null, verified: row?.verified ?? null });
 		// A WKD host (openpgpkey.<aliasDomain>) is routed here only to serve public keys: keep the
-		// dashboard, login, health, API, MCP and webhook routes off it so alias domains are not linked.
-		const host = new URL(c.req.url).hostname.toLowerCase();
-		const publicHost = hostnameOf(loadedConfig.publicUrl)?.toLowerCase();
+		// dashboard, login, health, assets, API, MCP, webhook and non-WKD paths off it so alias domains are not linked.
+		const publicHost = loadedConfig.publicUrl ? normalizeHost(hostnameOf(loadedConfig.publicUrl) ?? "") : "";
 		if (
-			host !== publicHost &&
-			loadedSettings.aliasDomains.some((domain) => host === `${WKD_SUBDOMAIN}.${domain}`) &&
-			!c.req.path.startsWith("/.well-known/openpgpkey/")
+			reqHost !== publicHost &&
+			loadedSettings.aliasDomains.some((domain) => reqHost === `${WKD_SUBDOMAIN}.${domain}`) &&
+			!((c.req.method === "GET" || c.req.method === "HEAD") && WKD_ADVANCED_PATH.test(c.req.path))
 		) {
 			return c.text("Not found", 404);
 		}
@@ -305,7 +309,7 @@ app.get("/health", async (c) => c.json({ ok: missingConnection(c.get("settings")
 
 /** The alias domain a WKD request is for, from its host: openpgpkey.<domain> (advanced) or <domain> (direct). */
 function wkdDomain(c: C, named?: string): string | null {
-	const host = new URL(c.req.url).hostname.toLowerCase();
+	const host = normalizeHost(new URL(c.req.url).hostname);
 	const domains = c.get("settings")?.aliasDomains ?? [];
 	if (named !== undefined) {
 		const domain = named.toLowerCase();
@@ -540,8 +544,7 @@ app.post("/setup/verify", async (c) => {
 	if (!passkey) return jsonError(c, "err.registerFailed", 400);
 	await c.env.DB.prepare("DELETE FROM auth_challenges WHERE purpose = 'setup'").run();
 	// The language picked during setup also becomes the language of forwarded-mail banners.
-	const settings = await loadSettings(c.env.DB);
-	await saveSettings(c.env.DB, { ...settings, language: c.get("t").locale });
+	await saveSettingKeys(c.env.DB, { language: c.get("t").locale });
 	await startSession(c, passkey.id);
 	return c.json({ ok: true });
 });
@@ -922,7 +925,8 @@ app.post("/connection", async (c) => {
 		// other providers stay, so switching back later finds them as they were.
 		const submitted = Object.fromEntries(optionKeys.filter((key) => typeof form[key] === "string").map((key) => [key, raw(key)]));
 		const options: OutboundOptions = normalizeOutboundOptions({ ...config.outboundOptions, ...submitted });
-		if (raw("smtpHost").trim() && !options.smtpHost) return redirectWithNotice(c, "/connection", "notice.badSmtp");
+		const blocked = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin, config.mailflareUrl, values.mailflareUrl].map(hostnameOf)].filter((h): h is string => !!h);
+		if (raw("smtpHost").trim() && (!options.smtpHost || !isPublicHost(options.smtpHost, blocked))) return redirectWithNotice(c, "/connection", "notice.badSmtp");
 		const rawPort = raw("smtpPort").trim();
 		const parsedPort = Number(rawPort);
 		if (rawPort && (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535 || parsedPort === 25)) return redirectWithNotice(c, "/connection", "notice.badSmtp");
@@ -932,16 +936,15 @@ app.post("/connection", async (c) => {
 		const customSubmitted = (["customUrl", "customHeaders", "customBody", "customIdPath"] as const).some((key) => typeof form[key] === "string");
 		if ((customSubmitted || effectiveProvider === "custom") && options.customUrl) {
 			// The key and messages go to this URL: a public https host, not this Worker or Mailflare.
-			const blocked = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin, config.mailflareUrl, values.mailflareUrl].map(hostnameOf)].filter((h): h is string => !!h);
 			if (!safeHttpsUrl(options.customUrl, blocked)) {
 				return redirectWithNotice(c, "/connection", "notice.badCustom");
 			}
 			try {
-				// A sample message must give valid JSON, so a mistake shows now and not on the first reply.
+				// A sample message must render cleanly (and give valid JSON when sending JSON), so a mistake shows now and not on the first reply.
 				const sample = customValues({ from: { name: "A", email: "a@example.com" }, to: "b@example.com", subject: "s", text: "t", html: "<p>h</p>" }, "key", "<id@example.com>", () => "raw");
 				for (const [, value] of parseHeaderLines(options.customHeaders)) fillTemplate(value, sample, "text");
-				const json = /^content-type:\s*(?!application\/json)/im.test(options.customHeaders) ? null : fillTemplate(options.customBody, sample, "json");
-				if (json !== null) JSON.parse(json);
+				const renderedBody = fillTemplate(options.customBody, sample, "json");
+				if (!/^content-type:\s*(?!application\/json)/im.test(options.customHeaders)) JSON.parse(renderedBody);
 			} catch {
 				return redirectWithNotice(c, "/connection", "notice.badCustom");
 			}

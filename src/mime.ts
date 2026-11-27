@@ -168,21 +168,61 @@ export function buildMime(message: OutboundMessage, messageId: string, date = ne
  */
 export type Entity = { headers: string; body: Uint8Array };
 
+/** Parses a single Content-Type header value into its lowercased media type and parameters (RFC 2045). */
+function parseContentType(raw: string): { mediaType: string; params: [string, string][] } | null {
+	// Fetch Headers.get() joins duplicate headers with ", "; an unquoted comma means multiple headers.
+	const parts: string[] = [];
+	let current = "";
+	let quoted = false;
+	for (let i = 0; i < raw.length; i += 1) {
+		const ch = raw[i]!;
+		if (quoted) {
+			current += ch;
+			if (ch === "\\" && i + 1 < raw.length) current += raw[++i]!;
+			else if (ch === '"') quoted = false;
+		} else if (ch === '"') {
+			quoted = true;
+			current += ch;
+		} else if (ch === ",") {
+			return null;
+		} else if (ch === ";") {
+			parts.push(current.trim());
+			current = "";
+		} else {
+			current += ch;
+		}
+	}
+	if (quoted) return null;
+	parts.push(current.trim());
+	const [mediaType = "", ...rest] = parts;
+	const params: [string, string][] = [];
+	for (const part of rest) {
+		if (!part) continue;
+		const eq = part.indexOf("=");
+		if (eq <= 0) return null;
+		const name = part.slice(0, eq).trim().toLowerCase();
+		let value = part.slice(eq + 1).trim();
+		if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+			value = value.slice(1, -1).replace(/\\(.)/g, "$1");
+		}
+		params.push([name, value.toLowerCase()]);
+	}
+	return { mediaType: mediaType.toLowerCase(), params };
+}
+
 /** PGP/MIME (RFC 3156) from the top-level Content-Type: already encrypted, signed, or neither. */
 export function pgpKind(headerBlock: string | null): "encrypted" | "signed" | null {
 	if (!headerBlock || /[\u0000\r](?!\n)/.test(headerBlock)) return null;
 	// Multiple Content-Type headers are ambiguous (clients disagree on which wins) and are refused.
-	const matches = [...headerBlock.matchAll(/^content-type:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/gim)];
+	// Allow obsolete RFC 5322 whitespace before the colon so it matches how mail parsers read headers.
+	const matches = [...headerBlock.matchAll(/^content-type[ \t]*:([^\r\n]*(?:\r?\n[ \t][^\r\n]*)*)/gim)];
 	if (matches.length !== 1) return null;
-	const type = matches[0]![1]!.replace(/\s+/g, " ").trim().toLowerCase();
-	// Fetch Headers.get() joins duplicate headers with ", "; an unquoted comma means multiple headers.
-	if (type.replace(/"(?:[^"\\]|\\.)*"/g, '""').includes(",")) return null;
-	if (/^multipart\/encrypted\s*;/.test(type) && /;\s*protocol\s*=\s*(?:"application\/pgp-encrypted"|application\/pgp-encrypted)(?:\s*;|\s*$)/.test(type)) {
-		return "encrypted";
-	}
-	if (/^multipart\/signed\s*;/.test(type) && /;\s*protocol\s*=\s*(?:"application\/pgp-signature"|application\/pgp-signature)(?:\s*;|\s*$)/.test(type)) {
-		return "signed";
-	}
+	const parsed = parseContentType(matches[0]![1]!.replace(/\s+/g, " ").trim());
+	if (!parsed) return null;
+	const protocols = parsed.params.filter(([name]) => name === "protocol").map(([, value]) => value);
+	if (protocols.length !== 1) return null;
+	if (parsed.mediaType === "multipart/encrypted" && protocols[0] === "application/pgp-encrypted") return "encrypted";
+	if (parsed.mediaType === "multipart/signed" && protocols[0] === "application/pgp-signature") return "signed";
 	return null;
 }
 
@@ -216,8 +256,8 @@ export function topEntity(raw: ArrayBuffer): Entity | null {
 			}
 			continue;
 		}
-		const isCt = /^content-type:/i.test(line);
-		const isCte = /^content-transfer-encoding:/i.test(line);
+		const isCt = /^content-type[ \t]*:/i.test(line);
+		const isCte = /^content-transfer-encoding[ \t]*:/i.test(line);
 		keep = isCt || isCte;
 		if (keep) {
 			if (/[\u0000-\u0008\u000b-\u001f\u007f]/.test(line)) return null;
@@ -267,7 +307,7 @@ export function encryptedPayload(message: EncryptedMessage, hideSubject: boolean
 
 /** The header lines with protected-headers="v1" added to the Content-Type (which may be folded). */
 function withProtectedHeaders(lines: string[]): string[] {
-	const start = lines.findIndex((line) => /^content-type:/i.test(line));
+	const start = lines.findIndex((line) => /^content-type[ \t]*:/i.test(line));
 	if (start < 0) return lines;
 	let last = start;
 	while (last + 1 < lines.length && /^[ \t]/.test(lines[last + 1]!)) last++;
