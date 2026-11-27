@@ -195,8 +195,9 @@ export async function storeMailboxMessage(
 	const ts = now();
 
 	const backend = resolveStorageBackend(env, config, settings.mailboxStorageBackend);
-	// On D1 fallback, cap raw blobs at mailboxMaxMessageKb (and never exceed 2 MB to stay well inside D1 row limits).
-	const maxBytes = Math.min(settings.mailboxMaxMessageKb * 1024, backend === "d1" ? 2 * 1024 * 1024 : 25 * 1024 * 1024);
+	// On D1 fallback the blob is stored as base64 (4/3 the size, before any gzip gain), and D1 takes
+	// at most 2,000,000 bytes per value: 1,400 KiB of raw mail always fits.
+	const maxBytes = Math.min(settings.mailboxMaxMessageKb * 1024, backend === "d1" ? 1400 * 1024 : 25 * 1024 * 1024);
 	let storageKind: "r2" | "s3" | "d1" | "headers_only" = "headers_only";
 	let storageKey: string | null = null;
 	let rawHeaders: string | null = rawBytes ? extractHeaderBlock(rawBytes) : null;
