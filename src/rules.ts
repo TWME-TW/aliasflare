@@ -1,17 +1,41 @@
 /**
- * Rules (addy.io's): conditions on the sender, subject or alias, and actions on mail that
- * matches. Rules run in order; every matching rule's actions apply, a later one overriding an
- * earlier one's value. Matching is on plain text, case-insensitively; there are no regular
- * expressions, so no rule can make a message slow to check.
+ * Rules (addy.io's): conditions on sender, displayFrom, subject, alias, alias_description,
+ * recipient or extension, and actions on mail that matches. Rules run in order; every matching
+ * rule's actions apply, a later one overriding an earlier one's value. Regular expressions are
+ * validated by isSafeRegex() to prevent ReDoS inside Workers' CPU budget.
  */
-import { extractEmail, normalizeEmail, safeHttpsUrl } from "./format";
+import { isSafeRegex, matchesSafeRegex } from "./domain-settings";
+import { extractEmail, MAX_NOTE_LENGTH, normalizeEmail, safeHttpsUrl } from "./format";
 import { newId, now } from "./db";
 import { hmacHex } from "./crypto";
+import type { BannerLocation } from "./settings";
 
-export const CONDITION_TYPES = ["sender", "subject", "alias"] as const;
-export const MATCHES = ["is exactly", "is not", "contains", "does not contain", "starts with", "does not start with", "ends with", "does not end with"] as const;
-export const ACTION_TYPES = ["block", "subject", "displayFrom", "forwardTo", "removeAttachments", "banner", "webhook"] as const;
-/** Actions that act on replies too; the others only make sense for forwarded mail. */
+export const CONDITION_TYPES = ["sender", "displayFrom", "subject", "alias", "alias_description", "recipient", "extension"] as const;
+export const MATCHES = [
+	"is exactly",
+	"is not",
+	"contains",
+	"does not contain",
+	"starts with",
+	"does not start with",
+	"ends with",
+	"does not end with",
+	"matches regex",
+	"does not match regex",
+] as const;
+export const ACTION_TYPES = [
+	"block",
+	"subject",
+	"displayFrom",
+	"forwardTo",
+	"removeAttachments",
+	"banner",
+	"webhook",
+	"encryption",
+	"aliasDescription",
+	"addLabel",
+] as const;
+/** Actions that act on replies/sends too; the others only make sense for forwarded mail. */
 export const REPLY_ACTIONS: readonly ActionType[] = ["block", "subject", "removeAttachments"];
 
 export type ConditionType = (typeof CONDITION_TYPES)[number];
@@ -68,10 +92,12 @@ export class RuleError extends Error {
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, max) : "");
 
+const isRegexMatch = (match: Match): boolean => match === "matches regex" || match === "does not match regex";
+
 /**
- * A condition as given, or null when it has no values. Anything aliasflare cannot test as given
- * (addy.io's regular expressions, too many or too long values) refuses the whole rule: leaving
- * part of it out would make a rule match other mail than its author meant.
+ * A condition as given, or null when it has no values. Anything aliasflare cannot test safely
+ * (unsafe/ReDoS regular expressions, unknown types/matches, too many or too long values) refuses
+ * the whole rule: leaving part of it out would make a rule match other mail than its author meant.
  */
 function cleanCondition(raw: unknown): Condition | null {
 	if (!raw || typeof raw !== "object") throw new RuleError("unsupported");
@@ -82,32 +108,39 @@ function cleanCondition(raw: unknown): Condition | null {
 		.filter(Boolean);
 	if (!given.length) return null;
 	if (!CONDITION_TYPES.includes(type as ConditionType) || !MATCHES.includes(match as Match)) throw new RuleError("unsupported");
-	const list = [...new Set(given.map((value) => value.toLowerCase()))];
+	const regex = isRegexMatch(match as Match);
+	const list = [...new Set(regex ? given : given.map((value) => value.toLowerCase()))];
 	if (list.length > MAX_VALUES || list.some((value) => value.length > MAX_VALUE_LENGTH)) throw new RuleError("unsupported");
+	if (regex && list.some((pattern) => !isSafeRegex(pattern))) throw new RuleError("unsupported");
 	return { type: type as ConditionType, match: match as Match, values: list };
 }
 
 function cleanAction(raw: unknown, ownHosts: string[]): Action | null {
 	if (!raw || typeof raw !== "object") throw new RuleError("unsupported");
 	const { type, value } = raw as Record<string, unknown>;
-	// addy.io's encryption and description changes are not done here.
 	if (!ACTION_TYPES.includes(type as ActionType)) throw new RuleError("unsupported");
 	const kind = type as ActionType;
 	if (kind === "block" || kind === "removeAttachments") return { type: kind, value: "true" };
-	// Only hiding the banner: addy.io's top and bottom places are both "shown" here.
-	if (kind === "banner") return value === "off" ? { type: kind, value: "off" } : null;
+	if (kind === "banner") {
+		if (value === "off" || value === "top" || value === "bottom") return { type: kind, value };
+		return null;
+	}
+	if (kind === "encryption") {
+		if (value === true || value === 1 || value === "1" || value === "true") return { type: kind, value: "true" };
+		if (value === false || value === 0 || value === "0" || value === "false") return { type: kind, value: "false" };
+		return null;
+	}
 	if (kind === "webhook") {
 		// A public https address: never a private network, a port, credentials in the URL, or this
-		// deployment's own host — a webhook back into aliasflare would have every matching message
-		// call itself again, once per delivery. The other places an owner-entered address is called
-		// block their own hosts the same way (see outbound.ts).
-		const raw = typeof value === "string" ? value.trim() : "";
-		if (!raw) return null;
-		const url = raw.length <= MAX_WEBHOOK_URL ? safeHttpsUrl(raw, ownHosts) : null;
+		// deployment's own host — a webhook back into aliasflare would loop.
+		const rawUrl = typeof value === "string" ? value.trim() : "";
+		if (!rawUrl) return null;
+		const url = rawUrl.length <= MAX_WEBHOOK_URL ? safeHttpsUrl(rawUrl, ownHosts) : null;
 		if (!url) throw new RuleError("webhook");
 		return { type: kind, value: url.href };
 	}
-	const cleaned = text(typeof value === "number" ? String(value) : value, kind === "displayFrom" ? 100 : MAX_VALUE_LENGTH);
+	const maxLen = kind === "displayFrom" ? 100 : kind === "aliasDescription" ? MAX_NOTE_LENGTH : kind === "addLabel" ? 64 : MAX_VALUE_LENGTH;
+	const cleaned = text(typeof value === "number" ? String(value) : value, maxLen);
 	if (!cleaned) return null;
 	if (kind === "forwardTo") {
 		const email = extractEmail(cleaned);
@@ -207,7 +240,20 @@ export async function insertRules(db: D1Database, inputs: RuleInput[]): Promise<
 			.prepare(
 				"INSERT INTO rules (id, name, position, operator, conditions, actions, forwards, replies, sends, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			)
-			.bind(newId("rl"), input.name, Number(count?.top ?? -1) + 1 + index, input.operator, JSON.stringify(input.conditions), JSON.stringify(input.actions), +input.forwards, +input.replies, +input.sends, +input.active, timestamp, timestamp),
+			.bind(
+				newId("rl"),
+				input.name,
+				Number(count?.top ?? -1) + 1 + index,
+				input.operator,
+				JSON.stringify(input.conditions),
+				JSON.stringify(input.actions),
+				+input.forwards,
+				+input.replies,
+				+input.sends,
+				+input.active,
+				timestamp,
+				timestamp,
+			),
 	);
 	if (statements.length) await db.batch(statements);
 	return statements.length;
@@ -269,30 +315,76 @@ function test(match: Match, subject: string, value: string): boolean {
 			return subject.endsWith(value);
 		case "does not end with":
 			return !subject.endsWith(value);
+		case "matches regex":
+			return matchesSafeRegex(value, subject);
+		case "does not match regex":
+			return !matchesSafeRegex(value, subject);
 	}
 }
 
-export type RuleMessage = { sender: string; senders?: string[]; envelopeSender?: string | null; spoofed?: boolean; subject: string; alias: string };
+export type RuleMessage = {
+	sender: string;
+	senders?: string[];
+	envelopeSender?: string | null;
+	displayFrom?: string | null;
+	spoofed?: boolean;
+	subject: string;
+	alias: string;
+	aliasDescription?: string | null;
+	recipient?: string | null;
+	extension?: string | null;
+};
 
 const MAX_RULE_SUBJECT_LENGTH = 8192;
 
-type NormalizedMessage = { sender: string; alias: string; subject: string };
+type NormalizedMessage = {
+	sender: string;
+	displayFrom: string;
+	alias: string;
+	aliasDescription: string;
+	recipient: string;
+	extension: string;
+	subject: string;
+};
 
-function normalizeSubject(subject: string): string {
-	return subject.slice(0, MAX_RULE_SUBJECT_LENGTH).replace(/[\u0000-\u001f\u007f]+/g, " ").trim().toLowerCase();
+function normalizeField(value: string | null | undefined, max = MAX_RULE_SUBJECT_LENGTH): string {
+	return (value ?? "").slice(0, max).replace(/[\u0000-\u001f\u007f]+/g, " ").trim().toLowerCase();
 }
 
 function normalizeMessage(message: RuleMessage): NormalizedMessage {
 	return {
 		sender: normalizeEmail(message.sender),
+		displayFrom: normalizeField(message.displayFrom, 256),
 		alias: normalizeEmail(message.alias),
-		subject: normalizeSubject(message.subject),
+		aliasDescription: normalizeField(message.aliasDescription, MAX_NOTE_LENGTH),
+		recipient: normalizeEmail(message.recipient ?? ""),
+		extension: normalizeField(message.extension, 128),
+		subject: normalizeField(message.subject),
 	};
+}
+
+function fieldValue(type: ConditionType, message: NormalizedMessage): string {
+	switch (type) {
+		case "sender":
+			return message.sender;
+		case "displayFrom":
+			return message.displayFrom;
+		case "alias":
+			return message.alias;
+		case "alias_description":
+			return message.aliasDescription;
+		case "recipient":
+			return message.recipient;
+		case "extension":
+			return message.extension;
+		case "subject":
+			return message.subject;
+	}
 }
 
 /** Whether the message meets the condition: any of its values for a positive match, all of them for a negative one ("is not a or b"). */
 function meets(condition: Condition, message: NormalizedMessage): boolean {
-	const field = condition.type === "sender" ? message.sender : condition.type === "alias" ? message.alias : message.subject;
+	const field = fieldValue(condition.type, message);
 	const negative = condition.match.startsWith("is not") || condition.match.startsWith("does not");
 	return negative ? condition.values.every((value) => test(condition.match, field, value)) : condition.values.some((value) => test(condition.match, field, value));
 }
@@ -319,6 +411,10 @@ export type RuleOutcome = {
 	forwardTo?: string;
 	removeAttachments?: boolean;
 	hideBanner?: boolean;
+	bannerLocation?: BannerLocation;
+	encryption?: boolean;
+	aliasDescription?: string;
+	addLabels?: string[];
 	/** Webhooks to call, with the name of the rule that asked. */
 	webhooks?: { rule: string; url: string }[];
 	applied: string[];
@@ -343,11 +439,10 @@ function blockRuleMatches(rule: Rule, message: NormalizedMessage, candidates: st
 	return rule.operator === "OR" ? rule.conditions.some(check) : rule.conditions.every(check);
 }
 
-/** The combined actions of every active rule that matches, for forwarded mail or for replies. */
-export async function runRules(db: D1Database, kind: "forwards" | "replies", message: RuleMessage): Promise<RuleOutcome> {
-	const { results } = await db
-		.prepare(`SELECT * FROM rules WHERE active = 1 AND ${kind === "forwards" ? "forwards = 1" : "(replies = 1 OR sends = 1)"} ORDER BY position, created_at`)
-		.all<RuleRow>();
+/** The combined actions of every active rule that matches, for forwarded mail, replies, or sends. */
+export async function runRules(db: D1Database, kind: "forwards" | "replies" | "sends", message: RuleMessage): Promise<RuleOutcome> {
+	const column = kind === "forwards" ? "forwards = 1" : kind === "sends" ? "sends = 1" : "replies = 1";
+	const { results } = await db.prepare(`SELECT * FROM rules WHERE active = 1 AND ${column} ORDER BY position, created_at`).all<RuleRow>();
 	const outcome: RuleOutcome = { applied: [] };
 	const normalized = normalizeMessage(message);
 	const candidates = [...new Set([message.sender, ...(message.senders ?? [])].filter(Boolean).map(normalizeEmail))];
@@ -355,12 +450,12 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 	// may participate in negative-sender checks so a forged From cannot bypass "does not end with ...".
 	const negativeCandidates = message.spoofed ? (message.envelopeSender ? [normalizeEmail(message.envelopeSender)] : []) : candidates;
 	for (const rule of results.map(parse)) {
-		const actions = kind === "replies" ? rule.actions.filter((action) => REPLY_ACTIONS.includes(action.type)) : rule.actions;
+		const actions = kind !== "forwards" ? rule.actions.filter((action) => REPLY_ACTIONS.includes(action.type)) : rule.actions;
 		if (!actions.length) continue;
 		const hasBlock = actions.some((action) => action.type === "block");
 		const blockMatched = hasBlock && blockRuleMatches(rule, normalized, candidates, negativeCandidates);
-		// A spoofed From address must not trigger positive sender rules (forwardTo, displayFrom, subject, banner).
-		const hasSenderCondition = rule.conditions.some((condition) => condition.type === "sender");
+		// A spoofed From address must not trigger positive sender/displayFrom rules (forwardTo, displayFrom, subject, banner, encryption).
+		const hasSenderCondition = rule.conditions.some((condition) => condition.type === "sender" || condition.type === "displayFrom");
 		const normalMatched = !(message.spoofed && hasSenderCondition) && ruleMatchesNormalized(rule, normalized);
 		if (!blockMatched && !normalMatched) continue;
 		let applied = false;
@@ -378,7 +473,13 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies", mes
 			else if (action.type === "displayFrom") outcome.displayFrom = action.value;
 			else if (action.type === "forwardTo") outcome.forwardTo = action.value;
 			else if (action.type === "removeAttachments") outcome.removeAttachments = true;
-			else if (action.type === "banner") outcome.hideBanner = true;
+			else if (action.type === "banner") {
+				const loc = action.value === "top" || action.value === "bottom" ? action.value : "off";
+				outcome.bannerLocation = loc;
+				outcome.hideBanner = loc === "off";
+			} else if (action.type === "encryption") outcome.encryption = action.value === "true";
+			else if (action.type === "aliasDescription") outcome.aliasDescription = action.value;
+			else if (action.type === "addLabel") (outcome.addLabels ??= []).push(action.value);
 			else if (action.type === "webhook" && (outcome.webhooks ??= []).length < MAX_WEBHOOKS) outcome.webhooks.push({ rule: rule.name, url: action.value });
 		}
 		if (applied) outcome.applied.push(rule.id);

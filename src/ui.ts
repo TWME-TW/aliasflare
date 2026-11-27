@@ -12,7 +12,16 @@ import type { DomainSetup } from "./cloudflare";
 import type { ImportResult } from "./importer";
 import type { PasskeyRow } from "./passkeys";
 import type { SessionRow } from "./sessions";
-import { FORWARD_METHODS, RANDOM_ALIAS_FORMATS, UNSUBSCRIBE_BEHAVIORS, UNSUBSCRIBE_FALLBACKS, type Settings } from "./settings";
+import {
+	ALIAS_SEPARATORS,
+	BANNER_LOCATIONS,
+	FORWARD_METHODS,
+	RANDOM_ALIAS_FORMATS,
+	SPAM_WARNING_BEHAVIOURS,
+	UNSUBSCRIBE_BEHAVIORS,
+	UNSUBSCRIBE_FALLBACKS,
+	type Settings,
+} from "./settings";
 import { APP_SCRIPT, OPENPGP_BROWSER, PASSKEY_SCRIPT } from "./client";
 import { OUTBOUND_PROVIDERS, type OutboundOptions, type OutboundProvider } from "./outbound";
 import { WORKERS_PLANS, type WorkersPlan } from "./config";
@@ -870,7 +879,25 @@ ${checkbox("reverseAliasReplacement", settings.reverseAliasReplacement, t("setti
 ${checkbox("includeSenderInReverseAlias", settings.includeSenderInReverseAlias, t("settings.includeSender"), t("settings.includeSenderHelp"))}
 ${checkbox("sendAutoReplies", settings.sendAutoReplies, t("settings.autoReplies"), t("settings.autoRepliesHelp"))}
 ${checkbox("removeTrackers", settings.removeTrackers, t("settings.trackers"), t("settings.trackersHelp"))}
-${checkbox("showBanner", settings.showBanner, t("settings.banner"), t("settings.bannerHelp"))}
+<label for="bannerLocation">${t("settings.bannerLocation")}</label>
+<select id="bannerLocation" name="bannerLocation">
+${BANNER_LOCATIONS.map((loc) => html`<option value="${loc}" ${settings.bannerLocation === loc ? "selected" : ""}>${t(`bannerLoc.${loc}`)}</option>`)}
+</select>
+<p class="help">${t("settings.bannerHelp")}</p>
+
+<label for="spamWarningBehaviour">${t("settings.spamWarning")}</label>
+<select id="spamWarningBehaviour" name="spamWarningBehaviour">
+${SPAM_WARNING_BEHAVIOURS.map((mode) => html`<option value="${mode}" ${settings.spamWarningBehaviour === mode ? "selected" : ""}>${t(`spamWarn.${mode}`)}</option>`)}
+</select>
+
+<label for="defaultFromName">${t("settings.defaultFromName")}</label>
+<input id="defaultFromName" name="defaultFromName" type="text" maxlength="100" value="${settings.defaultFromName}" />
+<p class="help">${t("settings.defaultFromNameHelp")}</p>
+
+<label for="defaultEmailSubject">${t("settings.defaultEmailSubject")}</label>
+<input id="defaultEmailSubject" name="defaultEmailSubject" type="text" maxlength="200" value="${settings.defaultEmailSubject}" />
+<p class="help">${t("settings.defaultEmailSubjectHelp")}</p>
+
 ${checkbox("createAliasesFromMail", settings.createAliasesFromMail, t("settings.createFromMail"), t("settings.createFromMailHelp"))}
 ${settings.aliasDomains.length > 1
 	? html`<fieldset class="domain-list"><legend class="help">${t("settings.createFromMailDomains")}</legend>
@@ -932,6 +959,11 @@ ${checkbox("mcpServer", settings.mcpServer, t("set.mcpServer"), t("set.mcpServer
 <label for="randomAliasFormat">${t("set.randomFormat")}</label>
 <select id="randomAliasFormat" name="randomAliasFormat">
 ${RANDOM_ALIAS_FORMATS.map((format) => html`<option value="${format}" ${settings.randomAliasFormat === format ? "selected" : ""}>${t(`set.format.${format}`)}</option>`)}
+</select>
+
+<label for="aliasSeparator">${t("settings.aliasSeparator")}</label>
+<select id="aliasSeparator" name="aliasSeparator">
+${ALIAS_SEPARATORS.map((sep) => html`<option value="${sep}" ${settings.aliasSeparator === sep ? "selected" : ""}><code>${sep}</code></option>`)}
 </select>
 
 ${checkbox("appSettings", settings.appSettings, t("set.appSettings"), t("set.appSettingsHelp"))}

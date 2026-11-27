@@ -14,8 +14,11 @@ import { readLimited } from "./streams";
 import { calendarOrganizers, carriesAddresses, rewriteAttachment } from "./attachments";
 import type { Replacement } from "./format";
 import { callWebhooks, runRules } from "./rules";
-import { encryptionKeyFor, sendEncrypted, sendKept } from "./pgp";
+import { anyPgpKeyFor, isPgpKeyAttachment, isPgpSignatureAttachment, sendEncrypted, sendInlineEncrypted, sendKept } from "./pgp";
 import { pgpKind, topEntity } from "./mime";
+import { getDomainRow, matchesSafeRegex } from "./domain-settings";
+import { effectiveAliasDestinations, recipientPolicy } from "./recipients";
+import { listLabels, toggleAliasLabels } from "./labels";
 
 /**
  * RFC 4880 ASCII-armored OpenPGP message: optional standard armor headers, a blank line, strictly
@@ -334,18 +337,45 @@ async function loadSettingsAndAlias(db: D1Database, aliasAddress: string): Promi
 
 async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput): Promise<ForwardOutcome> {
 	const db = env.DB;
-	const { aliasAddress, origin } = input;
+	const { origin } = input;
+	let aliasAddress = input.aliasAddress;
 	const event = { messageId: input.key, from: input.envelopeFrom };
 	const aliasDomain = domainOf(aliasAddress);
 	const reverseDomain = reverseDomainFor(aliasDomain);
 
 	// Mail to an address that is not an alias yet creates one only when that is turned on.
-	// Otherwise it is refused before anything is written, so mail to made-up addresses
-	// leaves no rows behind.
-	const { settings, known } = input.preloaded ?? (await loadSettingsAndAlias(db, aliasAddress));
+	// Also resolve addy.io-style +extension subaddressing to an existing base alias when present.
+	const loaded = input.preloaded ?? (await loadSettingsAndAlias(db, aliasAddress));
+	const settings = loaded.settings;
+	let known = loaded.known;
+	let extension: string | null = null;
+	if (!known) {
+		const local = aliasAddress.slice(0, aliasAddress.lastIndexOf("@"));
+		const plus = local.indexOf("+");
+		if (plus > 0 && plus < local.length - 1) {
+			const baseAddress = `${local.slice(0, plus)}@${aliasDomain}`;
+			const baseAlias = await db.prepare("SELECT * FROM aliases WHERE address = ?").bind(baseAddress).first<AliasRow>();
+			if (baseAlias && !baseAlias.deleted_at) {
+				known = baseAlias;
+				aliasAddress = baseAddress;
+				extension = local.slice(plus + 1);
+			}
+		}
+	}
+	const domainRow = await getDomainRow(db, aliasDomain);
+	if (domainRow && domainRow.active === 0) {
+		const claimedInactive = await claim(db, input.key, aliasAddress);
+		if (!("id" in claimedInactive)) return claimedInactive;
+		await finish(db, claimedInactive.id, { status: "skipped", error: "this domain is deactivated" });
+		return { status: 200, result: "skipped: this domain is deactivated" };
+	}
+	const localPart = aliasAddress.slice(0, aliasAddress.lastIndexOf("@"));
+	const regexBlocked = !known && !!domainRow?.auto_create_regex && !matchesSafeRegex(domainRow.auto_create_regex, localPart);
 	// Only on an alias domain (Mailflare may receive for others), and not without end: mail to
 	// thousands of made-up addresses would otherwise make thousands of aliases.
-	const unknown = !known && (!createsAliasesFromMail(settings, aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
+	const unknown =
+		!known &&
+		(regexBlocked || !createsAliasesFromMail(settings, aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
 	if (unknown && !input.claimUnknown) return { status: 404, result: "no such alias" };
 
 	const claimed = await claim(db, input.key, aliasAddress);
@@ -379,13 +409,19 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const tooLarge = config.workersPlan === "free" && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES;
 		const passThrough = input.passThrough && (direct || tooLarge) ? input.passThrough : null;
 		let stored = passThrough ? null : await input.load();
-		// No address of its own: the alias follows the default, also when the default changes later.
+		// No address of its own: the alias follows its domain's default, or the account default.
 		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", { forwardEnabled: settings.autoForwardNewAliases }, current);
-		const destination = alias.destination || settings.defaultDestination;
+		const aliasTargets = (await effectiveAliasDestinations(db, alias, settings, domainRow?.default_recipient)).filter(
+			(addr) => !isOwnAddress(addr, [...settings.aliasDomains, aliasDomain]),
+		);
+		const destination = aliasTargets[0] ?? "";
 		if (alias.deleted_at) return await skip("the alias was deleted");
 		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias");
-		if (!destination) return await skip("no forwarding address");
-		if (isOwnAddress(destination, [...settings.aliasDomains, aliasDomain])) return await skip("destination would loop");
+		if (!destination) {
+			const rawDest = alias.destination || domainRow?.default_recipient || settings.defaultDestination;
+			if (rawDest && isOwnAddress(rawDest, [...settings.aliasDomains, aliasDomain])) return await skip("destination would loop");
+			return await skip("no forwarding address");
+		}
 
 		if (passThrough) {
 			// The body is not read, but the headers are: the same filters run on the envelope
@@ -421,19 +457,33 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				sender: primarySender,
 				senders,
 				envelopeSender,
+				displayFrom: rawFromEntries[0]?.name ?? null,
 				spoofed: passSpoofed,
 				subject: ruleSubject,
 				alias: aliasAddress,
+				aliasDescription: alias.note,
+				recipient: destination,
+				extension,
 			});
 			await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: primarySender, subject: ruleSubject }, ownHosts(config));
 			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
+			if (rules.aliasDescription) {
+				await db.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(rules.aliasDescription, now(), aliasAddress).run();
+			}
+			if (rules.addLabels?.length) {
+				await attachRuleLabels(db, aliasAddress, rules.addLabels);
+			}
 			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
+			const targetPolicy = await recipientPolicy(db, target);
+			if (!targetPolicy.active) return await skip("recipient is deactivated");
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
 			// Mail to an address with encryption on is never passed on in the clear.
 			// Mail that is PGP encrypted already can go as it is only once the body itself is
 			// verified to be RFC 3156 PGP/MIME — never on an unverified Content-Type header alone.
-			if (settings.pgpRecipients.includes(normalizeEmail(target))) {
+			const passWantsEncryption =
+				rules.encryption !== undefined ? rules.encryption : targetPolicy.shouldEncrypt || settings.pgpRecipients.includes(normalizeEmail(target));
+			if (passWantsEncryption) {
 				let verifiedEncrypted = false;
 				if (!tooLarge && pgpKind(`Content-Type: ${headers.get("Content-Type") ?? ""}`) === "encrypted") {
 					try {
@@ -538,12 +588,37 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (contact.blocked) return await skip("sender is blocked");
 		// A sender can have an address of its own (set by an unsubscribe, say).
 		const ruleSenders = [senderEmail, ...(envelopeSender ? [envelopeSender] : [])];
-		const rules = await runRules(db, "forwards", { sender: senderEmail, senders: ruleSenders, envelopeSender, spoofed, subject: email.subject ?? "", alias: aliasAddress });
+		const rules = await runRules(db, "forwards", {
+			sender: senderEmail,
+			senders: ruleSenders,
+			envelopeSender,
+			displayFrom: senderName,
+			spoofed,
+			subject: email.subject ?? "",
+			alias: aliasAddress,
+			aliasDescription: alias.note,
+			recipient: destination,
+			extension,
+		});
 		await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: senderEmail, subject: email.subject ?? "" }, ownHosts(config));
 		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
-		// A rule's Forward to comes first, then the sender's own address, then the alias's.
+		if (rules.aliasDescription) {
+			await db.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(rules.aliasDescription, now(), aliasAddress).run();
+		}
+		if (rules.addLabels?.length) {
+			await attachRuleLabels(db, aliasAddress, rules.addLabels);
+		}
+		// A rule's Forward to comes first, then the sender's own address, then the alias's target(s).
 		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
-		const recipient = ruleRecipient ?? (contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain]) ? contact.destination : destination);
+		const targetList = ruleRecipient
+			? [ruleRecipient]
+			: contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain])
+				? [contact.destination]
+				: aliasTargets;
+		const policies = await Promise.all(targetList.map(async (addr) => ({ email: addr, policy: await recipientPolicy(db, addr) })));
+		const activeTargets = policies.filter((item) => item.policy.active);
+		if (!activeTargets.length) return await skip("recipient is deactivated");
+		const primaryRecipient = activeTargets[0]!.email;
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
 		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
@@ -556,30 +631,41 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		// The banner and the spoof warning are in the language set for forwarded mail.
 		await loadLocale(settings.language);
 		const sign = (purpose: string, payload: string) => signToken(config.signingSecret, purpose, payload, LINK_TTL_SECONDS);
+		const warnInBanner = spoofed && (settings.spamWarningBehaviour === "both" || settings.spamWarningBehaviour === "banner");
+		const warnInSubject = spoofed && (settings.spamWarningBehaviour === "both" || settings.spamWarningBehaviour === "subject");
+		const effectiveBannerLocation =
+			rules.bannerLocation === "off" && warnInBanner
+				? settings.bannerLocation === "off"
+					? "off"
+					: settings.bannerLocation
+				: (rules.bannerLocation ?? settings.bannerLocation);
 		// Without a known origin there is nowhere for the banner's links to point.
-		const banner: BannerInfo | null = settings.showBanner && origin && !(rules.hideBanner && !spoofed)
-			? {
-					alias: aliasAddress,
-					sender: contact.name ? `${sanitizeDisplayName(contact.name)} <${contact.email}>` : contact.email,
-					blockUrl: `${origin}/action/${await sign("action", `block~${forwardId}`)}`,
-					disableUrl: `${origin}/action/${await sign("action", `disable~${forwardId}`)}`,
-					spoofWarning: spoofed,
-				}
-			: null;
+		const banner: BannerInfo | null =
+			effectiveBannerLocation !== "off" && origin
+				? {
+						alias: aliasAddress,
+						sender: contact.name ? `${sanitizeDisplayName(contact.name)} <${contact.email}>` : contact.email,
+						blockUrl: `${origin}/action/${await sign("action", `block~${forwardId}`)}`,
+						disableUrl: `${origin}/action/${await sign("action", `disable~${forwardId}`)}`,
+						spoofWarning: warnInBanner,
+					}
+				: null;
 		// A kept body is sent as it came: no banner and no tracker removal can go into it.
-		const body: { html?: string; text?: string; trackersRemoved: number } = kept
-			? { trackersRemoved: 0 }
-			: await transformForward(
-			{ html: email.html ?? undefined, text: email.text ?? undefined },
-			{ removeTrackers: settings.removeTrackers, banner, t: translator(settings.language) },
-		);
+		const anyKeepsSigned = kept !== null && pgp === "signed" && activeTargets.some((t) => !t.policy.removePgpSignatures);
+		const needsRebuilt = !kept || (pgp === "signed" && activeTargets.some((t) => t.policy.removePgpSignatures));
+		const body: { html?: string; text?: string; trackersRemoved: number } = needsRebuilt
+			? await transformForward(
+					{ html: email.html ?? undefined, text: email.text ?? undefined },
+					{ removeTrackers: settings.removeTrackers, banner, bannerLocation: effectiveBannerLocation === "bottom" ? "bottom" : "top", t: translator(settings.language) },
+				)
+			: { trackersRemoved: 0 };
 
 		const reverseAddress = reverseAddressOf(contact.reverse_local, reverseDomain);
 		// A calendar client answers an invitation straight to its ORGANIZER, from the owner's real
 		// mailbox. Each organizer becomes a reverse alias, so the answer comes back through here
 		// like a reply (which puts the alias in place of the owner's address).
 		const calendarReplacements: Replacement[] = [];
-		if (!kept) {
+		if (needsRebuilt) {
 			for (const [index, attachment] of email.attachments.entries()) {
 				const { filename, type } = cleanAttachment(attachment, index);
 				if (carriesAddresses(type, filename) !== "calendar") continue;
@@ -587,7 +673,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 					if (calendarReplacements.length >= 5 || calendarReplacements.some((r) => r.from === organizer)) continue;
 					if (
 						organizer === normalizeEmail(destination) ||
-						organizer === normalizeEmail(recipient) ||
+						activeTargets.some((t) => organizer === normalizeEmail(t.email)) ||
 						isOwnAddress(organizer, [...settings.aliasDomains, aliasDomain]) ||
 						isReverseDomainOf(domainOf(organizer), settings.aliasDomains) ||
 						(await matchBlocklist(db, organizer))
@@ -613,53 +699,59 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		if (references.length) headers.References = references.join(" ");
 
 		// The banner can be hidden by the message's own CSS; a subject prefix cannot.
-		const rawSubject = cleanSubjectLine(rules.subject ?? email.subject) || "(no subject)";
-		const finalSubject = spoofed ? cleanSubjectLine(`${translator(settings.language)("banner.spoofSubject")} ${rawSubject}`) : rawSubject;
-		const outgoing = {
-			from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
-			// Cloudflare will not take a To header of our own, so the alias goes in the display name:
-			// the message still reads as sent to the alias, and the real mailbox stays the recipient.
-			to: { name: aliasAddress, email: recipient },
-			replyTo: reverseAddress,
-			subject: finalSubject,
-			headers,
-			...(body.html ? { html: body.html } : {}),
-			text: body.text ?? (body.html ? undefined : ""),
-			attachments: (rules.removeAttachments ? [] : email.attachments).map((attachment, index) => {
-				const { filename, type, contentId } = cleanAttachment(attachment, index);
-				const content =
-					carriesAddresses(type, filename) === "calendar"
-						? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", calendarReplacements)
-						: (attachment.content as ArrayBuffer);
-				return (attachment.disposition === "inline" || attachment.related) && contentId
-					? { disposition: "inline" as const, contentId, filename, type, content }
-					: { disposition: "attachment" as const, filename, type, content };
-			}),
-		};
-		// Encrypted to the forwarding address's PGP key when it has encryption on. That needs a
-		// message built here, so it goes as raw MIME. If it cannot be encrypted it is not sent in
-		// the clear: it fails, and shows under failed deliveries.
-		// Mail encrypted already (PGP/MIME, or a body that is nothing but inline PGP) is not
-		// encrypted again: the owner's app would then have to decrypt twice. Only a message with
-		// nothing else in it counts: an HTML part or an attachment beside the armor is written by the
-		// sender too, and would otherwise go out readable.
+		const rawSubject = cleanSubjectLine(rules.subject ?? (settings.defaultEmailSubject || email.subject)) || "(no subject)";
+		const finalSubject = warnInSubject ? cleanSubjectLine(`${translator(settings.language)("banner.spoofSubject")} ${rawSubject}`) : rawSubject;
+
 		const inlinePgp = !email.html && !email.attachments.length && isInlinePgpArmor(email.text ?? "");
 		const encryptedAlready = (kept !== null && pgp === "encrypted" && isValidPgpMimeEncrypted(email)) || inlinePgp;
-		const wantsEncryption = !encryptedAlready && settings.pgpRecipients.includes(normalizeEmail(recipient));
-		const pgpKey = wantsEncryption ? await encryptionKeyFor(db, recipient) : null;
-		// The settings list which addresses are encrypted, and the key table is what that list is
-		// made from. If the two disagree — a key removed while its flag was still set, say — sending
-		// anyway would put the message on the wire in the clear, which is the one thing turning
-		// encryption on promises never to happen.
-		if (wantsEncryption && !pgpKey) {
-			await finish(db, forwardId, { status: "failed", error: "not sent: this forwarding address has PGP encryption on, but its key is missing" });
-			return { status: 200, result: "not sent: cannot encrypt" };
+
+		let firstResult: { messageId?: string } | undefined;
+		for (const { email: recipient, policy } of activeTargets) {
+			const stripKeys = policy.removePgpKeys;
+			const stripSigs = policy.removePgpSignatures;
+			const targetKept = kept && !(pgp === "signed" && stripSigs) ? kept : null;
+			const filteredAttachments = (rules.removeAttachments ? [] : email.attachments).filter(
+				(attachment) => !(stripKeys && isPgpKeyAttachment(attachment)) && !(stripSigs && isPgpSignatureAttachment(attachment)),
+			);
+			const outgoing = {
+				from: displayName ? { name: displayName, email: reverseAddress } : reverseAddress,
+				to: { name: aliasAddress, email: recipient },
+				replyTo: reverseAddress,
+				subject: finalSubject,
+				headers,
+				...(body.html ? { html: body.html } : {}),
+				text: body.text ?? (body.html ? undefined : ""),
+				attachments: filteredAttachments.map((attachment, index) => {
+					const { filename, type, contentId } = cleanAttachment(attachment, index);
+					const content =
+						carriesAddresses(type, filename) === "calendar"
+							? rewriteAttachment(attachment.content as ArrayBuffer, "calendar", calendarReplacements)
+							: (attachment.content as ArrayBuffer);
+					return (attachment.disposition === "inline" || attachment.related) && contentId
+						? { disposition: "inline" as const, contentId, filename, type, content }
+						: { disposition: "attachment" as const, filename, type, content };
+				}),
+			};
+			const wantsEncryption =
+				!encryptedAlready &&
+				(rules.encryption !== undefined ? rules.encryption : policy.shouldEncrypt || settings.pgpRecipients.includes(normalizeEmail(recipient)));
+			const pgpKey = wantsEncryption ? (policy.pgpKey ?? (await anyPgpKeyFor(db, recipient))) : null;
+			if (wantsEncryption && !pgpKey) {
+				await finish(db, forwardId, { status: "failed", error: "not sent: this forwarding address has PGP encryption on, but its key is missing" });
+				return { status: 200, result: "not sent: cannot encrypt" };
+			}
+			const result = pgpKey
+				? policy.inlineEncryption && !targetKept
+					? await sendInlineEncrypted(env, outgoing, pgpKey)
+					: await sendEncrypted(env, outgoing, { ...pgpKey, hide_subject: policy.protectedHeaders ? 1 : pgpKey.hide_subject }, targetKept ?? undefined)
+				: targetKept
+					? await sendKept(env, outgoing, targetKept)
+					: await env.EMAIL.send(outgoing);
+			firstResult ??= result;
 		}
-		const result = pgpKey
-			? await sendEncrypted(env, outgoing, pgpKey, kept ?? undefined)
-			: kept
-				? await sendKept(env, outgoing, kept)
-				: await env.EMAIL.send(outgoing);
+		const result = firstResult ?? {};
+		void primaryRecipient;
+		void anyKeepsSigned;
 
 		// The message is out. Record that in one batch, and never report a failure from here on:
 		// a retry would send it a second time.
@@ -699,6 +791,17 @@ async function ruleTargetOf(db: D1Database, settings: Settings, address: string 
 	if (!address || isOwnAddress(address, [...settings.aliasDomains, aliasDomain])) return null;
 	const known = await listDestinations(db, settings);
 	return known.some((destination) => destination.email === address) ? address : null;
+}
+
+async function attachRuleLabels(db: D1Database, aliasAddress: string, targets: string[]): Promise<void> {
+	const existing = await listLabels(db);
+	const matchedIds: string[] = [];
+	for (const raw of targets) {
+		const lower = raw.trim().toLowerCase();
+		const found = existing.find((l) => l.id === raw || l.name.toLowerCase() === lower);
+		if (found) matchedIds.push(found.id);
+	}
+	if (matchedIds.length) await toggleAliasLabels(db, [aliasAddress], matchedIds, true);
 }
 
 /** A Subject header's value with its RFC 2047 encoded words decoded, as a rule should see it. */

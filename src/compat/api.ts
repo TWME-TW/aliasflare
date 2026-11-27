@@ -17,9 +17,45 @@ import { ensureContact, newId, now, type BlocklistRow, type ContactRow } from ".
 import { cleanDisplayName, DOMAIN_PATTERN, domainOf, extractEmail, hostnameOf, isSenderFormat, pageParam, reverseAddress } from "../format";
 import { contactReverseAddress, isOwnAddress, reverseDomainFor } from "../domains";
 import { ownHosts } from "../config";
-import { createsAliasesFromMail, loadSettings, normalizeSettings, saveSettingKeys, type Settings } from "../settings";
+import {
+	createsAliasesFromMail,
+	isAliasSeparator,
+	isBannerLocation,
+	isRandomAliasFormat,
+	isSpamWarningBehaviour,
+	loadSettings,
+	normalizeSettings,
+	saveSettingKeys,
+	type Settings,
+} from "../settings";
 import { createLabel, deleteLabel, getLabelWithCount, LabelError, labelsOf, listLabels, setAliasLabels, updateLabel, type LabelRow } from "../labels";
 import { cleanRule, createRule, deleteRule, getRule, listRules, reorderRules, RuleError, setRuleActive, updateRule, type Rule } from "../rules";
+import { PgpError } from "../pgp";
+import {
+	attachedRecipientsMap,
+	createRecipient,
+	deleteRecipient,
+	deleteRecipientKey,
+	findRecipientById,
+	listRecipients,
+	RecipientError,
+	setAliasRecipients,
+	setRecipientFlag,
+	setRecipientKey,
+	updateRecipient,
+	type RecipientFlag,
+	type RecipientView,
+} from "../recipients";
+import {
+	DomainError,
+	ensureDomainRow,
+	findDomainById,
+	listDomainConfigs,
+	setDomainFlag,
+	updateDomainConfig,
+	validateNewDomain,
+	type DomainView,
+} from "../domain-settings";
 import {
 	ClientError,
 	cleanPrefix,
@@ -81,6 +117,19 @@ api.use("*", async (c, next) => {
 
 api.onError((error, c) => {
 	if (error instanceof ClientError) return c.json({ error: error.message, message: error.message }, error.status as 400);
+	if (error instanceof RecipientError) return c.json({ error: error.message, message: error.message }, error.status as 400);
+	if (error instanceof DomainError) return c.json({ error: error.message, message: error.message }, error.status as 400);
+	if (error instanceof PgpError) {
+		const messages: Record<PgpError["reason"], string> = {
+			invalid: "The PGP public key is invalid.",
+			private: "A private PGP key cannot be uploaded.",
+			noEncryption: "The PGP key has no encryption subkey.",
+			expired: "The PGP public key has expired.",
+			tooLarge: "The PGP public key is too large.",
+			keyInUse: "This PGP key is already published for an alias via WKD.",
+		};
+		return c.json({ error: messages[error.reason], message: messages[error.reason] }, 422);
+	}
 	console.error("API error", error);
 	return c.json({ error: "Internal error", message: "Internal error" }, 500);
 });
@@ -546,54 +595,63 @@ api.get("/setting/domains", (c) => c.json(c.get("settings").aliasDomains.map((do
 // ═════════════════════════════════════════ addy.io ═════════════════════════════════════════
 
 const OWNER_ID = "00000000-0000-4000-8000-000000000001";
-const addyDomainId = (index: number) => `00000000-0000-4000-9000-${String(index + 1).padStart(12, "0")}`;
 const addyDate = (seconds: number | null | undefined) => (seconds ? new Date(seconds * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, "") : null);
 
-async function addyRecipient(email: string, aliasCount: number, settings: Settings) {
-	const { uid } = await destinationIds(email);
+function addyRecipientFromView(r: RecipientView) {
 	return {
-		id: uid,
+		id: r.id,
 		user_id: OWNER_ID,
-		email,
-		description: email === settings.defaultDestination ? "Default" : null,
-		can_reply_send: true,
-		should_encrypt: settings.pgpRecipients.includes(email),
-		inline_encryption: false,
-		protected_headers: false,
-		remove_pgp_keys: false,
-		remove_pgp_signatures: false,
-		fingerprint: null,
-		active: true,
+		email: r.email,
+		description: r.description,
+		can_reply_send: r.canReplySend,
+		should_encrypt: r.shouldEncrypt,
+		inline_encryption: r.inlineEncryption,
+		protected_headers: r.protectedHeaders,
+		remove_pgp_keys: r.removePgpKeys,
+		remove_pgp_signatures: r.removePgpSignatures,
+		fingerprint: r.fingerprint,
+		active: r.active,
 		email_verified_at: "2000-01-01 00:00:00",
-		aliases_count: aliasCount,
-		created_at: "2000-01-01 00:00:00",
-		updated_at: "2000-01-01 00:00:00",
+		aliases_count: r.aliasCount,
+		created_at: addyDate(r.createdAt) ?? "2000-01-01 00:00:00",
+		updated_at: addyDate(r.updatedAt) ?? "2000-01-01 00:00:00",
 	};
 }
 
-async function addyAlias(c: C, alias: AliasView, labels?: LabelRow[]) {
+async function addyAlias(c: C, alias: AliasView, labels?: LabelRow[], preloadedRecipients?: Map<string, RecipientView>, preloadedAttached?: string[]) {
 	const settings = c.get("settings");
-	const destination = destinationOf(alias, settings);
+	const attached = preloadedAttached ?? (await attachedRecipientsMap(c.env.DB, [alias.address])).get(alias.address) ?? [];
+	const targetEmails = attached.length > 0 ? attached : alias.destination ? [alias.destination.toLowerCase()] : [];
+	let recipientsMap = preloadedRecipients;
+	if (!recipientsMap && targetEmails.length > 0) {
+		recipientsMap = new Map((await listRecipients(c.env.DB, settings)).map((r) => [r.email, r]));
+	}
+	const recipients = targetEmails
+		.map((email) => recipientsMap?.get(email))
+		.filter((r): r is RecipientView => !!r)
+		.map((r) => addyRecipientFromView({ ...r, aliasCount: 0 }));
 	const at = alias.address.lastIndexOf("@");
+	const localPart = alias.address.slice(0, at);
+	const plus = localPart.indexOf("+");
 	return {
 		id: alias.uid,
 		user_id: OWNER_ID,
 		aliasable_id: null,
 		aliasable_type: null,
-		local_part: alias.address.slice(0, at),
-		extension: null,
+		local_part: plus > 0 ? localPart.slice(0, plus) : localPart,
+		extension: plus > 0 ? localPart.slice(plus + 1) : null,
 		domain: alias.address.slice(at + 1),
 		email: alias.address,
 		active: alias.forward_mode !== "none",
 		pinned: alias.pinned === 1,
 		description: alias.note,
 		from_name: alias.name,
-		attached_recipients_only: false,
+		attached_recipients_only: alias.attached_recipients_only === 1,
 		emails_forwarded: Number(alias.nb_forward),
 		emails_blocked: Number(alias.nb_block),
 		emails_replied: Number(alias.nb_reply),
 		emails_sent: Number(alias.nb_sent),
-		recipients: destination && alias.destination ? [await addyRecipient(destination, 0, settings)] : [],
+		recipients,
 		labels: (labels ?? (await labelsOf(c.env.DB, [alias.address])).get(alias.address) ?? []).map((label) => addyLabel(label)),
 		last_forwarded: addyDate(alias.last_forward_at),
 		last_blocked: addyDate(alias.last_block_at),
@@ -617,58 +675,115 @@ api.get("/v1/api-token-details", async (c) => {
 	return c.json({ name: row.name, created_at: addyDate(row.created_at), expires_at: null });
 });
 
-api.get("/v1/account-details", async (c) => {
-	const settings = c.get("settings");
+async function buildAccountDetails(c: C, settings: Settings) {
 	const all = await totals(c.env.DB);
-	const destinations = await listDestinations(c.env.DB, settings);
-	const defaultRecipient = destinations[0]?.uid ?? "";
-	return c.json({
-		data: {
-			id: OWNER_ID,
-			username: "aliasflare",
-			from_name: null,
-			email_subject: null,
-			banner_location: settings.showBanner ? "top" : "off",
-			spam_warning_behaviour: "off",
-			wkd_auto_encrypt: 0,
-			bandwidth: 0,
-			username_count: 0,
-			username_limit: 1,
-			default_username_id: OWNER_ID,
-			default_recipient_id: defaultRecipient,
-			default_alias_domain: settings.aliasDomains[0] ?? "",
-			default_alias_format: settings.randomAliasFormat,
-			alias_separator: ".",
-			custom_alias_random_characters: false,
-			custom_alias_random_length: 0,
-			custom_alias_random_charset: "alphanumeric",
-			subscription: "lite",
-			subscription_type: null,
-			subscription_ends_at: null,
-			family_plan_role: null,
-			bandwidth_limit: 0,
-			recipient_count: destinations.length,
-			recipient_limit: 0,
-			active_domain_count: settings.aliasDomains.length,
-			active_domain_limit: 0,
-			active_shared_domain_alias_count: 0,
-			active_shared_domain_alias_limit: 0,
-			active_rule_count: 0,
-			active_rule_limit: 0,
-			total_emails_forwarded: all.forwarded,
-			total_emails_blocked: all.blocked,
-			total_emails_replied: all.replied,
-			total_emails_sent: 0,
-			total_aliases: all.aliases + all.deleted,
-			total_active_aliases: all.active,
-			total_inactive_aliases: all.aliases - all.active,
-			total_pinned_aliases: all.pinned,
-			total_deleted_aliases: all.deleted,
-			created_at: "2000-01-01 00:00:00",
-			updated_at: "2000-01-01 00:00:00",
-		},
-	});
-});
+	const recipients = await listRecipients(c.env.DB, settings);
+	const domains = await listDomainConfigs(c.env.DB, settings);
+	const defaultRecipient = recipients.find((r) => r.isDefault)?.id ?? recipients[0]?.id ?? "";
+	return {
+		id: OWNER_ID,
+		username: "aliasflare",
+		from_name: settings.defaultFromName || null,
+		email_subject: settings.defaultEmailSubject || null,
+		banner_location: settings.bannerLocation,
+		spam_warning_behaviour: settings.spamWarningBehaviour,
+		wkd_auto_encrypt: settings.wkdAutoEncrypt ? 1 : 0,
+		bandwidth: 0,
+		username_count: 0,
+		username_limit: 1,
+		default_username_id: OWNER_ID,
+		default_recipient_id: defaultRecipient,
+		default_alias_domain: settings.aliasDomains[0] ?? "",
+		default_alias_format: settings.randomAliasFormat,
+		alias_separator: settings.aliasSeparator,
+		custom_alias_random_characters: false,
+		custom_alias_random_length: 0,
+		custom_alias_random_charset: "alphanumeric",
+		subscription: "pro",
+		subscription_type: null,
+		subscription_ends_at: null,
+		family_plan_role: null,
+		bandwidth_limit: 0,
+		recipient_count: recipients.length,
+		recipient_limit: 0,
+		active_domain_count: domains.filter((d) => d.active).length,
+		active_domain_limit: 0,
+		active_shared_domain_alias_count: 0,
+		active_shared_domain_alias_limit: 0,
+		active_rule_count: all.activeRules,
+		active_rule_limit: 0,
+		total_emails_forwarded: all.forwarded,
+		total_emails_blocked: all.blocked,
+		total_emails_replied: all.replied,
+		total_emails_sent: all.sent,
+		total_aliases: all.aliases + all.deleted,
+		total_active_aliases: all.active,
+		total_inactive_aliases: all.aliases - all.active,
+		total_pinned_aliases: all.pinned,
+		total_deleted_aliases: all.deleted,
+		created_at: "2000-01-01 00:00:00",
+		updated_at: "2000-01-01 00:00:00",
+	};
+}
+
+api.get("/v1/account-details", async (c) => c.json({ data: await buildAccountDetails(c, c.get("settings")) }));
+
+const updateAccountDetails = async (c: C) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const settings = c.get("settings");
+	const update: Partial<Settings> = {};
+
+	// Explicitly disallow adding random characters to custom aliases per project scope.
+	if (input.custom_alias_random_characters === true || input.custom_alias_random_characters === 1 || (typeof input.custom_alias_random_length === "number" && input.custom_alias_random_length > 0)) {
+		throw new ClientError(422, "Adding random characters to custom aliases is not supported by aliasflare.");
+	}
+	if (input.default_recipient_id !== undefined) {
+		const id = typeof input.default_recipient_id === "string" ? input.default_recipient_id.trim() : "";
+		const match = id ? await findRecipientById(c.env.DB, settings, id) : null;
+		if (!match) throw new ClientError(422, "The selected default recipient is invalid.");
+		if (!match.active) throw new ClientError(422, "The default recipient must be active.");
+		update.defaultDestination = match.email;
+	}
+	if (input.default_alias_domain !== undefined) {
+		const domain = typeof input.default_alias_domain === "string" ? input.default_alias_domain.trim().toLowerCase() : "";
+		if (!settings.aliasDomains.includes(domain)) throw new ClientError(422, "The selected default alias domain is invalid.");
+		update.aliasDomains = [domain, ...settings.aliasDomains.filter((d) => d !== domain)];
+	}
+	if (input.default_alias_format !== undefined) {
+		if (!isRandomAliasFormat(input.default_alias_format)) throw new ClientError(422, "The selected default alias format is invalid.");
+		update.randomAliasFormat = input.default_alias_format;
+	}
+	if (input.alias_separator !== undefined) {
+		if (!isAliasSeparator(input.alias_separator)) throw new ClientError(422, "The alias separator must be '.', '-' or '_'.");
+		update.aliasSeparator = input.alias_separator;
+	}
+	if (input.from_name !== undefined) {
+		if (input.from_name !== null && typeof input.from_name !== "string") throw new ClientError(422, "Invalid from_name.");
+		update.defaultFromName = input.from_name === null ? "" : input.from_name;
+	}
+	if (input.email_subject !== undefined) {
+		if (input.email_subject !== null && typeof input.email_subject !== "string") throw new ClientError(422, "Invalid email_subject.");
+		update.defaultEmailSubject = input.email_subject === null ? "" : input.email_subject;
+	}
+	if (input.banner_location !== undefined) {
+		if (!isBannerLocation(input.banner_location)) throw new ClientError(422, "The banner_location must be off, top or bottom.");
+		update.bannerLocation = input.banner_location;
+		update.showBanner = input.banner_location !== "off";
+	}
+	if (input.spam_warning_behaviour !== undefined) {
+		if (!isSpamWarningBehaviour(input.spam_warning_behaviour)) throw new ClientError(422, "Invalid spam_warning_behaviour.");
+		update.spamWarningBehaviour = input.spam_warning_behaviour;
+	}
+	if (input.wkd_auto_encrypt !== undefined) {
+		update.wkdAutoEncrypt = input.wkd_auto_encrypt === true || input.wkd_auto_encrypt === 1 || input.wkd_auto_encrypt === "1";
+	}
+
+	const next = Object.keys(update).length ? await changeSettings(c, update) : settings;
+	return c.json({ data: await buildAccountDetails(c, next) });
+};
+api.patch("/v1/account-details", updateAccountDetails);
+api.put("/v1/account-details", updateAccountDetails);
 
 api.get("/v1/account-notifications", (c) => c.json({ data: [] }));
 
@@ -679,7 +794,7 @@ const addyBlock = (row: BlocklistRow) => ({
 	value: row.value,
 	type: row.kind === "address" ? "email" : "domain",
 	blocked: row.hits,
-	last_blocked: null,
+	last_blocked: addyDate(row.last_blocked_at),
 	created_at: addyDate(row.created_at),
 	updated_at: addyDate(row.created_at),
 });
@@ -731,7 +846,7 @@ const BLOCKLIST_SORT = new Map([
 	["created_at", "created_at"],
 	["value", "value"],
 	["blocked", "hits"],
-	["last_blocked", "created_at"],
+	["last_blocked", "COALESCE(last_blocked_at, 0)"],
 ]);
 
 api.get("/v1/blocklist", async (c) => {
@@ -836,7 +951,7 @@ api.get("/v1/aliases", async (c) => {
 	// The apps filter by domain id and recipient id; an unknown one matches nothing.
 	const domainId = c.req.query("domain");
 	const recipientId = c.req.query("recipient");
-	const domain = domainId ? (settings.aliasDomains.find((_, index) => addyDomainId(index) === domainId) ?? "\u0000") : undefined;
+	const domain = domainId ? ((await findDomainById(c.env.DB, settings, domainId))?.domain ?? "\u0000") : undefined;
 	const recipient = recipientId ? (await listDestinations(c.env.DB, settings)).find((d) => d.uid === recipientId) : undefined;
 	const { aliases, total } = await listAliasViews(c.env.DB, {
 		deleted: deleted === "with" || deleted === "only" ? deleted : "without",
@@ -858,11 +973,15 @@ api.get("/v1/aliases", async (c) => {
 		return next.toString();
 	};
 	const from = aliases.length ? (page - 1) * size + 1 : null;
+	const addresses = aliases.map((alias) => alias.address);
+	const [labels, recipientsList, attachedMap] = await Promise.all([
+		labelsOf(c.env.DB, addresses),
+		listRecipients(c.env.DB, settings),
+		attachedRecipientsMap(c.env.DB, addresses),
+	]);
+	const recipientsMap = new Map(recipientsList.map((r) => [r.email, r]));
 	return c.json({
-		data: await (async () => {
-			const labels = await labelsOf(c.env.DB, aliases.map((alias) => alias.address));
-			return Promise.all(aliases.map((alias) => addyAlias(c, alias, labels.get(alias.address) ?? [])));
-		})(),
+		data: await Promise.all(aliases.map((alias) => addyAlias(c, alias, labels.get(alias.address) ?? [], recipientsMap, attachedMap.get(alias.address) ?? []))),
 		links: { first: pageUrl(1), last: pageUrl(lastPage), prev: page > 1 ? pageUrl(page - 1) : null, next: page < lastPage ? pageUrl(page + 1) : null },
 		meta: {
 			current_page: page,
@@ -877,26 +996,43 @@ api.get("/v1/aliases", async (c) => {
 	});
 });
 
+async function resolveRecipientIds(db: D1Database, settings: Settings, rawIds: unknown[]): Promise<string[]> {
+	const ids = [...new Set(rawIds.filter((id): id is string => typeof id === "string" && !!id))];
+	if (rawIds.length > 0 && ids.length === 0) throw new ClientError(400, "Unknown mailbox");
+	if (!ids.length) return [];
+	const all = await listRecipients(db, settings);
+	const emails: string[] = [];
+	for (const id of ids) {
+		const match = all.find((r) => r.id === id || String(r.numId) === id);
+		if (!match) throw new ClientError(400, "Unknown mailbox");
+		emails.push(match.email);
+	}
+	return emails;
+}
+
 api.post("/v1/aliases", async (c) => {
 	const input = await body(c);
 	const settings = c.get("settings");
 	const domain = str(input.domain, 253)?.trim() || settings.aliasDomains[0] || "";
 	const format = str(input.format, 40) ?? settings.randomAliasFormat;
 	const recipientIds = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
-	const destination = (await resolveDestination(c.env.DB, settings, recipientIds[0] as string | undefined)) ?? null;
+	const recipientEmails = await resolveRecipientIds(c.env.DB, settings, recipientIds);
+	const destination = recipientEmails.length === 1 && recipientEmails[0] === settings.defaultDestination ? null : (recipientEmails[0] ?? null);
 	const note = str(input.description) ?? null;
+	const attachedRecipientsOnly = typeof input.attached_recipients_only === "boolean" ? input.attached_recipients_only : undefined;
 	let alias: AliasView;
 	if (format === "custom") {
 		const rawLocal = str(input.local_part, 64)?.trim().toLowerCase() ?? "";
 		if (!rawLocal || !/^[a-z0-9._+-]{1,64}$/.test(rawLocal) || rawLocal.startsWith(".") || rawLocal.endsWith(".") || rawLocal.includes("..")) {
 			throw new ClientError(422, "Invalid local part.");
 		}
-		alias = await createAlias(c.env.DB, settings, { localPart: rawLocal, domain, note, destination });
+		alias = await createAlias(c.env.DB, settings, { localPart: rawLocal, domain, note, destination, attachedRecipientsOnly });
 	} else {
-		alias = await createRandomAlias(c.env.DB, settings, { domain, format, note, destination });
+		alias = await createRandomAlias(c.env.DB, settings, { domain, format, note, destination, attachedRecipientsOnly });
 	}
+	if (recipientEmails.length > 0) await setAliasRecipients(c.env.DB, [alias.address], recipientEmails, settings.defaultDestination);
 	if (Array.isArray(input.label_ids) && input.label_ids.length) await setAliasLabels(c.env.DB, [alias.address], input.label_ids);
-	return c.json({ data: await addyAlias(c, alias) }, 201);
+	return c.json({ data: await addyAlias(c, await addyFind(c, alias.uid)) }, 201);
 });
 
 api.get("/v1/aliases/:id", async (c) => c.json({ data: await addyAlias(c, await addyFind(c, c.req.param("id"), true)) }));
@@ -907,6 +1043,7 @@ api.patch("/v1/aliases/:id", async (c) => {
 	await updateAlias(c.env.DB, alias.address, {
 		note: input.description === null ? null : str(input.description),
 		name: input.from_name === null ? null : str(input.from_name, 100),
+		attachedRecipientsOnly: typeof input.attached_recipients_only === "boolean" ? input.attached_recipients_only : undefined,
 	});
 	return c.json({ data: await addyAlias(c, await addyFind(c, alias.uid)) });
 });
@@ -927,7 +1064,7 @@ api.delete("/v1/aliases/:id/forget", async (c) => {
 	return c.body(null, 204);
 });
 
-async function setFlag(c: C, id: unknown, fields: { enabled?: boolean; pinned?: boolean }): Promise<AliasView> {
+async function setFlag(c: C, id: unknown, fields: { enabled?: boolean; pinned?: boolean; attachedRecipientsOnly?: boolean }): Promise<AliasView> {
 	const alias = await addyFind(c, typeof id === "string" ? id : "");
 	await updateAlias(c.env.DB, alias.address, fields);
 	return addyFind(c, alias.uid);
@@ -943,65 +1080,261 @@ api.delete("/v1/pinned-aliases/:id", async (c) => {
 	await setFlag(c, c.req.param("id"), { pinned: false });
 	return c.body(null, 204);
 });
+api.post("/v1/attached-recipients-only-aliases", async (c) =>
+	c.json({ data: await addyAlias(c, await setFlag(c, (await body(c)).id, { attachedRecipientsOnly: true })) }),
+);
+api.delete("/v1/attached-recipients-only-aliases/:id", async (c) => {
+	await setFlag(c, c.req.param("id"), { attachedRecipientsOnly: false });
+	return c.body(null, 204);
+});
+
+api.post("/v1/aliases/:id/send-from", async (c) => {
+	const alias = await addyFind(c, c.req.param("id"));
+	const input = await body(c);
+	const raw = str(input.recipient ?? input.email) ?? "";
+	const email = extractEmail(raw);
+	if (!email || isOwnAddress(email, [...c.get("settings").aliasDomains, domainOf(alias.address)])) {
+		throw new ClientError(422, "Enter a valid recipient email address.");
+	}
+	const name = raw.includes("<") ? cleanDisplayName(raw.slice(0, raw.indexOf("<"))) : null;
+	const contact = await ensureContact(c.env.DB, alias.address, email, name, c.get("settings").includeSenderInReverseAlias);
+	return c.json({ data: { alias: alias.address, recipient: email, reverse_alias: contactReverseAddress(contact) } });
+});
 
 api.post("/v1/alias-recipients", async (c) => {
 	const input = await body(c);
 	const alias = await addyFind(c, str(input.alias_id, 64) ?? "");
 	const ids = Array.isArray(input.recipient_ids) ? input.recipient_ids : [];
-	if (ids.length && typeof ids[0] !== "string") throw new ClientError(400, "Unknown mailbox");
-	const destination = ids.length ? await resolveDestination(c.env.DB, c.get("settings"), ids[0] as string) : null;
-	await updateAlias(c.env.DB, alias.address, { destination: destination ?? null });
+	const emails = await resolveRecipientIds(c.env.DB, c.get("settings"), ids);
+	await setAliasRecipients(c.env.DB, [alias.address], emails, c.get("settings").defaultDestination);
 	return c.json({ data: await addyAlias(c, await addyFind(c, alias.uid)) });
 });
 
+// ── Recipients ────────────────────────────────────────────────────────────────────────────────
+
 api.get("/v1/recipients", async (c) => {
-	const settings = c.get("settings");
-	const destinations = await listDestinations(c.env.DB, settings);
-	return c.json({ data: await Promise.all(destinations.map((d) => addyRecipient(d.email, d.aliasCount, settings))) });
+	const list = await listRecipients(c.env.DB, c.get("settings"));
+	return c.json({ data: list.map(addyRecipientFromView) });
 });
 
 api.get("/v1/recipients/:id", async (c) => {
-	const settings = c.get("settings");
-	const match = (await listDestinations(c.env.DB, settings)).find((d) => d.uid === c.req.param("id"));
+	const match = await findRecipientById(c.env.DB, c.get("settings"), c.req.param("id"));
 	if (!match) throw new ClientError(404, "Not found");
-	return c.json({ data: await addyRecipient(match.email, match.aliasCount, settings) });
+	return c.json({ data: addyRecipientFromView(match) });
 });
 
-const addyDomain = (settings: Settings) => (domain: string, index: number) => ({
-	id: addyDomainId(index),
-	user_id: OWNER_ID,
-	domain,
-	description: null,
-	from_name: null,
-	aliases_count: 0,
-	default_recipient: null,
-	active: true,
-	catch_all: createsAliasesFromMail(settings, domain),
-	shared_with_family: false,
-	default_attached_recipients_only: false,
-	auto_create_regex: null,
-	domain_verified_at: "2000-01-01 00:00:00",
-	domain_mx_validated_at: "2000-01-01 00:00:00",
-	domain_sending_verified_at: "2000-01-01 00:00:00",
-	created_at: "2000-01-01 00:00:00",
-	updated_at: "2000-01-01 00:00:00",
+api.post("/v1/recipients", async (c) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const created = await createRecipient(c.env.DB, c.get("settings"), str(input.email, 254) ?? "");
+	return c.json({ data: addyRecipientFromView(created) }, 201);
 });
 
-api.get("/v1/domains", (c) => c.json({ data: c.get("settings").aliasDomains.map(addyDomain(c.get("settings"))) }));
+const patchRecipient = async (c: C) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const updated = await updateRecipient(c.env.DB, c.get("settings"), c.req.param("id") ?? "", {
+		description: input.description === null ? null : str(input.description),
+	});
+	return c.json({ data: addyRecipientFromView(updated) });
+};
+api.patch("/v1/recipients/:id", patchRecipient);
+api.put("/v1/recipients/:id", patchRecipient);
 
-api.get("/v1/domains/:id", (c) => {
-	const index = c.get("settings").aliasDomains.findIndex((_, i) => addyDomainId(i) === c.req.param("id"));
-	if (index < 0) throw new ClientError(404, "Not found");
-	return c.json({ data: addyDomain(c.get("settings"))(c.get("settings").aliasDomains[index]!, index) });
+api.delete("/v1/recipients/:id", async (c) => {
+	requireAppSettings(c);
+	await deleteRecipient(c.env.DB, c.get("settings"), c.req.param("id"));
+	return c.body(null, 204);
 });
+
+api.post("/v1/recipients/email/resend", async (c) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const id = str(input.recipient_id ?? input.id, 64) ?? "";
+	const match = id ? await findRecipientById(c.env.DB, c.get("settings"), id) : null;
+	if (!match) throw new ClientError(404, "Not found");
+	return c.json({ message: "Recipient is already verified." });
+});
+
+const RECIPIENT_TOGGLES: [string, RecipientFlag][] = [
+	["allowed-recipients", "can_reply_send"],
+	["encrypted-recipients", "should_encrypt"],
+	["inline-encryption-recipients", "inline_encryption"],
+	["protected-headers-recipients", "protected_headers"],
+	["remove-pgp-keys-recipients", "remove_pgp_keys"],
+	["remove-pgp-signatures-recipients", "remove_pgp_signatures"],
+	["active-recipients", "active"],
+];
+
+for (const [slug, flag] of RECIPIENT_TOGGLES) {
+	api.post(`/v1/${slug}`, async (c) => {
+		requireAppSettings(c);
+		const input = await jsonBody(c);
+		const updated = await setRecipientFlag(c.env.DB, c.get("settings"), str(input.id, 64) ?? "", flag, true);
+		return c.json({ data: addyRecipientFromView(updated) });
+	});
+	api.delete(`/v1/${slug}/:id`, async (c) => {
+		requireAppSettings(c);
+		await setRecipientFlag(c.env.DB, c.get("settings"), c.req.param("id") ?? "", flag, false);
+		return c.body(null, 204);
+	});
+}
+
+api.patch("/v1/recipient-keys/:id", async (c) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const keyData = typeof input.key_data === "string" ? input.key_data : typeof input.key === "string" ? input.key : "";
+	if (!keyData.trim()) throw new ClientError(422, "The key_data field is required.");
+	const updated = await setRecipientKey(c.env.DB, c.get("settings"), c.req.param("id"), keyData);
+	return c.json({ data: addyRecipientFromView(updated) });
+});
+
+api.delete("/v1/recipient-keys/:id", async (c) => {
+	requireAppSettings(c);
+	await deleteRecipientKey(c.env.DB, c.get("settings"), c.req.param("id"));
+	return c.body(null, 204);
+});
+
+// ── Domains ───────────────────────────────────────────────────────────────────────────────────
+
+function addyDomainFromView(d: DomainView, recipientsMap: Map<string, RecipientView>) {
+	const defaultRec = d.defaultRecipient ? recipientsMap.get(d.defaultRecipient.toLowerCase()) : undefined;
+	return {
+		id: d.id,
+		user_id: OWNER_ID,
+		domain: d.domain,
+		description: d.description,
+		from_name: d.fromName,
+		aliases_count: d.aliasesCount,
+		default_recipient: defaultRec ? addyRecipientFromView(defaultRec) : null,
+		active: d.active,
+		catch_all: d.catchAll,
+		shared_with_family: false,
+		default_attached_recipients_only: d.defaultAttachedRecipientsOnly,
+		auto_create_regex: d.autoCreateRegex,
+		domain_verified_at: "2000-01-01 00:00:00",
+		domain_mx_validated_at: "2000-01-01 00:00:00",
+		domain_sending_verified_at: "2000-01-01 00:00:00",
+		created_at: addyDate(d.createdAt) ?? "2000-01-01 00:00:00",
+		updated_at: addyDate(d.updatedAt) ?? "2000-01-01 00:00:00",
+	};
+}
+
+api.get("/v1/domains", async (c) => {
+	const settings = c.get("settings");
+	const domains = await listDomainConfigs(c.env.DB, settings);
+	const recipients = await listRecipients(c.env.DB, settings);
+	const recipientsMap = new Map(recipients.map((r) => [r.email, r]));
+	return c.json({ data: domains.map((d) => addyDomainFromView(d, recipientsMap)) });
+});
+
+api.get("/v1/domains/:id", async (c) => {
+	const settings = c.get("settings");
+	const match = await findDomainById(c.env.DB, settings, c.req.param("id"));
+	if (!match) throw new ClientError(404, "Not found");
+	const recipients = await listRecipients(c.env.DB, settings);
+	return c.json({ data: addyDomainFromView(match, new Map(recipients.map((r) => [r.email, r]))) });
+});
+
+api.post("/v1/domains", async (c) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const settings = c.get("settings");
+	const domain = validateNewDomain(str(input.domain, 253) ?? "", settings.aliasDomains);
+	const next = await changeSettings(c, { aliasDomains: [...settings.aliasDomains, domain] });
+	await ensureDomainRow(c.env.DB, domain);
+	const [domains, recipients] = await Promise.all([listDomainConfigs(c.env.DB, next), listRecipients(c.env.DB, next)]);
+	const created = domains.find((d) => d.domain === domain)!;
+	return c.json({ data: addyDomainFromView(created, new Map(recipients.map((r) => [r.email, r]))) }, 201);
+});
+
+const patchDomain = async (c: C) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const settings = c.get("settings");
+	const updated = await updateDomainConfig(c.env.DB, settings, c.req.param("id") ?? "", {
+		description: input.description === null ? null : str(input.description),
+		fromName: input.from_name === null ? null : str(input.from_name, 100),
+		autoCreateRegex: input.auto_create_regex === null ? null : str(input.auto_create_regex, 250),
+	});
+	const recipients = await listRecipients(c.env.DB, settings);
+	return c.json({ data: addyDomainFromView(updated, new Map(recipients.map((r) => [r.email, r]))) });
+};
+api.patch("/v1/domains/:id", patchDomain);
+api.put("/v1/domains/:id", patchDomain);
+
+api.delete("/v1/domains/:id", async (c) => {
+	requireAppSettings(c);
+	const settings = c.get("settings");
+	const match = await findDomainById(c.env.DB, settings, c.req.param("id"));
+	if (!match) throw new ClientError(404, "Not found");
+	await changeSettings(c, {
+		aliasDomains: settings.aliasDomains.filter((d) => d !== match.domain),
+		aliasesFromMailOff: settings.aliasesFromMailOff.filter((d) => d !== match.domain),
+	});
+	await c.env.DB.prepare("DELETE FROM domains WHERE domain = ?").bind(match.domain).run();
+	return c.body(null, 204);
+});
+
+api.patch("/v1/domains/:id/default-recipient", async (c) => {
+	requireAppSettings(c);
+	const input = await jsonBody(c);
+	const settings = c.get("settings");
+	const recId = input.default_recipient === null || input.default_recipient === "" ? null : str(input.default_recipient, 64);
+	let recipientEmail: string | null = null;
+	if (recId) {
+		const rec = await findRecipientById(c.env.DB, settings, recId);
+		if (!rec) throw new ClientError(422, "The selected default recipient is invalid.");
+		recipientEmail = rec.email;
+	}
+	const updated = await updateDomainConfig(c.env.DB, settings, c.req.param("id"), { defaultRecipient: recipientEmail });
+	const recipients = await listRecipients(c.env.DB, settings);
+	return c.json({ data: addyDomainFromView(updated, new Map(recipients.map((r) => [r.email, r]))) });
+});
+
+api.post("/v1/active-domains", async (c) => {
+	requireAppSettings(c);
+	const settings = c.get("settings");
+	const updated = await setDomainFlag(c.env.DB, settings, str((await jsonBody(c)).id, 64) ?? "", "active", true);
+	const recipients = await listRecipients(c.env.DB, settings);
+	return c.json({ data: addyDomainFromView(updated, new Map(recipients.map((r) => [r.email, r]))) });
+});
+api.delete("/v1/active-domains/:id", async (c) => {
+	requireAppSettings(c);
+	await setDomainFlag(c.env.DB, c.get("settings"), c.req.param("id"), "active", false);
+	return c.body(null, 204);
+});
+
+api.post("/v1/default-attached-recipients-only-domains", async (c) => {
+	requireAppSettings(c);
+	const settings = c.get("settings");
+	const updated = await setDomainFlag(c.env.DB, settings, str((await jsonBody(c)).id, 64) ?? "", "default_attached_recipients_only", true);
+	const recipients = await listRecipients(c.env.DB, settings);
+	return c.json({ data: addyDomainFromView(updated, new Map(recipients.map((r) => [r.email, r]))) });
+});
+api.delete("/v1/default-attached-recipients-only-domains/:id", async (c) => {
+	requireAppSettings(c);
+	await setDomainFlag(c.env.DB, c.get("settings"), c.req.param("id"), "default_attached_recipients_only", false);
+	return c.body(null, 204);
+});
+
+const checkDomainSending = async (c: C) => {
+	const settings = c.get("settings");
+	const match = await findDomainById(c.env.DB, settings, c.req.param("id") ?? "");
+	if (!match) throw new ClientError(404, "Not found");
+	const recipients = await listRecipients(c.env.DB, settings);
+	return c.json({ data: addyDomainFromView(match, new Map(recipients.map((r) => [r.email, r]))), message: "Domain is configured in aliasflare." });
+};
+api.get("/v1/domains/:id/check-sending", checkDomainSending);
+api.post("/v1/domains/:id/check-sending", checkDomainSending);
 
 // Catch-all on or off for one domain: whether mail to an address there that is not an alias yet
 // creates it. It is a setting, so it needs "apps may change settings".
 async function setCatchAll(c: C, id: unknown, on: boolean) {
 	const settings = c.get("settings");
-	const index = settings.aliasDomains.findIndex((_, i) => addyDomainId(i) === id);
-	if (index < 0) throw new ClientError(404, "Not found");
-	const domain = settings.aliasDomains[index]!;
+	const match = typeof id === "string" ? await findDomainById(c.env.DB, settings, id) : null;
+	if (!match) throw new ClientError(404, "Not found");
+	const domain = match.domain;
 	const off = settings.aliasesFromMailOff.filter((other) => other !== domain);
 	const nextOff = [...off, domain];
 	const update: Partial<Settings> = on
@@ -1010,7 +1343,8 @@ async function setCatchAll(c: C, id: unknown, on: boolean) {
 			? { createAliasesFromMail: false, aliasesFromMailOff: [] }
 			: { aliasesFromMailOff: nextOff };
 	const next = await changeSettings(c, update);
-	return addyDomain(next)(domain, index);
+	const [updated, recipients] = await Promise.all([findDomainById(c.env.DB, next, match.id), listRecipients(c.env.DB, next)]);
+	return addyDomainFromView(updated!, new Map(recipients.map((r) => [r.email, r])));
 }
 api.post("/v1/catch-all-domains", async (c) => c.json({ data: await setCatchAll(c, (await body(c)).id, true) }));
 api.delete("/v1/catch-all-domains/:id", async (c) => (await setCatchAll(c, c.req.param("id"), false), c.body(null, 204)));
@@ -1058,21 +1392,16 @@ for (const [action, verb, includeDeleted, run] of [
 api.post("/v1/aliases/recipients/bulk", async (c) => {
 	const { input, aliases } = await bulkAliases(c, false);
 	if (!Array.isArray(input.recipient_ids)) throw new ClientError(422, "The recipient_ids field must be an array.");
-	const ids = input.recipient_ids;
-	if (ids.length && typeof ids[0] !== "string") throw new ClientError(400, "Unknown mailbox");
-	const destination = ids.length ? await resolveDestination(c.env.DB, c.get("settings"), ids[0] as string) : null;
-	await updateAliases(c.env.DB, aliases.map((alias) => alias.address), { destination: destination ?? null });
+	const emails = await resolveRecipientIds(c.env.DB, c.get("settings"), input.recipient_ids);
+	await setAliasRecipients(c.env.DB, aliases.map((alias) => alias.address), emails, c.get("settings").defaultDestination);
 	return bulkDone(c, aliases, "updated");
 });
 
 // aliasflare has no usernames (addy.io's own subdomains; alias domains take their place). The apps
-// load the list on start, so it is answered with an empty one; adding one, a domain or a recipient
-// is refused: those are set up in aliasflare.
+// load the list on start, so it is answered with an empty one; adding a username is refused.
 const NOT_SUPPORTED = "Not supported by aliasflare";
 api.get("/v1/usernames", (c) => c.json({ data: [] }));
-for (const path of ["/v1/usernames", "/v1/domains", "/v1/recipients"]) {
-	api.post(path, (c) => c.json({ message: NOT_SUPPORTED, errors: { id: [NOT_SUPPORTED] } }, 422));
-}
+api.post("/v1/usernames", (c) => c.json({ message: NOT_SUPPORTED, errors: { id: [NOT_SUPPORTED] } }, 422));
 
 // ---------- labels ----------
 
@@ -1166,7 +1495,7 @@ const RULE_ERRORS: Record<RuleError["reason"], [number, string]> = {
 	missing: [404, "Not found"],
 	forwardTo: [422, "The Forward to recipient is not known."],
 	webhook: [422, "A webhook needs a public https address."],
-	unsupported: [422, "aliasflare cannot apply this rule as given: it supports no regular expressions, encryption or description changes, and at most 10 conditions, 20 values in a condition and 200 characters in a value."],
+	unsupported: [422, "aliasflare cannot apply this rule as given: unsafe regular expressions, unknown conditions/actions, or more than 10 conditions, 20 values in a condition and 200 characters in a value are not supported."],
 };
 
 /** A rule from an app; its Forward to may stay the address it had, even if no alias uses it any more. */

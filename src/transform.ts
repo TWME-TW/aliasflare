@@ -94,10 +94,10 @@ function leadingHeadBlock(html: string): string {
 	return html.slice(0, pos);
 }
 
-/** Removes trackers from forwarded HTML and text, then adds the banner. */
+/** Removes trackers from forwarded HTML and text, then adds the banner (top or bottom). */
 export async function transformForward(
 	input: { html?: string; text?: string },
-	options: { removeTrackers: boolean; banner: BannerInfo | null; t: Translate },
+	options: { removeTrackers: boolean; banner: BannerInfo | null; bannerLocation?: "top" | "bottom"; t: Translate },
 ): Promise<{ html?: string; text?: string; trackersRemoved: number }> {
 	let { html, text } = input;
 	let trackersRemoved = 0;
@@ -143,6 +143,7 @@ export async function transformForward(
 
 	if (options.banner) {
 		const banner = options.banner;
+		const atBottom = options.bannerLocation === "bottom";
 		if (html) {
 			let inserted = false;
 			const block = bannerHtml(banner, trackersRemoved, options.t);
@@ -151,15 +152,15 @@ export async function transformForward(
 					.on("body", {
 						element(element) {
 							if (inserted) return;
-							element.prepend(block, { html: true });
+							if (atBottom) element.append(block, { html: true });
+							else element.prepend(block, { html: true });
 							inserted = true;
 						},
 					})
 					.transform(new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } }))
 					.text();
-				// Without a <body>, place the banner right after <head> via HTMLRewriter (safe against
-				// </head> inside comments or <style>).
-				if (!inserted) {
+				// Without a <body>, place a top banner right after <head> via HTMLRewriter.
+				if (!inserted && !atBottom) {
 					html = await new HTMLRewriter()
 						.on("head", {
 							element(element) {
@@ -173,11 +174,19 @@ export async function transformForward(
 				}
 			}
 			if (!inserted) {
-				const lead = leadingHeadBlock(html);
-				html = lead + block + html.slice(lead.length);
+				if (atBottom) {
+					const bodyClose = html.search(/<\/body\s*>/i);
+					html = bodyClose >= 0 ? `${html.slice(0, bodyClose)}${block}${html.slice(bodyClose)}` : `${html}${block}`;
+				} else {
+					const lead = leadingHeadBlock(html);
+					html = lead + block + html.slice(lead.length);
+				}
 			}
 		}
-		if (text !== undefined || !html) text = bannerText(banner, trackersRemoved, options.t) + (text ?? "");
+		if (text !== undefined || !html) {
+			const txtBanner = bannerText(banner, trackersRemoved, options.t);
+			text = atBottom ? `${text ?? ""}\n\n${txtBanner.trimEnd()}\n` : txtBanner + (text ?? "");
+		}
 	}
 	return { html, text, trackersRemoved };
 }
