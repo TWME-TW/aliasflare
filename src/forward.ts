@@ -384,12 +384,14 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		return { status: 200, result: "skipped: this domain is deactivated" };
 	}
 	const localPart = aliasAddress.slice(0, aliasAddress.lastIndexOf("@"));
-	const regexBlocked = !known && !!domainRow?.auto_create_regex && !matchesSafeRegex(domainRow.auto_create_regex, localPart);
-	// Only on an alias domain (Mailflare may receive for others), and not without end: mail to
-	// thousands of made-up addresses would otherwise make thousands of aliases.
-	const unknown =
-		!known &&
-		(regexBlocked || !createsAliasesFromMail(settings, aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
+	// As on addy.io: with catch-all on every address makes an alias; with it off, an address the
+	// domain's auto-create pattern matches still does. Only on an alias domain (Mailflare may receive
+	// for others), and not without end: mail to thousands of made-up addresses would otherwise make
+	// thousands of aliases.
+	const createsHere =
+		createsAliasesFromMail(settings, aliasDomain) ||
+		(settings.aliasDomains.includes(aliasDomain) && !!domainRow?.auto_create_regex && matchesSafeRegex(domainRow.auto_create_regex, localPart));
+	const unknown = !known && (!createsHere || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
 	if (unknown && !input.claimUnknown) {
 		if (shouldStoreSkipped(settings, "unknown_alias")) {
 			try {
@@ -768,7 +770,6 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 					}
 				: null;
 		// A kept body is sent as it came: no banner and no tracker removal can go into it.
-		const anyKeepsSigned = kept !== null && pgp === "signed" && activeTargets.some((t) => !t.policy.removePgpSignatures);
 		const needsRebuilt = !kept || (pgp === "signed" && activeTargets.some((t) => t.policy.removePgpSignatures));
 		const body: { html?: string; text?: string; trackersRemoved: number } = needsRebuilt
 			? await transformForward(
@@ -822,8 +823,27 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const inlinePgp = !email.html && !email.attachments.length && isInlinePgpArmor(email.text ?? "");
 		const encryptedAlready = (kept !== null && pgp === "encrypted" && isValidPgpMimeEncrypted(email)) || inlinePgp;
 
-		let firstResult: { messageId?: string } | undefined;
+		// Every key is looked up before anything goes out: a missing key found at the second
+		// recipient would otherwise fail the message after the first had it already.
+		const plans: { recipient: string; policy: (typeof activeTargets)[number]["policy"]; pgpKey: Awaited<ReturnType<typeof anyPgpKeyFor>> }[] = [];
 		for (const { email: recipient, policy } of activeTargets) {
+			const wantsEncryption =
+				!encryptedAlready &&
+				(rules.encryption !== undefined ? rules.encryption : policy.shouldEncrypt || settings.pgpRecipients.includes(normalizeEmail(recipient)));
+			const pgpKey = wantsEncryption ? (policy.pgpKey ?? (await anyPgpKeyFor(db, recipient))) : null;
+			if (wantsEncryption && !pgpKey) {
+				const errMsg = "not sent: this forwarding address has PGP encryption on, but its key is missing";
+				await finish(db, forwardId, { status: "failed", error: errMsg });
+				await db.prepare("UPDATE forwards SET recipient_email = ? WHERE id = ?").bind(recipient, forwardId).run();
+				if (settings.storeFailed) await archive("Failed", "failed", errMsg);
+				return { status: 200, result: "not sent: cannot encrypt" };
+			}
+			plans.push({ recipient, policy, pgpKey });
+		}
+
+		let firstResult: { messageId?: string } | undefined;
+		const partialFailures: string[] = [];
+		for (const { recipient, policy, pgpKey } of plans) {
 			const stripKeys = policy.removePgpKeys;
 			const stripSigs = policy.removePgpSignatures;
 			const targetKept = kept && !(pgp === "signed" && stripSigs) ? kept : null;
@@ -849,32 +869,31 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 						: { disposition: "attachment" as const, filename, type, content };
 				}),
 			};
-			const wantsEncryption =
-				!encryptedAlready &&
-				(rules.encryption !== undefined ? rules.encryption : policy.shouldEncrypt || settings.pgpRecipients.includes(normalizeEmail(recipient)));
-			const pgpKey = wantsEncryption ? (policy.pgpKey ?? (await anyPgpKeyFor(db, recipient))) : null;
-			if (wantsEncryption && !pgpKey) {
-				const errMsg = "not sent: this forwarding address has PGP encryption on, but its key is missing";
-				await finish(db, forwardId, { status: "failed", error: errMsg });
-				await db.prepare("UPDATE forwards SET recipient_email = ? WHERE id = ?").bind(recipient, forwardId).run();
-				if (settings.storeFailed) await archive("Failed", "failed", errMsg);
-				return { status: 200, result: "not sent: cannot encrypt" };
+			// Inline PGP carries one text part only: with attachments, PGP/MIME keeps them.
+			const inline = !!pgpKey && policy.inlineEncryption && !targetKept && outgoing.attachments.length === 0;
+			let result: { messageId?: string };
+			try {
+				result = pgpKey
+					? inline
+						? await sendInlineEncrypted(env, outgoing, pgpKey)
+						: await sendEncrypted(env, outgoing, { ...pgpKey, hide_subject: policy.protectedHeaders ? 1 : pgpKey.hide_subject }, targetKept ?? undefined)
+					: targetKept
+						? await sendKept(env, outgoing, targetKept)
+						: ((await env.EMAIL.send(outgoing)) as { messageId?: string } | undefined) ?? {};
+			} catch (error) {
+				// Before anything went out a failure is the message's: Email Routing tries again. After
+				// one copy went out, a retry would send that copy twice, so the rest is only noted.
+				if (!firstResult) throw error;
+				partialFailures.push(`${recipient}: ${error instanceof Error ? error.message : String(error)}`.slice(0, 300));
+				continue;
 			}
-			const result = pgpKey
-				? policy.inlineEncryption && !targetKept
-					? await sendInlineEncrypted(env, outgoing, pgpKey)
-					: await sendEncrypted(env, outgoing, { ...pgpKey, hide_subject: policy.protectedHeaders ? 1 : pgpKey.hide_subject }, targetKept ?? undefined)
-				: targetKept
-					? await sendKept(env, outgoing, targetKept)
-					: await env.EMAIL.send(outgoing);
 			firstResult ??= result;
 		}
 		if (alsoStoreLocal || settings.storeForwardedCopy) {
 			await archive("INBOX", alsoStoreLocal ? "local_mailbox" : "forwarded_copy", alsoStoreLocal ? "stored in built-in mailbox" : "copy of forwarded mail");
 		}
 		const result = firstResult ?? {};
-		void primaryRecipient;
-		void anyKeepsSigned;
+		if (partialFailures.length) console.error("Forwarded to some recipients only", event.messageId, partialFailures.join("; "));
 
 		// The message is out. Record that in one batch, and never report a failure from here on:
 		// a retry would send it a second time.
@@ -882,8 +901,15 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		try {
 			await db.batch([
 				db
-					.prepare("UPDATE forwards SET status = 'sent', forwarded_message_id = ?, trackers_removed = ?, recipient_email = ?, updated_at = ? WHERE id = ?")
-					.bind(ensureAngle(result.messageId) ?? null, body.trackersRemoved, primaryRecipient, sentAt, forwardId),
+					.prepare("UPDATE forwards SET status = 'sent', forwarded_message_id = ?, trackers_removed = ?, recipient_email = ?, error = ?, updated_at = ? WHERE id = ?")
+					.bind(
+						ensureAngle(result.messageId) ?? null,
+						body.trackersRemoved,
+						primaryRecipient,
+						partialFailures.length ? `not sent to ${partialFailures.join("; ")}`.slice(0, 1000) : null,
+						sentAt,
+						forwardId,
+					),
 				db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(sentAt, contact.id),
 				db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(sentAt, aliasAddress),
 			]);
