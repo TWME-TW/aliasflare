@@ -31,15 +31,48 @@ export class ClientError extends Error {
 	}
 }
 
-const STATS_COLUMNS = `
-	a.imported_forwarded + (SELECT COALESCE(SUM(c.forward_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_forward,
-	a.imported_replied + (SELECT COALESCE(SUM(c.reply_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_reply,
-	a.imported_blocked + (SELECT COUNT(*) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped') AS nb_block,
-	a.imported_sent + (SELECT COALESCE(SUM(c.sent_count), 0) FROM contacts c WHERE c.alias_address = a.address) AS nb_sent,
-	NULLIF(MAX(COALESCE((SELECT MAX(c.last_forward_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_forward_at, 0)), 0) AS last_forward_at,
-	NULLIF(MAX(COALESCE((SELECT MAX(c.last_reply_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_reply_at, 0)), 0) AS last_reply_at,
-	NULLIF(MAX(COALESCE((SELECT MAX(f.created_at) FROM forwards f WHERE f.alias_address = a.address AND f.status = 'skipped'), 0), COALESCE(a.imported_last_block_at, 0)), 0) AS last_block_at,
-	NULLIF(MAX(COALESCE((SELECT MAX(c.last_sent_at) FROM contacts c WHERE c.alias_address = a.address), 0), COALESCE(a.imported_last_sent_at, 0)), 0) AS last_sent_at`;
+const JOINED_STATS_SELECT = `
+	a.imported_forwarded + COALESCE(cs.fwd, 0) AS nb_forward,
+	a.imported_replied + COALESCE(cs.rep, 0) AS nb_reply,
+	a.imported_blocked + COALESCE(fs.blk, 0) AS nb_block,
+	a.imported_sent + COALESCE(cs.snt, 0) AS nb_sent,
+	NULLIF(MAX(COALESCE(cs.last_fwd, 0), COALESCE(a.imported_last_forward_at, 0)), 0) AS last_forward_at,
+	NULLIF(MAX(COALESCE(cs.last_rep, 0), COALESCE(a.imported_last_reply_at, 0)), 0) AS last_reply_at,
+	NULLIF(MAX(COALESCE(fs.last_blk, 0), COALESCE(a.imported_last_block_at, 0)), 0) AS last_block_at,
+	NULLIF(MAX(COALESCE(cs.last_snt, 0), COALESCE(a.imported_last_sent_at, 0)), 0) AS last_sent_at`;
+
+const STATS_CTES = `
+	cstats AS (
+		SELECT alias_address,
+			SUM(forward_count) AS fwd,
+			SUM(reply_count) AS rep,
+			SUM(sent_count) AS snt,
+			MAX(last_forward_at) AS last_fwd,
+			MAX(last_reply_at) AS last_rep,
+			MAX(last_sent_at) AS last_snt
+		FROM contacts
+		WHERE alias_address IN (SELECT address FROM target)
+		GROUP BY alias_address
+	),
+	fstats AS (
+		SELECT alias_address,
+			COUNT(*) AS blk,
+			MAX(created_at) AS last_blk
+		FROM forwards
+		WHERE status = 'skipped' AND alias_address IN (SELECT address FROM target)
+		GROUP BY alias_address
+	)`;
+
+const STAT_SORT_COLUMNS = new Set([
+	"nb_forward",
+	"nb_block",
+	"nb_reply",
+	"nb_sent",
+	"last_forward_at",
+	"last_block_at",
+	"last_reply_at",
+	"last_sent_at",
+]);
 
 export type AliasQuery = {
 	deleted?: "without" | "with" | "only";
@@ -118,10 +151,22 @@ export async function listAliasViews(db: D1Database, query: AliasQuery): Promise
 	const order = column
 		? `${column} ${query.sort!.desc ? "DESC" : "ASC"}, a.num_id ${query.sort!.desc ? "DESC" : "ASC"}`
 		: "a.pinned DESC, MAX(a.created_at, COALESCE(a.last_used_at, 0)) DESC, a.num_id DESC";
+	const isStatSort = !!column && STAT_SORT_COLUMNS.has(column);
+	const selectSql = isStatSort
+		? `WITH target AS (SELECT a.* FROM aliases a ${where.sql}), ${STATS_CTES}
+		   SELECT a.*, ${JOINED_STATS_SELECT}
+		   FROM target a
+		   LEFT JOIN cstats cs ON cs.alias_address = a.address
+		   LEFT JOIN fstats fs ON fs.alias_address = a.address
+		   ORDER BY ${order} LIMIT ? OFFSET ?`
+		: `WITH target AS (SELECT a.* FROM aliases a ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?), ${STATS_CTES}
+		   SELECT a.*, ${JOINED_STATS_SELECT}
+		   FROM target a
+		   LEFT JOIN cstats cs ON cs.alias_address = a.address
+		   LEFT JOIN fstats fs ON fs.alias_address = a.address
+		   ORDER BY ${order}`;
 	const [rows, count] = await db.batch([
-		db
-			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`)
-			.bind(...where.params, query.limit, query.offset),
+		db.prepare(selectSql).bind(...where.params, query.limit, query.offset),
 		db.prepare(`SELECT COUNT(*) AS total FROM aliases a ${where.sql}`).bind(...where.params),
 	]);
 	return { aliases: (rows?.results ?? []) as AliasView[], total: Number((count?.results?.[0] as { total?: number } | undefined)?.total ?? 0) };
@@ -129,7 +174,16 @@ export async function listAliasViews(db: D1Database, query: AliasQuery): Promise
 
 export async function getAliasView(db: D1Database, by: { numId: number } | { uid: string } | { address: string }): Promise<AliasView | null> {
 	const [column, value] = "numId" in by ? ["num_id", by.numId] : "uid" in by ? ["uid", by.uid] : ["address", by.address];
-	return db.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a WHERE a.${column} = ?`).bind(value).first<AliasView>();
+	return db
+		.prepare(
+			`WITH target AS (SELECT a.* FROM aliases a WHERE a.${column} = ?), ${STATS_CTES}
+			 SELECT a.*, ${JOINED_STATS_SELECT}
+			 FROM target a
+			 LEFT JOIN cstats cs ON cs.alias_address = a.address
+			 LEFT JOIN fstats fs ON fs.alias_address = a.address`,
+		)
+		.bind(value)
+		.first<AliasView>();
 }
 
 /** Batch version of getAliasView by uid (chunked by 90 params to stay within D1 limits). Preserves input order. */
@@ -140,7 +194,13 @@ export async function getAliasViewsByUids(db: D1Database, uids: string[]): Promi
 	for (let i = 0; i < unique.length; i += 90) {
 		const chunk = unique.slice(i, i + 90);
 		const { results } = await db
-			.prepare(`SELECT a.*, ${STATS_COLUMNS} FROM aliases a WHERE a.uid IN (${chunk.map(() => "?").join(", ")})`)
+			.prepare(
+				`WITH target AS (SELECT a.* FROM aliases a WHERE a.uid IN (${chunk.map(() => "?").join(", ")})), ${STATS_CTES}
+				 SELECT a.*, ${JOINED_STATS_SELECT}
+				 FROM target a
+				 LEFT JOIN cstats cs ON cs.alias_address = a.address
+				 LEFT JOIN fstats fs ON fs.alias_address = a.address`,
+			)
 			.bind(...chunk)
 			.all<AliasView>();
 		for (const row of results) byUid.set(row.uid, row);
@@ -174,18 +234,40 @@ export async function latestContacts(db: D1Database, addresses: string[]): Promi
 }
 
 export async function totals(db: D1Database): Promise<{ aliases: number; active: number; deleted: number; pinned: number; forwarded: number; replied: number; sent: number; blocked: number; activeRules: number }> {
+	// Single-pass scan per table instead of 5× aliases + 3× contacts subqueries.
 	const row = await db
 		.prepare(
 			`SELECT
-				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL) AS aliases,
-				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL AND forward_mode != 'none') AS active,
-				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NOT NULL) AS deleted,
-				(SELECT COUNT(*) FROM aliases WHERE deleted_at IS NULL AND pinned = 1) AS pinned,
-				(SELECT COALESCE(SUM(forward_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_forwarded), 0) FROM aliases) AS forwarded,
-				(SELECT COALESCE(SUM(reply_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_replied), 0) FROM aliases) AS replied,
-				(SELECT COALESCE(SUM(sent_count), 0) FROM contacts) + (SELECT COALESCE(SUM(imported_sent), 0) FROM aliases) AS sent,
-				(SELECT COUNT(*) FROM forwards WHERE status = 'skipped') + (SELECT COALESCE(SUM(imported_blocked), 0) FROM aliases) AS blocked,
-				(SELECT COUNT(*) FROM rules WHERE active = 1) AS active_rules`,
+				a.aliases,
+				a.active,
+				a.deleted,
+				a.pinned,
+				c.forwarded + a.imp_fwd AS forwarded,
+				c.replied + a.imp_rep AS replied,
+				c.sent + a.imp_snt AS sent,
+				f.blocked + a.imp_blk AS blocked,
+				r.active_rules
+			 FROM (
+				SELECT
+					COALESCE(SUM(CASE WHEN deleted_at IS NULL THEN 1 ELSE 0 END), 0) AS aliases,
+					COALESCE(SUM(CASE WHEN deleted_at IS NULL AND forward_mode != 'none' THEN 1 ELSE 0 END), 0) AS active,
+					COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS deleted,
+					COALESCE(SUM(CASE WHEN deleted_at IS NULL AND pinned = 1 THEN 1 ELSE 0 END), 0) AS pinned,
+					COALESCE(SUM(imported_forwarded), 0) AS imp_fwd,
+					COALESCE(SUM(imported_replied), 0) AS imp_rep,
+					COALESCE(SUM(imported_sent), 0) AS imp_snt,
+					COALESCE(SUM(imported_blocked), 0) AS imp_blk
+				FROM aliases
+			 ) a,
+			 (
+				SELECT
+					COALESCE(SUM(forward_count), 0) AS forwarded,
+					COALESCE(SUM(reply_count), 0) AS replied,
+					COALESCE(SUM(sent_count), 0) AS sent
+				FROM contacts
+			 ) c,
+			 (SELECT COUNT(*) AS blocked FROM forwards WHERE status = 'skipped') f,
+			 (SELECT COUNT(*) AS active_rules FROM rules WHERE active = 1) r`,
 		)
 		.first<Record<string, number>>();
 	return {
@@ -218,18 +300,48 @@ export async function destinationIds(email: string): Promise<{ numId: number; ui
 	return { numId, uid };
 }
 
+/**
+ * Lightweight set of known non-alias destination addresses (without per-email SHA-256 IDs or
+ * full alias table transfer) for reply ownership and rule-target validation.
+ */
+export async function listKnownDestinationEmails(db: D1Database, settings: Settings): Promise<Set<string>> {
+	const { results } = await db
+		.prepare(
+			`SELECT email FROM recipients
+			 UNION
+			 SELECT DISTINCT destination AS email FROM aliases WHERE deleted_at IS NULL AND destination IS NOT NULL AND destination != ''
+			 UNION
+			 SELECT DISTINCT ar.recipient_email AS email FROM alias_recipients ar JOIN aliases a ON a.address = ar.alias_address WHERE a.deleted_at IS NULL`,
+		)
+		.all<{ email: string }>();
+	const emails = new Set<string>();
+	const add = (email: string | null | undefined) => {
+		const normalized = email?.trim().toLowerCase();
+		if (normalized && !isOwnAddress(normalized, settings.aliasDomains)) emails.add(normalized);
+	};
+	if (settings.defaultDestination) add(settings.defaultDestination);
+	for (const row of results) add(row.email);
+	return emails;
+}
+
 export async function listDestinations(db: D1Database, settings: Settings): Promise<Destination[]> {
-	const [aliasRes, recRes, attachRes] = await db.batch([
-		db.prepare("SELECT address, destination FROM aliases WHERE deleted_at IS NULL"),
+	const [recRes, attachCountsRes, fallbackCountsRes] = await db.batch([
 		db.prepare("SELECT email FROM recipients"),
-		db.prepare("SELECT ar.alias_address, ar.recipient_email FROM alias_recipients ar JOIN aliases a ON a.address = ar.alias_address WHERE a.deleted_at IS NULL"),
+		db.prepare(
+			`SELECT lower(ar.recipient_email) AS email, COUNT(*) AS cnt
+			 FROM alias_recipients ar
+			 JOIN aliases a ON a.address = ar.alias_address
+			 WHERE a.deleted_at IS NULL
+			 GROUP BY lower(ar.recipient_email)`,
+		),
+		db.prepare(
+			`SELECT lower(COALESCE(NULLIF(a.destination, ''), '')) AS email, COUNT(*) AS cnt
+			 FROM aliases a
+			 WHERE a.deleted_at IS NULL
+			   AND NOT EXISTS (SELECT 1 FROM alias_recipients ar WHERE ar.alias_address = a.address)
+			 GROUP BY lower(COALESCE(NULLIF(a.destination, ''), ''))`,
+		),
 	]);
-	const attached = new Map<string, string[]>();
-	for (const row of (attachRes?.results ?? []) as { alias_address: string; recipient_email: string }[]) {
-		const list = attached.get(row.alias_address) ?? [];
-		list.push(row.recipient_email.toLowerCase());
-		attached.set(row.alias_address, list);
-	}
 	const counts = new Map<string, number>();
 	const add = (email: string, delta: number) => {
 		const normalized = email.toLowerCase();
@@ -239,14 +351,12 @@ export async function listDestinations(db: D1Database, settings: Settings): Prom
 	};
 	for (const row of (recRes?.results ?? []) as { email: string }[]) add(row.email, 0);
 	if (settings.defaultDestination) add(settings.defaultDestination, 0);
-	for (const row of (aliasRes?.results ?? []) as { address: string; destination: string | null }[]) {
-		const list = attached.get(row.address);
-		if (list && list.length > 0) {
-			for (const email of list) add(email, 1);
-		} else {
-			const email = row.destination?.toLowerCase() || settings.defaultDestination;
-			if (email) add(email, 1);
-		}
+	for (const row of (attachCountsRes?.results ?? []) as { email: string; cnt: number }[]) {
+		add(row.email, Number(row.cnt ?? 0));
+	}
+	for (const row of (fallbackCountsRes?.results ?? []) as { email: string; cnt: number }[]) {
+		const email = row.email || settings.defaultDestination;
+		if (email) add(email, Number(row.cnt ?? 0));
 	}
 	const out: Destination[] = [];
 	for (const [email, aliasCount] of counts) {

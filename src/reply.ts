@@ -24,7 +24,7 @@ import { MAX_MESSAGE_BYTES } from "./mailflare";
 import { FREE_PLAN_REWRITE_BYTES, LOOP_HEADER } from "./forward";
 import { readLimited } from "./streams";
 import { attachmentSearchText, carriesAddresses, MAX_NESTED_EML_PARSES, rewriteAttachment, rewriteContentId, scrubAttachedMessage, scrubContentId } from "./attachments";
-import { listDestinations } from "./compat/aliases";
+import { listKnownDestinationEmails } from "./compat/aliases";
 import { getDomainRow } from "./domain-settings";
 import { effectiveAliasDestinations, recipientPolicy } from "./recipients";
 import { ruleForwardAddresses, runRules } from "./rules";
@@ -271,7 +271,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 	// The owner writes from one of the alias's destination addresses (or contact.destination / rule target unless attached_recipients_only).
-	const knownDestinations = new Set((await listDestinations(db, settings)).map((d) => normalizeEmail(d.email)));
+	const knownDestinations = await listKnownDestinationEmails(db, settings);
 	const attachedTargets = await effectiveAliasDestinations(db, alias, settings, domainRow?.default_recipient);
 	const ruleOwners = alias.attached_recipients_only ? [] : (await ruleForwardAddresses(db)).filter((address) => knownDestinations.has(normalizeEmail(address)));
 	const owners = [...new Set([...attachedTargets, ...(alias.attached_recipients_only ? [] : [contact.destination]), ...ruleOwners].filter((value): value is string => !!value))];

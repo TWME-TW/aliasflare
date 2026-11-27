@@ -170,6 +170,24 @@ export function resolveStorageBackend(env: Env, config: AppConfig, preferred: St
 	return "d1";
 }
 
+/** Prepares a compressed D1 blob statement so callers can batch it atomically with metadata inserts. */
+export async function prepareD1BlobPut(
+	db: D1Database,
+	messageId: string,
+	raw: Uint8Array,
+): Promise<{ statement: D1PreparedStatement; storedBytes: number }> {
+	const { encoding, bytes } = await compressBytes(raw);
+	const b64 = bytesToBase64(bytes);
+	return {
+		statement: db
+			.prepare(
+				"INSERT INTO mailbox_blobs (message_id, encoding, raw_base64, stored_bytes) VALUES (?, ?, ?, ?) ON CONFLICT (message_id) DO UPDATE SET encoding = excluded.encoding, raw_base64 = excluded.raw_base64, stored_bytes = excluded.stored_bytes",
+			)
+			.bind(messageId, encoding, b64, bytes.byteLength),
+		storedBytes: bytes.byteLength,
+	};
+}
+
 /** Stores raw email bytes into R2, S3, or compressed D1. */
 export async function putRawBlob(
 	env: Env,
@@ -199,14 +217,46 @@ export async function putRawBlob(
 		if (!response.ok) throw new Error(`S3 PUT failed: HTTP ${response.status}`);
 		return { storageKind: "s3", storageKey: key, storedBytes: raw.byteLength };
 	}
-	const { encoding, bytes } = await compressBytes(raw);
-	const b64 = bytesToBase64(bytes);
-	await env.DB.prepare(
-		"INSERT INTO mailbox_blobs (message_id, encoding, raw_base64, stored_bytes) VALUES (?, ?, ?, ?) ON CONFLICT (message_id) DO UPDATE SET encoding = excluded.encoding, raw_base64 = excluded.raw_base64, stored_bytes = excluded.stored_bytes",
-	)
-		.bind(messageId, encoding, b64, bytes.byteLength)
-		.run();
-	return { storageKind: "d1", storageKey: null, storedBytes: bytes.byteLength };
+	const { statement, storedBytes } = await prepareD1BlobPut(env.DB, messageId, raw);
+	await statement.run();
+	return { storageKind: "d1", storageKey: null, storedBytes };
+}
+
+/**
+ * Returns raw email bytes as a stream (for R2/S3/gzipped D1) or Uint8Array so download endpoints
+ * avoid buffering up to 25 MB into Worker isolate memory.
+ */
+export async function getRawBlobBody(
+	env: Env,
+	config: AppConfig,
+	record: { id: string; storage_kind: string; storage_key: string | null },
+): Promise<ReadableStream<Uint8Array> | Uint8Array | null> {
+	if (record.storage_kind === "r2" && record.storage_key && env.MAILBOX_BUCKET) {
+		const obj = await env.MAILBOX_BUCKET.get(record.storage_key);
+		if (!obj) return null;
+		return obj.body ?? new Uint8Array(await obj.arrayBuffer());
+	}
+	if (record.storage_kind === "s3" && record.storage_key && s3Ready(config.mailboxS3)) {
+		const { url, headers } = await signS3Request({ method: "GET", s3: config.mailboxS3, key: record.storage_key });
+		const response = await fetch(url, { method: "GET", headers, redirect: "manual", signal: AbortSignal.timeout(15_000) });
+		if (!response.ok) {
+			await response.body?.cancel().catch(() => undefined);
+			return null;
+		}
+		return response.body ?? new Uint8Array(await response.arrayBuffer());
+	}
+	if (record.storage_kind === "d1") {
+		const row = await env.DB.prepare("SELECT encoding, raw_base64 FROM mailbox_blobs WHERE message_id = ?")
+			.bind(record.id)
+			.first<{ encoding: string; raw_base64: string }>();
+		if (!row) return null;
+		const bytes = base64ToBytes(row.raw_base64);
+		if (row.encoding === "gzip" && typeof DecompressionStream !== "undefined") {
+			return new Response(bytes as BodyInit).body!.pipeThrough(new DecompressionStream("gzip"));
+		}
+		return bytes;
+	}
+	return null;
 }
 
 /** Reads raw email bytes back from R2, S3, or D1. Returns null if headers_only or missing. */

@@ -31,7 +31,7 @@ import { customValues, fillTemplate, isOutboundProvider, normalizeOutboundOption
 import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddress } from "./domains";
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
-import { domainOf, extractEmail, hostnameOf, isPublicHost, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
+import { cleanAttachment, cleanDisplayName, cleanSubjectLine, domainOf, extractEmail, hostnameOf, isPublicHost, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
 import { handleDirectInbound, handleInbound, resendMailboxMessage, type InboundEvent } from "./forward";
 import {
 	deleteMailboxMessage,
@@ -42,6 +42,7 @@ import {
 	listMailboxMessages,
 	moveMailboxMessage,
 	readMailboxRaw,
+	readMailboxRawBody,
 	storeMailboxMessage,
 	updateMailboxFlags,
 	type MailboxFolder,
@@ -156,16 +157,44 @@ const normalizeHost = (value: string) => value.toLowerCase().replace(/\.$/, "");
 /** A year, for a versioned asset URL; an unversioned one is kept briefly so a deploy shows soon. */
 const assetCache = (c: C) => (c.req.query("v") ? "public, max-age=31536000, immutable" : "public, max-age=300");
 
+/** Machine-to-machine endpoints that never render localized dashboard HTML. */
+function isMachinePath(path: string): boolean {
+	return (
+		path === "/api" ||
+		path.startsWith("/api/") ||
+		path === "/mcp" ||
+		path.startsWith("/mcp/") ||
+		path === "/mail-api" ||
+		path.startsWith("/mail-api/") ||
+		path === "/webhook" ||
+		path === "/health" ||
+		path.startsWith("/.well-known/openpgpkey/")
+	);
+}
+
 app.use("*", async (c, next) => {
 	const reqHost = normalizeHost(new URL(c.req.url).hostname);
 	// Never bypass WKD host isolation on openpgpkey.<domain> for static assets.
 	if ((c.req.method === "GET" || c.req.method === "HEAD") && STATIC_PATHS.has(c.req.path) && !reqHost.startsWith(`${WKD_SUBDOMAIN}.`)) return next();
-	const chosen = getCookie(c, LANG_COOKIE);
-	const chosenTheme = getCookie(c, THEME_COOKIE);
-	const locale = await loadLocale(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language")));
-	c.set("t", translator(locale, isTheme(chosenTheme) ? chosenTheme : "system"));
-	// The client APIs and public endpoints are open to anyone with the URL: their limits come before any D1 read.
-	if (c.req.path === "/api" || c.req.path.startsWith("/api/") || c.req.path === "/mcp" || c.req.path.startsWith("/mcp/")) {
+	const machine = isMachinePath(c.req.path);
+	if (machine) {
+		c.set("t", translator("en"));
+	} else {
+		const chosen = getCookie(c, LANG_COOKIE);
+		const chosenTheme = getCookie(c, THEME_COOKIE);
+		const locale = await loadLocale(isLocale(chosen) ? chosen : negotiateLocale(c.req.header("Accept-Language")));
+		c.set("t", translator(locale, isTheme(chosenTheme) ? chosenTheme : "system"));
+	}
+	// The client APIs, MCP, Mail Gateway, and public endpoints are open to anyone with the URL:
+	// their limits and edge lockouts come before any D1 read.
+	const isApiSurface =
+		c.req.path === "/api" ||
+		c.req.path.startsWith("/api/") ||
+		c.req.path === "/mcp" ||
+		c.req.path.startsWith("/mcp/") ||
+		c.req.path === "/mail-api" ||
+		c.req.path.startsWith("/mail-api/");
+	if (isApiSurface) {
 		if (!(c.req.method === "OPTIONS" && (c.req.path === "/api" || c.req.path.startsWith("/api/")))) {
 			const throttled = await apiThrottled(c.env, c.req.header("CF-Connecting-IP"));
 			if (throttled) return throttled;
@@ -243,6 +272,8 @@ export async function readFormBody(c: C, next: () => Promise<void>): Promise<Res
 		!path.startsWith("/api/") &&
 		path !== "/mcp" &&
 		!path.startsWith("/mcp/") &&
+		path !== "/mail-api" &&
+		!path.startsWith("/mail-api/") &&
 		path !== "/webhook" &&
 		FORM_TYPES.test(contentType)
 	) {
@@ -483,7 +514,7 @@ for (const kind of ["unsubscribe", "action"] as const) {
 		const t = c.get("t");
 		return c.html(messagePage(t, t("link.invalidTitle"), html`<p>${t("link.invalid")}</p>`, c.req.path), 404);
 	};
-	const resolve = (c: C) => resolveLink(c.env, c.get("config"), kind, c.req.param("token") ?? "", [new URL(c.req.url).hostname]);
+	const resolve = (c: C) => resolveLink(c.env, c.get("config"), kind, c.req.param("token") ?? "", [new URL(c.req.url).hostname], c.get("settings"));
 	app.get(`/${kind}/:token`, async (c) => {
 		const t = c.get("t");
 		const target = await resolve(c);
@@ -641,9 +672,9 @@ const DASHBOARD_ACTIVITY = 10;
  * Forwards and other events, newest first. Without a search term, both halves read an index
  * in time order (forwards_updated_idx, events_created_idx), so a page never sorts the whole history.
  */
-async function activityPage(db: D1Database, limit: number, offset: number, query = ""): Promise<ActivityItem[]> {
+function activityPageStmt(db: D1Database, limit: number, offset: number, query = ""): D1PreparedStatement {
 	if (!query) {
-		const { results } = await db
+		return db
 			.prepare(
 				`SELECT 'forward' AS kind, status, alias_address AS alias,
 					CASE WHEN error IS NOT NULL THEN error
@@ -654,12 +685,10 @@ async function activityPage(db: D1Database, limit: number, offset: number, query
 				SELECT kind, status, alias_address AS alias, detail, created_at AS at FROM events
 				ORDER BY at DESC LIMIT ? OFFSET ?`,
 			)
-			.bind(limit, offset)
-			.all<ActivityItem>();
-		return results;
+			.bind(limit, offset);
 	}
 	const like = `%${query.toLowerCase().replace(/[!%_]/g, (char) => `!${char}`)}%`;
-	const { results } = await db
+	return db
 		.prepare(
 			`SELECT 'forward' AS kind, status, alias_address AS alias,
 				CASE WHEN error IS NOT NULL THEN error
@@ -672,26 +701,21 @@ async function activityPage(db: D1Database, limit: number, offset: number, query
 				WHERE kind LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR COALESCE(alias_address, '') LIKE ? ESCAPE '!' OR COALESCE(detail, '') LIKE ? ESCAPE '!'
 			ORDER BY at DESC LIMIT ? OFFSET ?`,
 		)
-		.bind(like, like, like, like, like, like, like, like, like, limit, offset)
-		.all<ActivityItem>();
-	return results;
+		.bind(like, like, like, like, like, like, like, like, like, limit, offset);
 }
 
-async function activityTotal(db: D1Database, query = ""): Promise<number> {
+function activityTotalStmt(db: D1Database, query = ""): D1PreparedStatement {
 	if (!query) {
-		const row = await db.prepare("SELECT (SELECT COUNT(*) FROM forwards) + (SELECT COUNT(*) FROM events) AS total").first<{ total: number }>();
-		return row?.total ?? 0;
+		return db.prepare("SELECT (SELECT COUNT(*) FROM forwards) + (SELECT COUNT(*) FROM events) AS total");
 	}
 	const like = `%${query.toLowerCase().replace(/[!%_]/g, (char) => `!${char}`)}%`;
-	const row = await db
+	return db
 		.prepare(
 			`SELECT
 				(SELECT COUNT(*) FROM forwards WHERE 'forward' LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR alias_address LIKE ? ESCAPE '!' OR COALESCE(subject, '') LIKE ? ESCAPE '!' OR COALESCE(error, '') LIKE ? ESCAPE '!')
 				+ (SELECT COUNT(*) FROM events WHERE kind LIKE ? ESCAPE '!' OR status LIKE ? ESCAPE '!' OR COALESCE(alias_address, '') LIKE ? ESCAPE '!' OR COALESCE(detail, '') LIKE ? ESCAPE '!') AS total`,
 		)
-		.bind(like, like, like, like, like, like, like, like, like)
-		.first<{ total: number }>();
-	return row?.total ?? 0;
+		.bind(like, like, like, like, like, like, like, like, like);
 }
 
 // ---------- built-in mailbox (Webmail) ----------
@@ -825,17 +849,37 @@ app.get("/mailbox/compose", async (c) => {
 	);
 });
 
+/** Active web content types forced to application/octet-stream on attachment download. */
+const ACTIVE_ATTACHMENT_TYPES = new Set([
+	"text/html",
+	"application/xhtml+xml",
+	"image/svg+xml",
+	"text/xml",
+	"application/xml",
+	"text/javascript",
+	"application/javascript",
+	"text/ecmascript",
+	"application/ecmascript",
+]);
+
+function attachmentDisposition(filename: string): string {
+	const cleaned = filename.replace(/[\u0000-\u001f\u007f"/\\]+/g, "_").slice(0, 120) || "attachment";
+	const ascii = cleaned.replace(/[^\x20-\x7e]/g, "_").replace(/[;"]/g, "_") || "attachment";
+	const encoded = encodeURIComponent(cleaned).replace(/[!'()*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`);
+	return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
 app.post("/mailbox/compose", async (c) => {
 	const form = await c.req.parseBody();
 	const fromAddr = normalizeEmail(typeof form.from === "string" ? form.from : "");
 	const toAddr = extractEmail(typeof form.to === "string" ? form.to : "");
-	const subject = (typeof form.subject === "string" ? form.subject : "").trim().slice(0, 500) || "(no subject)";
+	const subject = cleanSubjectLine(typeof form.subject === "string" ? form.subject : "").slice(0, 500) || "(no subject)";
 	const text = typeof form.text === "string" ? form.text : "";
 	const alias = await getAlias(c.env.DB, fromAddr);
 	if (!alias || alias.deleted_at || !toAddr) return redirectWithNotice(c, "/mailbox/compose", "notice.mbSendFailed");
 	const config = c.get("config");
-	const settings = await loadSettings(c.env.DB);
-	const displayName = alias.name || settings.defaultFromName || "";
+	const settings = c.get("settings") ?? (await loadSettings(c.env.DB));
+	const displayName = cleanDisplayName(alias.name || settings.defaultFromName) ?? "";
 	const fromHeader = displayName ? { name: displayName, email: alias.address } : alias.address;
 	try {
 		if (alias.mailbox_id && mailflareReady(config)) {
@@ -901,7 +945,7 @@ app.get("/mailbox/:id/html", async (c) => {
 	// ever opened outside the sandboxed iframe (CSP alone cannot block meta-refresh navigation).
 	c.header(
 		"Content-Security-Policy",
-		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'; sandbox",
+		"default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox",
 	);
 	c.header("X-Frame-Options", "SAMEORIGIN");
 	c.header("Cache-Control", "no-store");
@@ -914,9 +958,9 @@ app.get("/mailbox/:id/html", async (c) => {
 app.get("/mailbox/:id/raw", async (c) => {
 	const msg = await getMailboxMessage(c.env.DB, c.req.param("id"));
 	if (!msg) return c.notFound();
-	const raw = await readMailboxRaw(c.env, c.get("config"), msg);
+	const raw = await readMailboxRawBody(c.env, c.get("config"), msg);
 	if (!raw) return c.notFound();
-	return c.body(raw as Uint8Array<ArrayBuffer>, 200, {
+	return c.body(raw as ReadableStream<Uint8Array> | Uint8Array<ArrayBuffer>, 200, {
 		"Content-Type": "message/rfc822",
 		"Content-Disposition": `attachment; filename="${msg.id}.eml"`,
 		"Cache-Control": "no-store",
@@ -932,11 +976,12 @@ app.get("/mailbox/:id/attachment/:index", async (c) => {
 	const parsed = raw ? await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" }).catch(() => null) : null;
 	const att = parsed?.attachments[idx];
 	if (!att) return c.notFound();
-	const filename = (att.filename ?? `attachment-${idx + 1}`).replace(/["\r\n/\\]/g, "_").slice(0, 120);
+	const cleaned = cleanAttachment(att, idx);
+	const contentType = ACTIVE_ATTACHMENT_TYPES.has(cleaned.type) ? "application/octet-stream" : cleaned.type;
 	const bytes = typeof att.content === "string" ? new TextEncoder().encode(att.content) : new Uint8Array(att.content);
 	return c.body(bytes as Uint8Array<ArrayBuffer>, 200, {
-		"Content-Type": att.mimeType || "application/octet-stream",
-		"Content-Disposition": `attachment; filename="${filename}"`,
+		"Content-Type": contentType,
+		"Content-Disposition": attachmentDisposition(cleaned.filename),
 		"Cache-Control": "no-store",
 	});
 });
@@ -974,7 +1019,9 @@ app.get("/activity", async (c) => {
 	const page = pageParam(c.req.query("page"), 1);
 	const requestedSize = Number(c.req.query("per"));
 	const perPage = (ALIAS_PAGE_SIZES as readonly number[]).includes(requestedSize) ? requestedSize : DEFAULT_ACTIVITY_PAGE_SIZE;
-	const [items, total] = await Promise.all([activityPage(db, perPage, (page - 1) * perPage, query), activityTotal(db, query)]);
+	const [itemsRes, totalRes] = await db.batch([activityPageStmt(db, perPage, (page - 1) * perPage, query), activityTotalStmt(db, query)]);
+	const items = (itemsRes?.results ?? []) as ActivityItem[];
+	const total = Number((totalRes?.results?.[0] as { total?: number } | undefined)?.total ?? 0);
 	const lastPage = Math.max(1, Math.ceil(total / perPage));
 	return c.html(activityListPage(c.get("t"), { items, page, lastPage, query, perPage, total }));
 });
@@ -1015,18 +1062,22 @@ app.get("/", async (c) => {
 		params.push(like, like, like, like);
 	}
 	const clause = `WHERE ${where.join(" AND ")}`;
-	const [labels, { results: aliases }, counted, activity] = await Promise.all([
+	const [labels, [aliasesRes, countedRes, activityRes]] = await Promise.all([
 		listLabels(db),
-		db
-			.prepare(
-				`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts, last_used_at AS used_at FROM aliases ${clause}
-				 ORDER BY pinned DESC, ${LAST_USED} DESC, num_id DESC LIMIT ? OFFSET ?`,
-			)
-			.bind(...params, perPage, (pageNumber - 1) * perPage)
-			.all<AliasRow & { contacts: number }>(),
-		db.prepare(`SELECT COUNT(*) AS total FROM aliases ${clause}`).bind(...params).first<{ total: number }>(),
-		activityPage(db, DASHBOARD_ACTIVITY, 0),
+		db.batch([
+			db
+				.prepare(
+					`SELECT aliases.*, (SELECT COUNT(*) FROM contacts WHERE contacts.alias_address = aliases.address) AS contacts, last_used_at AS used_at FROM aliases ${clause}
+					 ORDER BY pinned DESC, ${LAST_USED} DESC, num_id DESC LIMIT ? OFFSET ?`,
+				)
+				.bind(...params, perPage, (pageNumber - 1) * perPage),
+			db.prepare(`SELECT COUNT(*) AS total FROM aliases ${clause}`).bind(...params),
+			activityPageStmt(db, DASHBOARD_ACTIVITY, 0),
+		]),
 	]);
+	const aliases = (aliasesRes?.results ?? []) as (AliasRow & { contacts: number })[];
+	const counted = (countedRes?.results?.[0] as { total?: number } | undefined) ?? null;
+	const activity = (activityRes?.results ?? []) as ActivityItem[];
 	const list = { query, filter, label: labels.some((row) => row.id === label) ? label : "", page: pageNumber, perPage, total: counted?.total ?? 0 };
 	const byAlias = labels.length ? await labelsOf(db, aliases.map((alias) => alias.address)) : new Map();
 	const withLabels = aliases.map((alias) => ({ ...alias, labels: byAlias.get(alias.address) ?? [] }));
@@ -1112,7 +1163,7 @@ app.post("/settings", async (c) => {
 	}
 	const bannerLocation =
 		typeof form.bannerLocation === "string" ? form.bannerLocation : form.showBanner === "1" ? "top" : "off";
-	const currentSettings = await loadSettings(c.env.DB);
+	const currentSettings = c.get("settings") ?? (await loadSettings(c.env.DB));
 	const mailboxShown = form.mailboxSettingsShown === "1";
 	const mailboxPatch = mailboxShown
 		? {
@@ -1209,7 +1260,7 @@ app.get("/settings/mailbox", async (c) =>
 
 app.post("/settings/mailbox", async (c) => {
 	const form = await c.req.parseBody();
-	const current = await loadSettings(c.env.DB);
+	const current = c.get("settings") ?? (await loadSettings(c.env.DB));
 	const settings = normalizeSettings({
 		...current,
 		mailboxEnabled: form.mailboxEnabled === "1",
@@ -1611,7 +1662,7 @@ async function saveRule(c: C, id: string | null): Promise<Response> {
 app.get("/rules", async (c) => c.html(rulesPage(c.get("t"), { rules: await listRules(c.env.DB), notice: noticeFrom(c), webhookKey: await webhookKey(c.get("config").signingSecret) })));
 /** The addresses a rule may forward to: the owner's forwarding addresses. */
 async function ruleDestinations(c: C): Promise<string[]> {
-	return (await listDestinations(c.env.DB, await loadSettings(c.env.DB))).map((destination) => destination.email);
+	return (await listDestinations(c.env.DB, c.get("settings") ?? (await loadSettings(c.env.DB)))).map((destination) => destination.email);
 }
 
 app.get("/rules/new", async (c) => c.html(ruleEditPage(c.get("t"), { rule: null, destinations: await ruleDestinations(c), notice: noticeFrom(c) })));
@@ -1656,7 +1707,7 @@ app.get("/export/aliases.csv", async (c) => {
 });
 
 app.get("/import", async (c) => {
-	const settings = await loadSettings(c.env.DB);
+	const settings = await pageSettings(c);
 	return c.html(
 		importPage(c.get("t"), {
 			domains: await defaultImportDomains(c.env.DB, settings),
@@ -1682,7 +1733,7 @@ async function executeImport(c: C, sourceName: string, options: { allowAutoDetec
 	if (Number(c.req.header("Content-Length") ?? 0) > MAX_IMPORT_UPLOAD) return { domains: [], sourceLabel: source.label, error: t("imp.err.format"), status: 413 };
 	const rawBytes = await readLimited(c.req.raw.body, MAX_IMPORT_UPLOAD);
 	if (rawBytes === null) return { domains: [], sourceLabel: source.label, error: t("imp.err.format"), status: 413 };
-	const settings = await loadSettings(c.env.DB);
+	const settings = c.get("settings") ?? (await loadSettings(c.env.DB));
 	const bounded = new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers, body: rawBytes.buffer as ArrayBuffer });
 	const form: Record<string, string | File> = Object.create(null);
 	try {
@@ -1853,7 +1904,7 @@ async function renderOnboarding(
 	} = {},
 ) {
 	const config = extra.config ?? c.get("config");
-	const settings = await loadSettings(c.env.DB);
+	const settings = await pageSettings(c);
 	const fixed = envOverrides(c.env);
 	return c.html(
 		onboardingPage(c.get("t"), {
@@ -1958,7 +2009,7 @@ async function renderApiKeys(
 	extra: { newKey?: string; newMailPassword?: { username: string; password: string }; notice?: Notice } = {},
 ) {
 	const [settings, keys, mailPasswords] = await Promise.all([
-		loadSettings(c.env.DB),
+		pageSettings(c),
 		listApiKeys(c.env.DB),
 		listMailPasswords(c.env.DB),
 	]);
@@ -2123,7 +2174,7 @@ app.post("/aliases/bulk", async (c) => {
 	if (action === "destination") {
 		destination = value ? extractEmail(value) : null;
 		if (value && !destination) return done("notice.badDestination");
-		const own = [...(await loadSettings(db)).aliasDomains, ...ids.map(domainOf)];
+		const own = [...(c.get("settings") ?? (await loadSettings(db))).aliasDomains, ...ids.map(domainOf)];
 		if (destination && (isOwnAddress(destination, own) || ids.includes(destination))) return done("notice.loop");
 	}
 	const timestamp = now();
@@ -2175,7 +2226,7 @@ app.post("/aliases/:address/mode", async (c) => {
 
 app.post("/aliases/new", async (c) => {
 	const db = c.env.DB;
-	const settings = await loadSettings(db);
+	const settings = c.get("settings") ?? (await loadSettings(db));
 	const form = await c.req.parseBody();
 	const field = (name: string, max: number) => (typeof form[name] === "string" ? (form[name] as string).trim().slice(0, max) : "");
 	const domain = field("domain", 253).toLowerCase();
@@ -2216,7 +2267,7 @@ app.post("/aliases/:address/destination", async (c) => {
 	const raw = typeof form.destination === "string" ? form.destination.trim() : "";
 	const destination = raw ? extractEmail(raw) : null;
 	if (raw && !destination) return savedNotice(c, back, "notice.badDestination", false);
-	if (destination && (isOwnAddress(destination, [...(await loadSettings(c.env.DB)).aliasDomains, domainOf(address)]) || destination === address)) {
+	if (destination && (isOwnAddress(destination, [...(c.get("settings") ?? (await loadSettings(c.env.DB))).aliasDomains, domainOf(address)]) || destination === address)) {
 		return savedNotice(c, back, "notice.loop", false);
 	}
 	const saved = await c.env.DB.prepare("UPDATE aliases SET destination = ?, updated_at = ? WHERE address = ? AND deleted_at IS NULL").bind(destination, now(), address).run();
@@ -2302,7 +2353,7 @@ app.post("/aliases/:address/contacts", async (c) => {
 	if (!alias || alias.deleted_at) return c.notFound();
 	const base = `/aliases/${encodeURIComponent(alias.address)}`;
 	const form = await c.req.parseBody();
-	const settings = await loadSettings(c.env.DB);
+	const settings = c.get("settings") ?? (await loadSettings(c.env.DB));
 	const email = extractEmail(typeof form.email === "string" ? form.email : "");
 	if (!email || isOwnAddress(email, [...settings.aliasDomains, domainOf(alias.address)])) return redirectWithNotice(c, base, "notice.badContact");
 	const contact = await ensureContact(c.env.DB, alias.address, email, null, settings.includeSenderInReverseAlias);
@@ -2317,7 +2368,7 @@ app.post("/aliases/:address/contacts/:id/destination", async (c) => {
 	const raw = typeof form.destination === "string" ? form.destination.trim() : "";
 	const destination = raw ? extractEmail(raw) : null;
 	if (raw && !destination) return redirectWithNotice(c, base, "notice.badDestination");
-	const settings = await loadSettings(c.env.DB);
+	const settings = c.get("settings") ?? (await loadSettings(c.env.DB));
 	if (destination && isOwnAddress(destination, [...settings.aliasDomains, domainOf(address)])) return redirectWithNotice(c, base, "notice.destinationOnReverse");
 	const result = await c.env.DB
 		.prepare("UPDATE contacts SET destination = ? WHERE id = ? AND alias_address = ? AND EXISTS (SELECT 1 FROM aliases WHERE address = ? AND deleted_at IS NULL)")
@@ -2365,8 +2416,12 @@ export default {
 	async scheduled(_controller, env, ctx) {
 		ctx.waitUntil(
 			(async () => {
-				const config = await loadConfig(env);
-				const settings = await loadSettings(env.DB);
+				const [configRes, settingsRes] = await env.DB.batch<{ key: string; value: string }>([
+					env.DB.prepare("SELECT key, value FROM config"),
+					env.DB.prepare("SELECT key, value FROM settings"),
+				]);
+				const config = await loadConfig(env, configRes!.results);
+				const settings = settingsFromRows(settingsRes!.results);
 				await cleanUp(env.DB, now(), { env, config, settings });
 			})(),
 		);

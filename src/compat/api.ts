@@ -57,7 +57,7 @@ import {
 	type DomainView,
 } from "../domain-settings";
 import { resendStoredForward } from "../forward";
-import { getMailboxMessageByForwardId, readMailboxRaw } from "../mailbox";
+import { getMailboxMessageByForwardId, readMailboxRawBody } from "../mailbox";
 import {
 	ClientError,
 	cleanPrefix,
@@ -917,24 +917,20 @@ api.post("/v1/blocklist/delete/bulk", async (c) => {
 	requireAppSettings(c);
 	const body = await jsonBody(c);
 	const ids = Array.isArray(body.ids) ? [...new Set(body.ids.filter((id): id is string => typeof id === "string"))].slice(0, 100) : [];
-	const found: string[] = [];
-	for (let i = 0; i < ids.length; i += 90) {
-		const chunk = ids.slice(i, i + 90);
-		const { results } = await c.env.DB
-			.prepare(`SELECT id FROM blocklist WHERE id IN (${chunk.map(() => "?").join(", ")})`)
-			.bind(...chunk)
-			.all<{ id: string }>();
-		found.push(...results.map((row) => row.id));
+	const deleted: string[] = [];
+	if (ids.length) {
+		const statements: D1PreparedStatement[] = [];
+		for (let i = 0; i < ids.length; i += 90) {
+			const chunk = ids.slice(i, i + 90);
+			statements.push(c.env.DB.prepare(`DELETE FROM blocklist WHERE id IN (${chunk.map(() => "?").join(", ")}) RETURNING id`).bind(...chunk));
+		}
+		const results = await c.env.DB.batch(statements);
+		for (const res of results) {
+			for (const row of (res?.results ?? []) as { id: string }[]) deleted.push(row.id);
+		}
 	}
-	if (!found.length) return c.json({ message: "No blocklist entries found" }, 404);
-	for (let i = 0; i < found.length; i += 90) {
-		const chunk = found.slice(i, i + 90);
-		await c.env.DB
-			.prepare(`DELETE FROM blocklist WHERE id IN (${chunk.map(() => "?").join(", ")})`)
-			.bind(...chunk)
-			.run();
-	}
-	return c.json({ message: found.length === 1 ? "1 entry removed from blocklist" : `${found.length} entries removed from blocklist`, ids: found });
+	if (!deleted.length) return c.json({ message: "No blocklist entries found" }, 404);
+	return c.json({ message: deleted.length === 1 ? "1 entry removed from blocklist" : `${deleted.length} entries removed from blocklist`, ids: deleted });
 });
 
 api.get("/v1/domain-options", (c) => {
@@ -1370,8 +1366,16 @@ const bulkDone = (c: C, aliases: AliasView[], verb: string) =>
 
 api.post("/v1/aliases/get/bulk", async (c) => {
 	const { aliases } = await bulkAliases(c, true);
-	const labels = await labelsOf(c.env.DB, aliases.map((alias) => alias.address));
-	return c.json({ data: await Promise.all(aliases.map((alias) => addyAlias(c, alias, labels.get(alias.address) ?? []))) });
+	const addresses = aliases.map((alias) => alias.address);
+	const [labels, recipientsList, attachedMap] = await Promise.all([
+		labelsOf(c.env.DB, addresses),
+		listRecipients(c.env.DB, c.get("settings")),
+		attachedRecipientsMap(c.env.DB, addresses),
+	]);
+	const recipientsMap = new Map(recipientsList.map((r) => [r.email, r]));
+	return c.json({
+		data: await Promise.all(aliases.map((alias) => addyAlias(c, alias, labels.get(alias.address) ?? [], recipientsMap, attachedMap.get(alias.address) ?? []))),
+	});
 });
 
 for (const [action, verb, includeDeleted, run] of [
@@ -1673,10 +1677,19 @@ api.post("/v1/failed-deliveries/delete/bulk", async (c) => {
 	const input = await jsonBody(c);
 	const ids = Array.isArray(input.ids) ? [...new Set(input.ids.filter((id): id is string => typeof id === "string"))].slice(0, 100) : [];
 	if (!ids.length) throw new ClientError(422, "The ids field is required.");
+	const statements: D1PreparedStatement[] = [];
+	for (let i = 0; i < ids.length; i += 90) {
+		const chunk = ids.slice(i, i + 90);
+		statements.push(
+			c.env.DB
+				.prepare(`UPDATE forwards SET dismissed = 1 WHERE id IN (${chunk.map(() => "?").join(", ")}) AND status = 'failed' AND dismissed = 0 RETURNING id`)
+				.bind(...chunk),
+		);
+	}
+	const results = await c.env.DB.batch(statements);
 	const dismissed: string[] = [];
-	for (const id of ids) {
-		const res = await c.env.DB.prepare("UPDATE forwards SET dismissed = 1 WHERE id = ? AND status = 'failed' AND dismissed = 0").bind(id).run();
-		if (res.meta.changes) dismissed.push(id);
+	for (const res of results) {
+		for (const row of (res?.results ?? []) as { id: string }[]) dismissed.push(row.id);
 	}
 	if (!dismissed.length) return c.json({ message: "No failed deliveries found" }, 404);
 	return c.json({ message: `${dismissed.length} failed deliver${dismissed.length === 1 ? "y" : "ies"} deleted`, ids: dismissed });
@@ -1685,9 +1698,9 @@ api.get("/v1/failed-deliveries/:id/download", async (c) => {
 	const row = await c.env.DB.prepare(`${FAILED_SELECT} AND f.id = ?`).bind(c.req.param("id")).first<FailedRow>();
 	if (!row) throw new ClientError(404, "Not found");
 	const stored = await getMailboxMessageByForwardId(c.env.DB, row.id);
-	const raw = stored ? await readMailboxRaw(c.env, c.get("config"), stored) : null;
+	const raw = stored ? await readMailboxRawBody(c.env, c.get("config"), stored) : null;
 	if (!raw) return c.json({ message: "No stored copy of this message is available to download." }, 422);
-	return c.body(raw as Uint8Array<ArrayBuffer>, 200, {
+	return c.body(raw as ReadableStream<Uint8Array> | Uint8Array<ArrayBuffer>, 200, {
 		"Content-Type": "message/rfc822",
 		"Content-Disposition": `attachment; filename="failed-${row.id}.eml"`,
 		"Cache-Control": "no-store",

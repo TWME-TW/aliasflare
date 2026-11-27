@@ -32,6 +32,8 @@ const allowPlaintextAuth = envBool("ALLOW_PLAINTEXT_AUTH", false);
 const enableImap = envBool("ENABLE_IMAP", true);
 const enablePop3 = envBool("ENABLE_POP3", false);
 const enableSmtp = envBool("ENABLE_SMTP", true);
+const rawIdlePoll = Number.parseInt(process.env.IMAP_IDLE_POLL_MS ?? "", 10);
+const idlePollMs = Number.isInteger(rawIdlePoll) && rawIdlePoll >= 15_000 ? rawIdlePoll : 60_000;
 
 let tlsOptions: BridgeTlsOptions | undefined;
 const certFile = process.env.TLS_CERT_FILE?.trim();
@@ -58,9 +60,9 @@ function start(name: string, server: net.Server, port: number) {
 }
 
 if (enableImap) {
-	start("IMAP (STARTTLS)", createImapServer({ gateway, tls: tlsOptions, allowPlaintextAuth }, false), envPort("IMAP_PORT", 143));
+	start("IMAP (STARTTLS)", createImapServer({ gateway, tls: tlsOptions, allowPlaintextAuth, idlePollMs }, false), envPort("IMAP_PORT", 143));
 	if (tlsOptions) {
-		start("IMAPS (TLS)", createImapServer({ gateway, tls: tlsOptions, allowPlaintextAuth }, true), envPort("IMAPS_PORT", 993));
+		start("IMAPS (TLS)", createImapServer({ gateway, tls: tlsOptions, allowPlaintextAuth, idlePollMs }, true), envPort("IMAPS_PORT", 993));
 	}
 }
 if (enablePop3) {

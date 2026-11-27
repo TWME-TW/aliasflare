@@ -124,7 +124,8 @@ export async function verifyMailPassword(
 	if (protocol === "smtp" && !row.allow_smtp) return null;
 
 	const moved = !!country && country !== row.last_country;
-	if ((row.last_used_at ?? 0) < now() - 60 || moved) {
+	// Match sessions' 5-minute throttle so active IMAP/Bridge polling does not burn D1 writes.
+	if ((row.last_used_at ?? 0) < now() - 300 || moved) {
 		await db
 			.prepare("UPDATE mail_passwords SET last_used_at = ?, last_country = COALESCE(?, last_country) WHERE id = ?")
 			.bind(now(), country, row.id)

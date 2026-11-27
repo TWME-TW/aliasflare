@@ -68,6 +68,7 @@ export function isSafeRegex(pattern: string): boolean {
 	const stack: { hasQuantifier: boolean; hasAlternation: boolean }[] = [];
 	let inClass = false;
 	let groupCount = 0;
+	let unboundedQuantifiers = 0;
 	let lastWasQuantifier = false;
 	for (let i = 0; i < pattern.length; i += 1) {
 		const ch = pattern[i]!;
@@ -104,8 +105,9 @@ export function isSafeRegex(pattern: string): boolean {
 			const next = pattern[i + 1];
 			const followedByRepeat = next === "+" || next === "*" || next === "{";
 			if (followedByRepeat && (closed.hasQuantifier || closed.hasAlternation)) return false;
-			if (stack.length > 0 && (closed.hasQuantifier || followedByRepeat)) {
-				stack[stack.length - 1]!.hasQuantifier = true;
+			if (stack.length > 0) {
+				if (closed.hasQuantifier || followedByRepeat) stack[stack.length - 1]!.hasQuantifier = true;
+				if (closed.hasAlternation) stack[stack.length - 1]!.hasAlternation = true;
 			}
 			lastWasQuantifier = false;
 			continue;
@@ -113,6 +115,7 @@ export function isSafeRegex(pattern: string): boolean {
 		const isQuantifier = ch === "+" || ch === "*" || ch === "{";
 		if (isQuantifier) {
 			if (lastWasQuantifier) return false;
+			let isUnbounded = ch === "+" || ch === "*";
 			if (ch === "{") {
 				const close = pattern.indexOf("}", i + 1);
 				if (close < 0) return false;
@@ -122,7 +125,12 @@ export function isSafeRegex(pattern: string): boolean {
 				const min = Number(minStr);
 				const max = maxStr === undefined ? min : maxStr === "" ? 100 : Number(maxStr);
 				if (min > 100 || max > 100 || max < min) return false;
+				if (maxStr === "" || max - min > 20) isUnbounded = true;
 				i = close;
+			}
+			if (isUnbounded) {
+				unboundedQuantifiers += 1;
+				if (unboundedQuantifiers > 4) return false;
 			}
 			if (stack.length > 0) stack[stack.length - 1]!.hasQuantifier = true;
 			lastWasQuantifier = true;

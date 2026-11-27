@@ -6,7 +6,7 @@ import { domainOf, extractEmail, hostnameOf, safeHttpsUrl } from "./format";
 export { safeHttpsUrl };
 import type { Translate } from "./i18n";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
-import { loadSettings, unsubscribeRuleFor, type UnsubscribeBehavior, type UnsubscribeFallback } from "./settings";
+import { loadSettings, unsubscribeRuleFor, type Settings, type UnsubscribeBehavior, type UnsubscribeFallback } from "./settings";
 import { isOwnAddress } from "./domains";
 import { discard } from "./streams";
 
@@ -52,10 +52,11 @@ export async function resolveLink(
 	kind: "unsubscribe" | "action",
 	token: string,
 	blockedHosts: string[] = [],
+	preloadedSettings?: Settings,
 ): Promise<LinkTarget | null> {
 	const payload = await verifyToken(config.signingSecret, kind, token);
 	if (!payload) return null;
-	const settings = await loadSettings(env.DB);
+	const settings = preloadedSettings ?? (await loadSettings(env.DB));
 	let action: LinkAction;
 	let forwardId: string;
 	if (kind === "unsubscribe") {

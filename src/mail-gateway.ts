@@ -11,9 +11,11 @@ import type { AppEnv } from "./auth";
 import { ensureAlias, newId, now, recordEvent, type AliasRow } from "./db";
 import { bytesToBase64 } from "./crypto";
 import { getDomainRow } from "./domain-settings";
-import { cleanDisplayName, domainOf, extractEmail, normalizeEmail } from "./format";
+import { cleanAttachment, cleanDisplayName, cleanSubjectLine, domainOf, extractEmail, normalizeEmail, parseMessageIds } from "./format";
 import {
+	allFolderUidStates,
 	deleteMailboxMessage,
+	deleteMailboxMessages,
 	folderStats,
 	folderUidState,
 	getMailboxMessage,
@@ -22,6 +24,7 @@ import {
 	moveMailboxMessage,
 	parseFlags,
 	readMailboxRaw,
+	readMailboxRawBody,
 	storeMailboxMessage,
 	updateMailboxFlags,
 	type MailboxFolder,
@@ -30,13 +33,15 @@ import {
 import { mailflareReady } from "./config";
 import { mailflareConfig, sendViaMailflare } from "./mailflare";
 import { parseMailCredentials, verifyMailPassword, type MailPasswordRow, type MailProtocol } from "./mail-passwords";
-import { sendOutbound, type OutboundAttachment } from "./outbound";
+import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments, type OutboundAttachment } from "./outbound";
 import { runRules } from "./rules";
 import { clientKey } from "./ratelimit";
 import { loadSettings, type Settings } from "./settings";
-import { readLimited } from "./streams";
+import { readLimited, readTextLimited } from "./streams";
 
 const MAX_GATEWAY_RAW_BYTES = 10 * 1024 * 1024;
+const MAX_GATEWAY_JSON_BODY_BYTES = Math.ceil((MAX_GATEWAY_RAW_BYTES * 4) / 3) + 64 * 1024;
+const MAX_GATEWAY_CONTROL_JSON_BYTES = 16 * 1024;
 const MAX_SMTP_RECIPIENTS = 20;
 
 const SPECIAL_USE: Record<MailboxFolder, string | null> = {
@@ -53,6 +58,21 @@ type GatewayEnv = AppEnv & {
 		mailSettings: Settings;
 	};
 };
+
+async function readGatewayJson<T>(
+	c: Context<GatewayEnv>,
+	maxBytes: number,
+): Promise<{ ok: true; data: T } | { ok: false; status: 400 | 413; error: string }> {
+	const text = await readTextLimited(c.req.raw, maxBytes);
+	if (text === null) return { ok: false, status: 413, error: "Request body too large" };
+	try {
+		const parsed = JSON.parse(text);
+		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { ok: false, status: 400, error: "Invalid JSON" };
+		return { ok: true, data: parsed as T };
+	} catch {
+		return { ok: false, status: 400, error: "Invalid JSON" };
+	}
+}
 
 function base64ToUint8Array(b64: string): Uint8Array | null {
 	try {
@@ -101,16 +121,12 @@ mailGateway.use("*", async (c, next) => {
 	// clientKey buckets IPv6 per /64: the bridge's egress hosts must not dodge the limit by
 	// rotating addresses within their /64.
 	const ip = clientKey(c.req.header("CF-Connecting-IP"));
-	if (c.env.API_RATE_LIMIT) {
-		const { success } = await c.env.API_RATE_LIMIT.limit({ key: `mailgw:${ip}` });
-		if (!success) return c.json({ error: "Rate limit exceeded" }, 429);
-	}
 	const creds = parseMailCredentials(c.req.raw.headers);
 	if (!creds) {
 		return c.json({ error: "Authentication required" }, 401, { "WWW-Authenticate": 'Basic realm="aliasflare-mail"' });
 	}
 	const protocol = protocolForPath(new URL(c.req.url).pathname);
-	const settings = await loadSettings(c.env.DB);
+	const settings = c.get("settings") ?? (await loadSettings(c.env.DB));
 
 	if (protocol === "imap" && (!settings.mailboxEnabled || !settings.imapEnabled)) {
 		return c.json({ error: "IMAP is disabled" }, 403);
@@ -125,6 +141,13 @@ mailGateway.use("*", async (c, next) => {
 	const country = ((c.req.raw as Request & { cf?: { country?: string } }).cf?.country ?? "").toUpperCase() || null;
 	const row = await verifyMailPassword(c.env.DB, creds, protocol ?? undefined, country);
 	if (!row) {
+		// Failures are limited per address and username, never by locking out the address: every
+		// mail app behind one bridge shares its IP, so one wrong password must not lock out the rest.
+		// (Mail App Passwords are long and random, so guessing one is not the threat this guards.)
+		if (c.env.LOGIN_RATE_LIMIT) {
+			const { success } = await c.env.LOGIN_RATE_LIMIT.limit({ key: `mailgw:${ip}:${creds.username ?? ""}` });
+			if (!success) return c.json({ error: "Too many failed attempts" }, 429);
+		}
 		return c.json({ error: "Invalid credentials or protocol not permitted" }, 401);
 	}
 	c.set("mailCred", row);
@@ -157,19 +180,15 @@ mailGateway.get("/status", async (c) => {
 
 mailGateway.get("/imap/folders", async (c) => {
 	const db = c.env.DB;
-	const stats = await folderStats(db);
-	const folders = [];
-	for (const name of MAILBOX_FOLDERS) {
-		const uidState = await folderUidState(db, name);
-		folders.push({
-			name,
-			specialUse: SPECIAL_USE[name],
-			uidvalidity: uidState.uidvalidity,
-			uidnext: uidState.uidnext,
-			exists: stats[name].total,
-			unseen: stats[name].unread,
-		});
-	}
+	const [stats, uidStates] = await Promise.all([folderStats(db), allFolderUidStates(db)]);
+	const folders = MAILBOX_FOLDERS.map((name) => ({
+		name,
+		specialUse: SPECIAL_USE[name],
+		uidvalidity: uidStates[name].uidvalidity,
+		uidnext: uidStates[name].uidnext,
+		exists: stats[name].total,
+		unseen: stats[name].unread,
+	}));
 	return c.json({ folders });
 });
 
@@ -210,13 +229,14 @@ mailGateway.get("/imap/folders/:folder/messages", async (c) => {
 mailGateway.get("/imap/messages/:id/raw", async (c) => {
 	const msg = await getMailboxMessage(c.env.DB, c.req.param("id"));
 	if (!msg) return c.json({ error: "Message not found" }, 404);
-	const raw = (await readMailboxRaw(c.env, c.get("config"), msg)) ?? synthesizeHeadersOnlyRaw(msg);
-	return c.body(raw as Uint8Array<ArrayBuffer>, 200, { "Content-Type": "message/rfc822" });
+	const raw = (await readMailboxRawBody(c.env, c.get("config"), msg)) ?? synthesizeHeadersOnlyRaw(msg);
+	return c.body(raw as ReadableStream<Uint8Array> | Uint8Array<ArrayBuffer>, 200, { "Content-Type": "message/rfc822" });
 });
 
 mailGateway.patch("/imap/messages/:id/flags", async (c) => {
-	const body = await c.req.json<{ add?: string[]; remove?: string[]; set?: string[] }>().catch(() => null);
-	if (!body || typeof body !== "object") return c.json({ error: "Invalid JSON" }, 400);
+	const parsed = await readGatewayJson<{ add?: string[]; remove?: string[]; set?: string[] }>(c, MAX_GATEWAY_CONTROL_JSON_BYTES);
+	if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+	const body = parsed.data;
 	const cleanList = (arr?: unknown) =>
 		Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 64).slice(0, 32) : undefined;
 	const updated = await updateMailboxFlags(c.env.DB, c.req.param("id"), {
@@ -229,16 +249,20 @@ mailGateway.patch("/imap/messages/:id/flags", async (c) => {
 });
 
 mailGateway.post("/imap/messages/:id/move", async (c) => {
-	const body = await c.req.json<{ folder?: string }>().catch(() => null);
-	if (!body || !isMailboxFolder(body.folder)) return c.json({ error: "Invalid folder" }, 400);
+	const parsed = await readGatewayJson<{ folder?: string }>(c, MAX_GATEWAY_CONTROL_JSON_BYTES);
+	if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+	const body = parsed.data;
+	if (!isMailboxFolder(body.folder)) return c.json({ error: "Invalid folder" }, 400);
 	const moved = await moveMailboxMessage(c.env.DB, c.req.param("id"), body.folder);
 	if (!moved) return c.json({ error: "Message not found" }, 404);
 	return c.json({ id: moved.id, folder: moved.folder, uid: moved.uid });
 });
 
 mailGateway.post("/imap/messages/:id/copy", async (c) => {
-	const body = await c.req.json<{ folder?: string }>().catch(() => null);
-	if (!body || !isMailboxFolder(body.folder)) return c.json({ error: "Invalid folder" }, 400);
+	const parsed = await readGatewayJson<{ folder?: string }>(c, MAX_GATEWAY_CONTROL_JSON_BYTES);
+	if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+	const body = parsed.data;
+	if (!isMailboxFolder(body.folder)) return c.json({ error: "Invalid folder" }, 400);
 	const original = await getMailboxMessage(c.env.DB, c.req.param("id"));
 	if (!original) return c.json({ error: "Message not found" }, 404);
 	const raw = await readMailboxRaw(c.env, c.get("config"), original);
@@ -263,15 +287,13 @@ mailGateway.post("/imap/folders/:folder/expunge", async (c) => {
 	const folder = c.req.param("folder");
 	if (!isMailboxFolder(folder)) return c.json({ error: "Unknown folder" }, 404);
 	const { results } = await c.env.DB.prepare(
-		"SELECT id, uid FROM mailbox_messages WHERE folder = ? AND flags LIKE '%\\Deleted%' ORDER BY uid ASC LIMIT 500",
+		"SELECT id, uid, storage_kind, storage_key FROM mailbox_messages WHERE folder = ? AND flags LIKE '%\\Deleted%' ORDER BY uid ASC LIMIT 500",
 	)
 		.bind(folder)
-		.all<{ id: string; uid: number }>();
-	const expunged: number[] = [];
-	for (const row of results) {
-		await deleteMailboxMessage(c.env, c.get("config"), row.id);
-		expunged.push(row.uid);
-	}
+		.all<{ id: string; uid: number; storage_kind: string; storage_key: string | null }>();
+	const { deletedIds } = await deleteMailboxMessages(c.env, c.get("config"), results);
+	const deletedSet = new Set(deletedIds);
+	const expunged = results.filter((row) => deletedSet.has(row.id)).map((row) => row.uid);
 	return c.json({ folder, expunged });
 });
 
@@ -283,8 +305,10 @@ mailGateway.post("/imap/folders/:folder/append", async (c) => {
 	let flags: string[] = [];
 
 	if (contentType.includes("application/json")) {
-		const body = await c.req.json<{ raw?: string; flags?: string[] }>().catch(() => null);
-		if (!body?.raw || typeof body.raw !== "string") return c.json({ error: "Missing raw message" }, 400);
+		const parsed = await readGatewayJson<{ raw?: string; flags?: string[] }>(c, MAX_GATEWAY_JSON_BODY_BYTES);
+		if (!parsed.ok) return c.json({ error: parsed.error }, parsed.status);
+		const body = parsed.data;
+		if (!body.raw || typeof body.raw !== "string") return c.json({ error: "Missing raw message" }, 400);
 		rawBytes = base64ToUint8Array(body.raw);
 		if (!rawBytes || rawBytes.byteLength > MAX_GATEWAY_RAW_BYTES) return c.json({ error: "Invalid or oversized message" }, 413);
 		if (Array.isArray(body.flags)) flags = body.flags.filter((f): f is string => typeof f === "string").slice(0, 32);
@@ -340,8 +364,8 @@ async function pop3Message(c: Context<GatewayEnv>, id: string) {
 mailGateway.get("/pop3/messages/:id/raw", async (c) => {
 	const msg = await pop3Message(c, c.req.param("id"));
 	if (!msg) return c.json({ error: "Message not found" }, 404);
-	const raw = (await readMailboxRaw(c.env, c.get("config"), msg)) ?? synthesizeHeadersOnlyRaw(msg);
-	return c.body(raw as Uint8Array<ArrayBuffer>, 200, { "Content-Type": "message/rfc822" });
+	const raw = (await readMailboxRawBody(c.env, c.get("config"), msg)) ?? synthesizeHeadersOnlyRaw(msg);
+	return c.body(raw as ReadableStream<Uint8Array> | Uint8Array<ArrayBuffer>, 200, { "Content-Type": "message/rfc822" });
 });
 
 mailGateway.delete("/pop3/messages/:id", async (c) => {
@@ -376,8 +400,10 @@ mailGateway.post("/smtp/send", async (c) => {
 		return c.json({ error: "Hourly SMTP rate limit exceeded" }, 429);
 	}
 
-	const body = await c.req.json<{ mailFrom?: string; rcptTo?: string[]; raw?: string }>().catch(() => null);
-	if (!body || typeof body.mailFrom !== "string" || !Array.isArray(body.rcptTo) || typeof body.raw !== "string") {
+	const jsonRes = await readGatewayJson<{ mailFrom?: string; rcptTo?: string[]; raw?: string }>(c, MAX_GATEWAY_JSON_BODY_BYTES);
+	if (!jsonRes.ok) return c.json({ error: jsonRes.error }, jsonRes.status);
+	const body = jsonRes.data;
+	if (typeof body.mailFrom !== "string" || !Array.isArray(body.rcptTo) || typeof body.raw !== "string") {
 		return c.json({ error: "Expected { mailFrom, rcptTo, raw }" }, 400);
 	}
 	const mailFrom = extractEmail(body.mailFrom);
@@ -417,57 +443,76 @@ mailGateway.post("/smtp/send", async (c) => {
 		return c.json({ error: "Unreadable MIME message" }, 400);
 	}
 
-	const subject = parsed.subject?.slice(0, 500) || "(no subject)";
+	const subject = cleanSubjectLine(parsed.subject).slice(0, 500) || "(no subject)";
 	// The name goes into a From header: control characters, quotes and brackets are cleaned out.
 	const displayName = cleanDisplayName(parsed.from?.name || alias.name || settings.defaultFromName) ?? "";
 	const fromHeader = displayName ? { name: displayName, email: alias.address } : alias.address;
 
-	// Apply rules configured for outgoing sends/replies.
-	const rules = await runRules(db, "sends", {
-		sender: alias.address,
-		senders: [alias.address],
-		displayFrom: displayName || null,
-		subject,
-		alias: alias.address,
-		aliasDescription: alias.note,
-		recipient: recipients[0] ?? "",
-	});
-	if (rules.block) {
-		return c.json({ error: `Blocked by rule: ${rules.block}` }, 403);
+	// Apply rules configured for outgoing sends/replies across every recipient so secondary
+	// recipients cannot bypass a block rule.
+	let removeAttachments = false;
+	let ruleSubject: string | null = null;
+	for (const rcpt of recipients) {
+		const rules = await runRules(db, "sends", {
+			sender: alias.address,
+			senders: [alias.address],
+			displayFrom: displayName || null,
+			subject,
+			alias: alias.address,
+			aliasDescription: alias.note,
+			recipient: rcpt,
+		});
+		if (rules.block) {
+			return c.json({ error: `Blocked by rule: ${rules.block}` }, 403);
+		}
+		if (rules.removeAttachments) removeAttachments = true;
+		if (ruleSubject === null && rules.subject) ruleSubject = rules.subject;
 	}
+	const effectiveSubject = cleanSubjectLine(ruleSubject ?? subject).slice(0, 500) || "(no subject)";
 
-	const attachments: OutboundAttachment[] = (rules.removeAttachments ? [] : parsed.attachments).map((att) => {
+	const viaMailflare = !!(alias.mailbox_id && mailflareReady(config));
+	const rawAttachments = removeAttachments ? [] : parsed.attachments;
+	const maxAttachments = viaMailflare ? 10 : Math.min(50, OUTBOUND_ATTACHMENT_LIMITS[config.outboundProvider]);
+	if (rawAttachments.length > maxAttachments) {
+		return c.json({ error: `Too many attachments: at most ${maxAttachments} per message` }, 400);
+	}
+	const attachments: OutboundAttachment[] = rawAttachments.map((att, index) => {
+		const cleaned = cleanAttachment(att, index);
 		const rawBytesAtt = typeof att.content === "string" ? new TextEncoder().encode(att.content) : new Uint8Array(att.content);
 		const copy = new Uint8Array(rawBytesAtt.byteLength);
 		copy.set(rawBytesAtt);
 		return {
-			disposition: att.disposition === "inline" ? "inline" : "attachment",
-			filename: att.filename || "attachment",
-			type: att.mimeType || "application/octet-stream",
+			disposition: att.disposition === "inline" && cleaned.contentId ? "inline" : "attachment",
+			filename: cleaned.filename,
+			type: cleaned.type,
 			content: copy.buffer,
-			...(att.contentId ? { contentId: att.contentId } : {}),
+			...(cleaned.contentId ? { contentId: cleaned.contentId } : {}),
 		};
 	});
+	const refused = viaMailflare ? null : unsendableAttachments(config.outboundProvider, attachments.map((att) => att.filename));
+	if (refused) return c.json({ error: refused }, 400);
 
+	const inReplyTo = parseMessageIds(parsed.inReplyTo)[0];
+	const references = parseMessageIds(parsed.references).slice(-10);
 	const extraHeaders: Record<string, string> = {};
-	if (parsed.inReplyTo) extraHeaders["In-Reply-To"] = parsed.inReplyTo;
-	if (parsed.references) extraHeaders.References = parsed.references;
+	if (inReplyTo) extraHeaders["In-Reply-To"] = inReplyTo;
+	if (references.length) extraHeaders.References = references.join(" ");
 
 	const sentIds: string[] = [];
 	const notSent: string[] = [];
 	for (const to of recipients) {
 		const cleanTo = normalizeEmail(to);
 		try {
-			if (alias.mailbox_id && mailflareReady(config)) {
+			if (viaMailflare) {
 				await sendViaMailflare(mailflareConfig(config), {
 					mailboxId: alias.mailbox_id,
 					from: displayName ? `"${displayName}" <${alias.address}>` : alias.address,
 					to: [cleanTo],
-					subject: rules.subject ?? subject,
+					subject: effectiveSubject,
 					text: parsed.text || undefined,
 					html: parsed.html || undefined,
-					...(parsed.inReplyTo ? { inReplyTo: parsed.inReplyTo } : {}),
-					...(parsed.references ? { references: parsed.references.split(/\s+/).filter(Boolean) } : {}),
+					...(inReplyTo ? { inReplyTo } : {}),
+					...(references.length ? { references } : {}),
 					...(attachments.length
 						? {
 								attachments: attachments.map((att) => ({
@@ -483,7 +528,7 @@ mailGateway.post("/smtp/send", async (c) => {
 				const res = await sendOutbound(c.env, config, {
 					from: fromHeader,
 					to: cleanTo,
-					subject: rules.subject ?? subject,
+					subject: effectiveSubject,
 					text: parsed.text || undefined,
 					html: parsed.html || undefined,
 					headers: Object.keys(extraHeaders).length ? extraHeaders : undefined,
@@ -504,7 +549,7 @@ mailGateway.post("/smtp/send", async (c) => {
 				fromAddress: alias.address,
 				fromName: displayName || null,
 				toAddress: recipients.join(", "),
-				subject,
+				subject: effectiveSubject,
 				reason: "smtp_failed",
 				reasonDetail: detail,
 				raw: rawBytes,
@@ -532,7 +577,7 @@ mailGateway.post("/smtp/send", async (c) => {
 			fromAddress: alias.address,
 			fromName: displayName || null,
 			toAddress: recipients.join(", "),
-			subject: rules.subject ?? subject,
+			subject: effectiveSubject,
 			reason: "smtp_sent",
 			flags: ["\\Seen"],
 			raw: rawBytes,

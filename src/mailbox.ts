@@ -8,7 +8,7 @@ import type { AppConfig } from "./config";
 import { newId, now } from "./db";
 import { cleanSubjectLine } from "./format";
 import type { Settings } from "./settings";
-import { deleteRawBlob, getRawBlob, putRawBlob, resolveStorageBackend } from "./storage";
+import { deleteRawBlob, getRawBlob, getRawBlobBody, prepareD1BlobPut, putRawBlob, resolveStorageBackend } from "./storage";
 
 export const MAILBOX_FOLDERS = ["INBOX", "Skipped", "Failed", "Sent", "Trash"] as const;
 export type MailboxFolder = (typeof MAILBOX_FOLDERS)[number];
@@ -86,6 +86,11 @@ export function shouldStoreSkipped(settings: Settings, kind: SkipReasonKind): bo
 
 /** Allocates the next monotonic IMAP UID for a folder (initializes UIDVALIDITY on first use). */
 export async function nextFolderUid(db: D1Database, folder: MailboxFolder): Promise<{ uid: number; uidvalidity: number }> {
+	const existing = await db
+		.prepare("UPDATE mailbox_uid_state SET uidnext = uidnext + 1 WHERE folder = ? RETURNING uidnext - 1 AS uid, uidvalidity")
+		.bind(folder)
+		.first<{ uid: number; uidvalidity: number }>();
+	if (existing) return { uid: Number(existing.uid), uidvalidity: Number(existing.uidvalidity) };
 	const ts = now();
 	await db
 		.prepare("INSERT INTO mailbox_uid_state (folder, uidvalidity, uidnext) VALUES (?, ?, 1) ON CONFLICT (folder) DO NOTHING")
@@ -98,8 +103,13 @@ export async function nextFolderUid(db: D1Database, folder: MailboxFolder): Prom
 	return { uid: Number(row?.uid ?? 1), uidvalidity: Number(row?.uidvalidity ?? ts) };
 }
 
-/** Returns UIDVALIDITY and UIDNEXT for a folder. */
+/** Returns UIDVALIDITY and UIDNEXT for a folder without writing unless the folder is uninitialized. */
 export async function folderUidState(db: D1Database, folder: MailboxFolder): Promise<{ uidvalidity: number; uidnext: number }> {
+	const existing = await db
+		.prepare("SELECT uidvalidity, uidnext FROM mailbox_uid_state WHERE folder = ?")
+		.bind(folder)
+		.first<{ uidvalidity: number; uidnext: number }>();
+	if (existing) return { uidvalidity: Number(existing.uidvalidity), uidnext: Number(existing.uidnext) };
 	const ts = now();
 	await db
 		.prepare("INSERT INTO mailbox_uid_state (folder, uidvalidity, uidnext) VALUES (?, ?, 1) ON CONFLICT (folder) DO NOTHING")
@@ -110,6 +120,37 @@ export async function folderUidState(db: D1Database, folder: MailboxFolder): Pro
 		.bind(folder)
 		.first<{ uidvalidity: number; uidnext: number }>();
 	return { uidvalidity: Number(row?.uidvalidity ?? ts), uidnext: Number(row?.uidnext ?? 1) };
+}
+
+/** Returns UIDVALIDITY and UIDNEXT for every folder in one read (initializing missing rows in one batch). */
+export async function allFolderUidStates(db: D1Database): Promise<Record<MailboxFolder, { uidvalidity: number; uidnext: number }>> {
+	const { results } = await db
+		.prepare("SELECT folder, uidvalidity, uidnext FROM mailbox_uid_state")
+		.all<{ folder: string; uidvalidity: number; uidnext: number }>();
+	const byFolder = new Map<MailboxFolder, { uidvalidity: number; uidnext: number }>();
+	for (const row of results) {
+		if (isMailboxFolder(row.folder)) byFolder.set(row.folder, { uidvalidity: Number(row.uidvalidity), uidnext: Number(row.uidnext) });
+	}
+	const missing = MAILBOX_FOLDERS.filter((folder) => !byFolder.has(folder));
+	if (missing.length) {
+		const ts = now();
+		await db.batch([
+			...missing.map((folder) =>
+				db.prepare("INSERT INTO mailbox_uid_state (folder, uidvalidity, uidnext) VALUES (?, ?, 1) ON CONFLICT (folder) DO NOTHING").bind(folder, ts),
+			),
+		]);
+		const refreshed = await db
+			.prepare("SELECT folder, uidvalidity, uidnext FROM mailbox_uid_state")
+			.all<{ folder: string; uidvalidity: number; uidnext: number }>();
+		for (const row of refreshed.results) {
+			if (isMailboxFolder(row.folder)) byFolder.set(row.folder, { uidvalidity: Number(row.uidvalidity), uidnext: Number(row.uidnext) });
+		}
+	}
+	const ts = now();
+	return Object.fromEntries(MAILBOX_FOLDERS.map((folder) => [folder, byFolder.get(folder) ?? { uidvalidity: ts, uidnext: 1 }])) as Record<
+		MailboxFolder,
+		{ uidvalidity: number; uidnext: number }
+	>;
 }
 
 function extractHeaderBlock(raw: Uint8Array): string {
@@ -124,6 +165,49 @@ function makeSnippet(text?: string | null, html?: string | null): string {
 	return source.replace(/\s+/g, " ").trim().slice(0, 300);
 }
 
+/**
+ * Deletes a batch of mailbox messages and their stored blobs (R2 in one delete call, S3 within
+ * subrequest budget, and D1 blobs + metadata in grouped IN (...) batches).
+ */
+export async function deleteMailboxMessages(
+	env: Env,
+	config: AppConfig,
+	items: { id: string; storage_kind: string; storage_key: string | null }[],
+	s3Budget = config.workersPlan === "free" ? 25 : 400,
+): Promise<{ deletedIds: string[]; s3Remaining: number }> {
+	if (!items.length) return { deletedIds: [], s3Remaining: s3Budget };
+	const deletedIds: string[] = [];
+	const deletedSet = new Set<string>();
+	let remainingS3 = s3Budget;
+	for (const item of items) {
+		if (item.storage_kind === "s3" && item.storage_key) {
+			if (remainingS3 <= 0) break;
+			remainingS3 -= 1;
+			await deleteRawBlob(env, config, item);
+		}
+		deletedIds.push(item.id);
+		deletedSet.add(item.id);
+	}
+	if (!deletedIds.length) return { deletedIds, s3Remaining: remainingS3 };
+	const r2Keys = items
+		.filter((item) => deletedSet.has(item.id) && item.storage_kind === "r2" && item.storage_key)
+		.map((item) => item.storage_key!);
+	if (r2Keys.length && env.MAILBOX_BUCKET) {
+		await env.MAILBOX_BUCKET.delete(r2Keys.length === 1 ? r2Keys[0]! : r2Keys).catch(() => undefined);
+	}
+	const statements: D1PreparedStatement[] = [];
+	for (let k = 0; k < deletedIds.length; k += 100) {
+		const ids = deletedIds.slice(k, k + 100);
+		const marks = ids.map(() => "?").join(", ");
+		statements.push(env.DB.prepare(`DELETE FROM mailbox_blobs WHERE message_id IN (${marks})`).bind(...ids));
+		statements.push(env.DB.prepare(`DELETE FROM mailbox_messages WHERE id IN (${marks})`).bind(...ids));
+	}
+	for (let i = 0; i < statements.length; i += 100) {
+		await env.DB.batch(statements.slice(i, i + 100));
+	}
+	return { deletedIds, s3Remaining: remainingS3 };
+}
+
 /** Enforces mailboxQuotaMb before inserting a new blob: either evicts oldest messages or refuses blob storage. */
 async function enforceQuota(env: Env, config: AppConfig, settings: Settings, incomingBytes: number): Promise<boolean> {
 	const quotaBytes = settings.mailboxQuotaMb * 1024 * 1024;
@@ -133,17 +217,24 @@ async function enforceQuota(env: Env, config: AppConfig, settings: Settings, inc
 	if (current + incomingBytes <= quotaBytes) return true;
 	if (settings.mailboxQuotaPolicy === "stop_storing") return false;
 
-	// Evict oldest messages (Trash first, then Skipped, then others) until under quota.
+	// Evict oldest messages (Trash first, then Skipped, then others) in one batched deletion until under quota.
 	const { results } = await env.DB.prepare(
 		`SELECT id, size_bytes, storage_kind, storage_key FROM mailbox_messages
 		 WHERE storage_kind != 'headers_only'
 		 ORDER BY CASE folder WHEN 'Trash' THEN 0 WHEN 'Skipped' THEN 1 ELSE 2 END ASC, created_at ASC LIMIT 50`,
 	).all<{ id: string; size_bytes: number; storage_kind: string; storage_key: string | null }>();
+	const toEvict: { id: string; size_bytes: number; storage_kind: string; storage_key: string | null }[] = [];
 	for (const candidate of results) {
 		if (current + incomingBytes <= quotaBytes) break;
-		await deleteRawBlob(env, config, candidate);
-		await env.DB.prepare("DELETE FROM mailbox_messages WHERE id = ?").bind(candidate.id).run();
+		toEvict.push(candidate);
 		current -= Number(candidate.size_bytes ?? 0);
+	}
+	if (toEvict.length) {
+		const { deletedIds } = await deleteMailboxMessages(env, config, toEvict, config.workersPlan === "free" ? 10 : 50);
+		if (deletedIds.length < toEvict.length) {
+			const deletedSet = new Set(deletedIds);
+			for (const item of toEvict) if (!deletedSet.has(item.id)) current += Number(item.size_bytes ?? 0);
+		}
 	}
 	return current + incomingBytes <= quotaBytes;
 }
@@ -189,6 +280,8 @@ export async function storeMailboxMessage(
 	const toAddress = (input.toAddress || input.aliasAddress || "").trim().toLowerCase().slice(0, 320);
 	const subject = cleanSubjectLine(input.subject ?? parsed?.subject ?? "").slice(0, 500) || "(no subject)";
 	const snippet = input.snippet ?? makeSnippet(parsed?.text, parsed?.html);
+	const flags = [...(input.flags ?? [])];
+	const reasonDetail = input.reasonDetail?.slice(0, 1000) ?? null;
 
 	const id = newId("mb");
 	const { uid } = await nextFolderUid(env.DB, input.folder);
@@ -201,52 +294,96 @@ export async function storeMailboxMessage(
 	let storageKind: "r2" | "s3" | "d1" | "headers_only" = "headers_only";
 	let storageKey: string | null = null;
 	let rawHeaders: string | null = rawBytes ? extractHeaderBlock(rawBytes) : null;
-
-	// Insert the message metadata row first so mailbox_blobs foreign key succeeds for D1 storage.
-	await env.DB.prepare(
-		`INSERT INTO mailbox_messages (id, folder, uid, alias_address, forward_id, from_address, from_name, to_address, subject, snippet, reason, reason_detail, flags, size_bytes, storage_kind, storage_key, raw_headers, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'headers_only', NULL, ?, ?, ?)`,
-	)
-		.bind(
-			id,
-			input.folder,
-			uid,
-			input.aliasAddress ?? null,
-			input.forwardId ?? null,
-			fromAddress,
-			fromName,
-			toAddress,
-			subject,
-			snippet,
-			input.reason ?? null,
-			input.reasonDetail?.slice(0, 1000) ?? null,
-			JSON.stringify(input.flags ?? []),
-			sizeBytes,
-			rawHeaders,
-			ts,
-			ts,
-		)
-		.run();
+	let d1BlobStmt: D1PreparedStatement | null = null;
 
 	if (rawBytes && sizeBytes > 0 && sizeBytes <= maxBytes) {
 		try {
 			const hasRoom = await enforceQuota(env, config, settings, sizeBytes);
 			if (hasRoom) {
-				const stored = await putRawBlob(env, config, settings.mailboxStorageBackend, id, rawBytes);
-				storageKind = stored.storageKind;
-				storageKey = stored.storageKey;
-				rawHeaders = null;
-				await env.DB.prepare("UPDATE mailbox_messages SET storage_kind = ?, storage_key = ?, raw_headers = NULL WHERE id = ?")
-					.bind(storageKind, storageKey, id)
-					.run();
+				if (backend === "d1") {
+					d1BlobStmt = (await prepareD1BlobPut(env.DB, id, rawBytes)).statement;
+					storageKind = "d1";
+					storageKey = null;
+					rawHeaders = null;
+				} else {
+					const stored = await putRawBlob(env, config, settings.mailboxStorageBackend, id, rawBytes);
+					storageKind = stored.storageKind;
+					storageKey = stored.storageKey;
+					rawHeaders = null;
+				}
 			}
 		} catch (error) {
 			console.warn("Mailbox raw blob storage failed, kept headers_only:", id, error instanceof Error ? error.message : error);
+			storageKind = "headers_only";
+			storageKey = null;
+			d1BlobStmt = null;
 		}
 	}
 
-	const row = await env.DB.prepare("SELECT * FROM mailbox_messages WHERE id = ?").bind(id).first<MailboxMessageRow>();
-	return row ? hydrate(row) : null;
+	const insertMsg = (kind: typeof storageKind, key: string | null, headers: string | null) =>
+		env.DB
+			.prepare(
+				`INSERT INTO mailbox_messages (id, folder, uid, alias_address, forward_id, from_address, from_name, to_address, subject, snippet, reason, reason_detail, flags, size_bytes, storage_kind, storage_key, raw_headers, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.bind(
+				id,
+				input.folder,
+				uid,
+				input.aliasAddress ?? null,
+				input.forwardId ?? null,
+				fromAddress,
+				fromName,
+				toAddress,
+				subject,
+				snippet,
+				input.reason ?? null,
+				reasonDetail,
+				JSON.stringify(flags),
+				sizeBytes,
+				kind,
+				key,
+				headers,
+				ts,
+				ts,
+			);
+
+	if (d1BlobStmt) {
+		try {
+			// Insert metadata and D1 blob together in one round trip (metadata first so FK passes).
+			await env.DB.batch([insertMsg("d1", null, null), d1BlobStmt]);
+		} catch (error) {
+			console.warn("Mailbox D1 blob storage failed, kept headers_only:", id, error instanceof Error ? error.message : error);
+			storageKind = "headers_only";
+			storageKey = null;
+			rawHeaders = rawBytes ? extractHeaderBlock(rawBytes) : null;
+			await insertMsg("headers_only", null, rawHeaders).run();
+		}
+	} else {
+		await insertMsg(storageKind, storageKey, rawHeaders).run();
+	}
+
+	return {
+		id,
+		folder: input.folder,
+		uid,
+		alias_address: input.aliasAddress ?? null,
+		forward_id: input.forwardId ?? null,
+		from_address: fromAddress,
+		from_name: fromName,
+		to_address: toAddress,
+		subject,
+		snippet,
+		reason: input.reason ?? null,
+		reason_detail: reasonDetail,
+		flags,
+		size_bytes: sizeBytes,
+		storage_kind: storageKind,
+		storage_key: storageKey,
+		raw_headers: rawHeaders,
+		created_at: ts,
+		updated_at: ts,
+	};
 }
 
 export async function getMailboxMessage(db: D1Database, id: string): Promise<MailboxMessage | null> {
@@ -264,6 +401,15 @@ export async function getMailboxMessageByForwardId(db: D1Database, forwardId: st
 
 export async function readMailboxRaw(env: Env, config: AppConfig, msg: Pick<MailboxMessageRow, "id" | "storage_kind" | "storage_key">): Promise<Uint8Array | null> {
 	return getRawBlob(env, config, msg);
+}
+
+/** Streaming read for raw `.eml` downloads (avoids buffering multi-MB blobs in Worker memory). */
+export async function readMailboxRawBody(
+	env: Env,
+	config: AppConfig,
+	msg: Pick<MailboxMessageRow, "id" | "storage_kind" | "storage_key">,
+): Promise<ReadableStream<Uint8Array> | Uint8Array | null> {
+	return getRawBlobBody(env, config, msg);
 }
 
 export type MailboxFolderStats = Record<MailboxFolder, { total: number; unread: number }>;
@@ -372,27 +518,10 @@ export async function emptyMailboxFolder(env: Env, config: AppConfig, folder: Ma
 			.bind(folder, BATCH)
 			.all<{ id: string; storage_kind: string; storage_key: string | null }>();
 		if (!results.length) break;
-		const done: string[] = [];
-		for (const item of results) {
-			if (item.storage_kind === "s3" && item.storage_key) {
-				if (s3Budget <= 0) break;
-				s3Budget -= 1;
-				await deleteRawBlob(env, config, item);
-			}
-			done.push(item.id);
-		}
-		const r2Keys = results.filter((item) => done.includes(item.id) && item.storage_kind === "r2" && item.storage_key).map((item) => item.storage_key!);
-		if (r2Keys.length && env.MAILBOX_BUCKET) await env.MAILBOX_BUCKET.delete(r2Keys).catch(() => undefined);
-		const statements: D1PreparedStatement[] = [];
-		for (let k = 0; k < done.length; k += 100) {
-			const ids = done.slice(k, k + 100);
-			const marks = ids.map(() => "?").join(", ");
-			statements.push(env.DB.prepare(`DELETE FROM mailbox_blobs WHERE message_id IN (${marks})`).bind(...ids));
-			statements.push(env.DB.prepare(`DELETE FROM mailbox_messages WHERE id IN (${marks})`).bind(...ids));
-		}
-		if (statements.length) await env.DB.batch(statements);
-		deleted += done.length;
-		if (done.length < results.length || results.length < BATCH) break;
+		const res = await deleteMailboxMessages(env, config, results, s3Budget);
+		s3Budget = res.s3Remaining;
+		deleted += res.deletedIds.length;
+		if (res.deletedIds.length < results.length || results.length < BATCH) break;
 	}
 	return deleted;
 }
@@ -435,23 +564,30 @@ export async function cleanupMailbox(env: Env, config: AppConfig, settings: Sett
 	// Trash is always purged after 30 days (or retentionDays if shorter).
 	const trashDays = settings.mailboxRetentionDays > 0 ? Math.min(settings.mailboxRetentionDays, 30) : 30;
 	const trashCutoff = at - trashDays * 86400;
-	const trashRes = await env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE folder = 'Trash' AND updated_at < ? LIMIT 200")
-		.bind(trashCutoff)
-		.all<{ id: string; storage_kind: string; storage_key: string | null }>();
-	toDelete.push(...trashRes.results);
+	const trashStmt = env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE folder = 'Trash' AND updated_at < ? LIMIT 200").bind(trashCutoff);
 
 	if (settings.mailboxRetentionDays > 0) {
 		const cutoff = at - settings.mailboxRetentionDays * 86400;
-		const oldRes = await env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE created_at < ? LIMIT 200")
-			.bind(cutoff)
-			.all<{ id: string; storage_kind: string; storage_key: string | null }>();
-		const seen = new Set(toDelete.map((r) => r.id));
-		for (const row of oldRes.results) if (!seen.has(row.id)) toDelete.push(row);
+		const [trashRes, oldRes] = await env.DB.batch([
+			trashStmt,
+			env.DB.prepare("SELECT id, storage_kind, storage_key FROM mailbox_messages WHERE created_at < ? LIMIT 200").bind(cutoff),
+		]);
+		const seen = new Set<string>();
+		for (const row of [
+			...((trashRes?.results ?? []) as { id: string; storage_kind: string; storage_key: string | null }[]),
+			...((oldRes?.results ?? []) as { id: string; storage_kind: string; storage_key: string | null }[]),
+		]) {
+			if (!seen.has(row.id)) {
+				seen.add(row.id);
+				toDelete.push(row);
+			}
+		}
+	} else {
+		const trashRes = await trashStmt.all<{ id: string; storage_kind: string; storage_key: string | null }>();
+		toDelete.push(...trashRes.results);
 	}
 
-	for (const item of toDelete) {
-		await deleteRawBlob(env, config, item);
-		await env.DB.prepare("DELETE FROM mailbox_messages WHERE id = ?").bind(item.id).run();
-	}
-	return toDelete.length;
+	if (!toDelete.length) return 0;
+	const { deletedIds } = await deleteMailboxMessages(env, config, toDelete, config.workersPlan === "free" ? 25 : 200);
+	return deletedIds.length;
 }

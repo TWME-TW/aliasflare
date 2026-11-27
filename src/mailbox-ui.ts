@@ -13,10 +13,17 @@ import { noticeBox, page, type Notice } from "./ui";
 
 type Html = HtmlEscapedString | Promise<HtmlEscapedString>;
 
+const shortDateTimeFormatters = new Map<string, Intl.DateTimeFormat>();
+
 function fmtTime(epoch: number, locale: string): string {
 	if (!epoch) return "—";
 	try {
-		return new Date(epoch * 1000).toLocaleString(locale, { dateStyle: "short", timeStyle: "short" });
+		let fmt = shortDateTimeFormatters.get(locale);
+		if (!fmt) {
+			fmt = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" });
+			shortDateTimeFormatters.set(locale, fmt);
+		}
+		return fmt.format(new Date(epoch * 1000));
 	} catch {
 		return new Date(epoch * 1000).toISOString().slice(0, 16).replace("T", " ");
 	}

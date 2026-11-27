@@ -79,6 +79,7 @@ export class MailGatewayClient {
 	private async requestJson<T>(creds: GatewayCredentials, path: string, init: RequestInit = {}): Promise<T> {
 		const res = await this.fetcher(`${this.baseUrl}/mail-api/v1${path}`, {
 			...init,
+			redirect: "manual",
 			headers: {
 				Authorization: this.authHeader(creds),
 				Accept: "application/json",
@@ -97,6 +98,7 @@ export class MailGatewayClient {
 	private async requestBytes(creds: GatewayCredentials, path: string): Promise<Buffer> {
 		const res = await this.fetcher(`${this.baseUrl}/mail-api/v1${path}`, {
 			method: "GET",
+			redirect: "manual",
 			headers: { Authorization: this.authHeader(creds) },
 			signal: AbortSignal.timeout(30_000),
 		});

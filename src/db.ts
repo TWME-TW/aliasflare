@@ -83,6 +83,8 @@ export type ForwardRow = {
 	status: "processing" | "sent" | "skipped" | "failed";
 	error: string | null;
 	attempts?: number;
+	recipient_email?: string | null;
+	mailbox_message_id?: string | null;
 	created_at: number;
 	updated_at: number;
 };
@@ -288,9 +290,10 @@ export function blocklistCandidates(email: string): string[] {
 	return [normalized, ...domains];
 }
 
-/** Returns the matching blocklist entry, counting the hit. */
-export async function matchBlocklist(db: D1Database, email: string): Promise<BlocklistRow | null> {
-	const candidates = blocklistCandidates(email);
+/** Returns the matching blocklist entry for one or more sender addresses, counting the hit. */
+export async function matchBlocklistAny(db: D1Database, emails: string[]): Promise<BlocklistRow | null> {
+	const candidates = boundedList(emails.flatMap((email) => blocklistCandidates(email)), 90);
+	if (!candidates.length) return null;
 	const placeholders = candidates.map(() => "?").join(", ");
 	const row = await db
 		.prepare(`SELECT * FROM blocklist WHERE value IN (${placeholders}) ORDER BY kind = 'address' DESC, length(value) DESC LIMIT 1`)
@@ -298,4 +301,9 @@ export async function matchBlocklist(db: D1Database, email: string): Promise<Blo
 		.first<BlocklistRow>();
 	if (row) await db.prepare("UPDATE blocklist SET hits = hits + 1, last_blocked_at = ? WHERE id = ?").bind(now(), row.id).run();
 	return row;
+}
+
+/** Returns the matching blocklist entry, counting the hit. */
+export async function matchBlocklist(db: D1Database, email: string): Promise<BlocklistRow | null> {
+	return matchBlocklistAny(db, [email]);
 }

@@ -38,6 +38,7 @@ export function attachPop3Session(socket: Duplex, opts: Pop3ServerOptions, initi
 	const deleted = new Set<number>();
 	let buffer = "";
 	let processing = Promise.resolve();
+	let pendingCommands = 0;
 	// Raised by STLS: lines that arrived in the clear behind it are dropped, not run under TLS.
 	let generation = 0;
 	// RFC 1939: an inactivity autologout timer of at least 10 minutes.
@@ -218,10 +219,21 @@ export function attachPop3Session(socket: Duplex, opts: Pop3ServerOptions, initi
 			buffer += typeof chunk === "string" ? chunk : chunk.toString("utf8");
 			let nl: number;
 			while ((nl = buffer.indexOf("\n")) >= 0) {
+				if (pendingCommands >= 128) {
+					write("-ERR Too many queued commands\r\n");
+					sock.destroy();
+					return;
+				}
 				const line = buffer.slice(0, nl).replace(/\r$/, "");
 				buffer = buffer.slice(nl + 1);
 				const gen = generation;
-				processing = processing.then(() => (gen === generation ? handleLine(line) : undefined)).catch(() => undefined);
+				pendingCommands += 1;
+				processing = processing
+					.then(() => (gen === generation ? handleLine(line) : undefined))
+					.catch(() => undefined)
+					.then(() => {
+						pendingCommands = Math.max(0, pendingCommands - 1);
+					});
 			}
 			// RFC 1939 commands are at most 255 octets; anything this long is not a client.
 			if (buffer.length > 8 * 1024) {
