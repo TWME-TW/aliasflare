@@ -138,9 +138,34 @@ export async function sendEncrypted(env: Env, message: Outgoing, key: PgpKeyRow,
 	return await sendRaw(env, message, raw, messageId);
 }
 
-/** Encrypts a forwarded message using Inline PGP (plain text body encrypted; attachments encrypted or dropped as per inline PGP). */
+/** A readable text version of an HTML body, for inline PGP (which carries text only). */
+export function htmlToPlainText(html: string): string {
+	const entities: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+	return html
+		.replace(/<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, "")
+		.replace(/<!--[\s\S]*?-->/g, "")
+		.replace(/<br\s*\/?>/gi, "\n")
+		.replace(/<\/(p|div|li|tr|h[1-6]|blockquote)\s*>/gi, "\n")
+		.replace(/<[^>]*>/g, "")
+		.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name: string) => {
+			if (name[0] === "#") {
+				const code = name[1] === "x" || name[1] === "X" ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
+				return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+			}
+			return entities[name.toLowerCase()] ?? whole;
+		})
+		.replace(/[ \t\f\v\r]+/g, " ")
+		.replace(/ *\n */g, "\n")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
+/**
+ * Sends a forwarded message as Inline PGP: one encrypted text body. The caller sends anything with
+ * attachments as PGP/MIME instead, since inline PGP has no place for them.
+ */
 export async function sendInlineEncrypted(env: Env, message: Outgoing, key: PgpKeyRow): Promise<{ messageId?: string }> {
-	const plain = message.text || (message.html ? message.html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "");
+	const plain = message.text || (message.html ? htmlToPlainText(message.html) : "");
 	const armored = await encryptInlineText(plain, key.public_key);
 	const result = (await env.EMAIL.send({
 		from: message.from,

@@ -3,6 +3,7 @@ import * as openpgp from "openpgp";
 import { createApiKey } from "../src/apikeys";
 import { isSafeRegex } from "../src/domain-settings";
 import worker, { app } from "../src/index";
+import { htmlToPlainText } from "../src/pgp";
 import { handleReverseAliasMail } from "../src/reply";
 import { loadSettings, saveSettings } from "../src/settings";
 import { EmailMessage } from "./helpers/email";
@@ -235,19 +236,26 @@ describe("addy.io domains management, +extension routing & expanded rules", () =
 		expect(patched.json.data).toMatchObject({ description: "Custom C", from_name: "C Brand", auto_create_regex: "^shop-[a-z0-9]+$" });
 		await call(`/v1/domains/${domainId}/default-recipient`, "PATCH", { default_recipient: second.id });
 
-		// Non-matching local part is rejected (404), matching local part is created and forwarded to domain default recipient.
+		// As on addy.io, the pattern matters with catch-all off: a non-matching local part is rejected
+		// (404), a matching one is created and forwarded to the domain's default recipient.
+		expect((await call(`/v1/catch-all-domains/${domainId}`, "DELETE")).status).toBe(204);
 		expect(await deliver("other@c.test")).toBe("This address does not exist");
 		expect(await deliver("shop-123@c.test")).toBeNull();
 		expect(sent).toHaveLength(1);
 		expect((sent[0] as { to: { email: string } }).to.email).toBe("cbox@home.test");
 
+		// With catch-all on, every address makes an alias, pattern or not.
+		expect((await call("/v1/catch-all-domains", "POST", { id: domainId })).status).toBe(200);
+		expect(await deliver("other@c.test")).toBeNull();
+		expect(sent).toHaveLength(2);
+
 		// Domain aliases_count reflects actual alias count.
-		expect((await call(`/v1/domains/${domainId}`)).json.data.aliases_count).toBe(1);
+		expect((await call(`/v1/domains/${domainId}`)).json.data.aliases_count).toBe(2);
 
 		// Deactivating domain skips incoming mail.
 		expect((await call(`/v1/active-domains/${domainId}`, "DELETE")).status).toBe(204);
 		await deliver("shop-123@c.test");
-		expect(sent).toHaveLength(1);
+		expect(sent).toHaveLength(2);
 
 		// Re-activate & remove domain.
 		expect((await call("/v1/active-domains", "POST", { id: domainId })).json.data.active).toBe(true);
@@ -286,5 +294,75 @@ describe("addy.io domains management, +extension routing & expanded rules", () =
 		const news = aliases.find((a) => a.email === "news@a.test")!;
 		expect(news.description).toBe("Auto-tagged VIP");
 		expect(news.labels.map((l) => l.id)).toEqual([label.id]);
+	});
+});
+
+describe("multi-recipient forwarding safety and inline PGP fallbacks", () => {
+	const multipartWithAttachment = (to: string) =>
+		[
+			"From: bob@store.test",
+			`To: ${to}`,
+			"Subject: With file",
+			`Message-ID: <${crypto.randomUUID()}@x>`,
+			"MIME-Version: 1.0",
+			'Content-Type: multipart/mixed; boundary="b1"',
+			"",
+			"--b1",
+			"Content-Type: text/plain; charset=UTF-8",
+			"",
+			"See attached",
+			"--b1",
+			'Content-Type: application/pdf; name="doc.pdf"',
+			'Content-Disposition: attachment; filename="doc.pdf"',
+			"Content-Transfer-Encoding: base64",
+			"",
+			"JVBERi0xLjQK",
+			"--b1--",
+			"",
+		].join("\r\n");
+
+	it("sends to no one when a later recipient's key is missing", async () => {
+		const home = ((await call("/v1/recipients")).json.data as { id: string }[])[0]!;
+		const extra = (await call("/v1/recipients", "POST", { email: "team@home.test" })).json.data;
+		await call(`/v1/recipient-keys/${extra.id}`, "PATCH", { key_data: publicKey });
+		await call("/v1/aliases", "POST", { domain: "a.test", format: "custom", local_part: "pair", recipient_ids: [home.id, extra.id] });
+		// The key goes, but the forwarding address keeps asking for encryption through Settings.
+		await db.prepare("DELETE FROM pgp_keys WHERE email = 'team@home.test'").run();
+		await saveSettings(db, { ...(await loadSettings(db)), pgpRecipients: ["team@home.test"] });
+		await deliver("pair@a.test");
+		expect(sent).toHaveLength(0);
+		const row = await db.prepare("SELECT status, error FROM forwards ORDER BY created_at DESC LIMIT 1").first<{ status: string; error: string }>();
+		expect(row).toMatchObject({ status: "failed", error: expect.stringMatching(/key is missing/) });
+	});
+
+	it("keeps the first copy and records the rest when a later send fails", async () => {
+		const home = ((await call("/v1/recipients")).json.data as { id: string }[])[0]!;
+		const extra = (await call("/v1/recipients", "POST", { email: "team@home.test" })).json.data;
+		await call("/v1/aliases", "POST", { domain: "a.test", format: "custom", local_part: "duo", recipient_ids: [home.id, extra.id] });
+		const send = env.EMAIL.send;
+		env.EMAIL.send = (async (message: { to: { email: string } }) => {
+			if (message.to.email === "team@home.test") throw new Error("mailbox full");
+			return send(message as never);
+		}) as never;
+		expect(await deliver("duo@a.test")).toBeNull();
+		expect(sent).toHaveLength(1);
+		const row = await db.prepare("SELECT status, error FROM forwards ORDER BY created_at DESC LIMIT 1").first<{ status: string; error: string }>();
+		expect(row).toMatchObject({ status: "sent", error: expect.stringMatching(/team@home\.test: mailbox full/) });
+	});
+
+	it("uses PGP/MIME instead of inline PGP when the message has attachments", async () => {
+		const home = ((await call("/v1/recipients")).json.data as { id: string }[])[0]!;
+		await call(`/v1/recipient-keys/${home.id}`, "PATCH", { key_data: publicKey });
+		await call("/v1/inline-encryption-recipients", "POST", { id: home.id });
+		await call("/v1/aliases", "POST", { domain: "a.test", format: "custom", local_part: "files", recipient_ids: [home.id] });
+		await deliver("files@a.test", { raw: multipartWithAttachment("files@a.test") });
+		expect(sent).toHaveLength(1);
+		const message = sent[0] as EmailMessage;
+		expect(message).toBeInstanceOf(EmailMessage);
+		expect(await new Response(message.raw).text()).toContain('Content-Type: multipart/encrypted; protocol="application/pgp-encrypted"');
+	});
+
+	it("turns HTML into readable text for inline PGP", () => {
+		expect(htmlToPlainText("<style>p{color:red}</style><p>Hi&nbsp;there &amp; <b>you</b></p><p>Line&#33;<br>Next</p>")).toBe("Hi there & you\nLine!\nNext");
 	});
 });
