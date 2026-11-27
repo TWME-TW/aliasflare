@@ -1,5 +1,12 @@
 import { cleanDisplayName, cleanSubjectLine, DOMAIN_PATTERN, extractEmail, isSenderFormat, type SenderFormat } from "./format";
 import { isLocale, type Locale } from "./i18n";
+import { isStorageBackend, type StorageBackend } from "./storage";
+
+export type QuotaPolicy = "evict_oldest" | "stop_storing";
+export const QUOTA_POLICIES: QuotaPolicy[] = ["evict_oldest", "stop_storing"];
+export function isQuotaPolicy(value: unknown): value is QuotaPolicy {
+	return QUOTA_POLICIES.includes(value as QuotaPolicy);
+}
 
 export type UnsubscribeBehavior = "disable_alias" | "block_contact" | "redirect_contact" | "preserve_original";
 
@@ -118,6 +125,36 @@ export type Settings = {
 	 * domain, sender format, default mailbox, recipients, domains, rules and the blocklist.
 	 */
 	appSettings: boolean;
+	/** Built-in mailbox master toggle (on by default so skipped/failed messages are preserved). */
+	mailboxEnabled: boolean;
+	/** Automatically store messages whose forwarding or reply failed into the Failed folder. */
+	storeFailed: boolean;
+	/** Store messages skipped because the alias or domain is disabled / deleted. */
+	storeSkippedAliasOff: boolean;
+	/** Store messages skipped by the promotions filter (no_promotions). */
+	storeSkippedPromotions: boolean;
+	/** Store messages blocked by a rule. */
+	storeSkippedRuleBlock: boolean;
+	/** Store messages blocked by a blocked contact or global blocklist. */
+	storeSkippedBlockedSender: boolean;
+	/** Store messages addressed to unknown aliases when catch-all is off (off by default to prevent spam floods). */
+	storeSkippedUnknownAlias: boolean;
+	/** Keep a copy of every successfully forwarded message in INBOX. */
+	storeForwardedCopy: boolean;
+	/** Keep a copy of messages sent from built-in Webmail / SMTP in Sent. */
+	storeSentCopy: boolean;
+	/** Retention days for mailbox messages (0 = keep forever). */
+	mailboxRetentionDays: number;
+	/** Per-message raw storage limit in KB (larger messages keep headers + snippet). */
+	mailboxMaxMessageKb: number;
+	/** Total mailbox storage quota in MB. */
+	mailboxQuotaMb: number;
+	/** What happens when mailboxQuotaMb is reached. */
+	mailboxQuotaPolicy: QuotaPolicy;
+	/** Preferred raw storage backend: auto (R2 > S3 > D1), r2, s3, or d1. */
+	mailboxStorageBackend: StorageBackend;
+	/** When Mailflare is configured, show Mailflare inbox integration inside the Mailbox view. */
+	mailboxMailflareIntegration: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -150,6 +187,21 @@ export const DEFAULT_SETTINGS: Settings = {
 	aliasDomains: [],
 	randomAliasFormat: "random_words",
 	appSettings: true,
+	mailboxEnabled: true,
+	storeFailed: true,
+	storeSkippedAliasOff: true,
+	storeSkippedPromotions: true,
+	storeSkippedRuleBlock: true,
+	storeSkippedBlockedSender: true,
+	storeSkippedUnknownAlias: false,
+	storeForwardedCopy: false,
+	storeSentCopy: true,
+	mailboxRetentionDays: 30,
+	mailboxMaxMessageKb: 512,
+	mailboxQuotaMb: 100,
+	mailboxQuotaPolicy: "evict_oldest",
+	mailboxStorageBackend: "auto",
+	mailboxMailflareIntegration: true,
 };
 
 export function isUnsubscribeBehavior(value: unknown): value is UnsubscribeBehavior {
@@ -216,6 +268,10 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 	} else {
 		bannerLocation = DEFAULT_SETTINGS.bannerLocation;
 	}
+	const clampInt = (value: unknown, fallback: number, min: number, max: number) => {
+		const n = Math.floor(Number(value));
+		return Number.isFinite(n) && value !== "" && value !== null && value !== undefined ? Math.min(max, Math.max(min, n)) : fallback;
+	};
 	return {
 		forwardMethod: raw.forwardMethod === "direct" ? "direct" : "rewrite",
 		senderFormat: isSenderFormat(raw.senderFormat) ? raw.senderFormat : DEFAULT_SETTINGS.senderFormat,
@@ -251,6 +307,21 @@ export function normalizeSettings(raw: Record<string, unknown>): Settings {
 		aliasDomains,
 		randomAliasFormat: isRandomAliasFormat(raw.randomAliasFormat) ? raw.randomAliasFormat : DEFAULT_SETTINGS.randomAliasFormat,
 		appSettings: typeof raw.appSettings === "boolean" ? raw.appSettings : DEFAULT_SETTINGS.appSettings,
+		mailboxEnabled: typeof raw.mailboxEnabled === "boolean" ? raw.mailboxEnabled : DEFAULT_SETTINGS.mailboxEnabled,
+		storeFailed: typeof raw.storeFailed === "boolean" ? raw.storeFailed : DEFAULT_SETTINGS.storeFailed,
+		storeSkippedAliasOff: typeof raw.storeSkippedAliasOff === "boolean" ? raw.storeSkippedAliasOff : DEFAULT_SETTINGS.storeSkippedAliasOff,
+		storeSkippedPromotions: typeof raw.storeSkippedPromotions === "boolean" ? raw.storeSkippedPromotions : DEFAULT_SETTINGS.storeSkippedPromotions,
+		storeSkippedRuleBlock: typeof raw.storeSkippedRuleBlock === "boolean" ? raw.storeSkippedRuleBlock : DEFAULT_SETTINGS.storeSkippedRuleBlock,
+		storeSkippedBlockedSender: typeof raw.storeSkippedBlockedSender === "boolean" ? raw.storeSkippedBlockedSender : DEFAULT_SETTINGS.storeSkippedBlockedSender,
+		storeSkippedUnknownAlias: typeof raw.storeSkippedUnknownAlias === "boolean" ? raw.storeSkippedUnknownAlias : DEFAULT_SETTINGS.storeSkippedUnknownAlias,
+		storeForwardedCopy: typeof raw.storeForwardedCopy === "boolean" ? raw.storeForwardedCopy : DEFAULT_SETTINGS.storeForwardedCopy,
+		storeSentCopy: typeof raw.storeSentCopy === "boolean" ? raw.storeSentCopy : DEFAULT_SETTINGS.storeSentCopy,
+		mailboxRetentionDays: clampInt(raw.mailboxRetentionDays, DEFAULT_SETTINGS.mailboxRetentionDays, 0, 3650),
+		mailboxMaxMessageKb: clampInt(raw.mailboxMaxMessageKb, DEFAULT_SETTINGS.mailboxMaxMessageKb, 64, 25600),
+		mailboxQuotaMb: clampInt(raw.mailboxQuotaMb, DEFAULT_SETTINGS.mailboxQuotaMb, 10, 102400),
+		mailboxQuotaPolicy: isQuotaPolicy(raw.mailboxQuotaPolicy) ? raw.mailboxQuotaPolicy : DEFAULT_SETTINGS.mailboxQuotaPolicy,
+		mailboxStorageBackend: isStorageBackend(raw.mailboxStorageBackend) ? raw.mailboxStorageBackend : DEFAULT_SETTINGS.mailboxStorageBackend,
+		mailboxMailflareIntegration: typeof raw.mailboxMailflareIntegration === "boolean" ? raw.mailboxMailflareIntegration : DEFAULT_SETTINGS.mailboxMailflareIntegration,
 	};
 }
 

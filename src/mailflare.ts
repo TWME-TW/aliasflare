@@ -188,3 +188,95 @@ export async function sendViaMailflare(config: MailflareConfig, request: SendReq
 	});
 	await discard(response);
 }
+
+export type MailflareMailboxSummary = {
+	id: string;
+	name: string;
+	role: string | null;
+	totalEmails: number;
+	unreadEmails: number;
+};
+
+export type MailflareEmailSummary = {
+	id: string;
+	subject: string;
+	from: string;
+	to: string;
+	preview: string;
+	receivedAt: string;
+	seen: boolean;
+	flagged: boolean;
+	size: number;
+};
+
+/** Lists Mailflare mailboxes via JMAP Mailbox/get for deep integration in aliasflare's Mailbox view. */
+export async function listMailflareMailboxes(config: MailflareConfig): Promise<MailflareMailboxSummary[]> {
+	const accountId = await jmapAccountId(config);
+	const response = await call(config, "/jmap/api", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			using: [JMAP_CORE, JMAP_MAIL],
+			methodCalls: [["Mailbox/get", { accountId, properties: ["id", "name", "role", "totalEmails", "unreadEmails"] }, "0"]],
+		}),
+	});
+	const body = await readJson<{ methodResponses?: [string, { list?: Record<string, unknown>[] }, string][] }>(response);
+	const list = body.methodResponses?.[0]?.[1]?.list ?? [];
+	return list.map((item) => ({
+		id: String(item.id ?? ""),
+		name: String(item.name ?? ""),
+		role: typeof item.role === "string" ? item.role : null,
+		totalEmails: Number(item.totalEmails ?? 0),
+		unreadEmails: Number(item.unreadEmails ?? 0),
+	}));
+}
+
+/** Lists recent Mailflare emails via JMAP Email/query + Email/get. */
+export async function listMailflareEmails(
+	config: MailflareConfig,
+	options: { mailboxId?: string; text?: string; limit?: number } = {},
+): Promise<MailflareEmailSummary[]> {
+	const accountId = await jmapAccountId(config);
+	const filter: Record<string, unknown> = {};
+	if (options.mailboxId) filter.inMailbox = options.mailboxId;
+	if (options.text?.trim()) filter.text = options.text.trim();
+	const response = await call(config, "/jmap/api", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({
+			using: [JMAP_CORE, JMAP_MAIL],
+			methodCalls: [
+				["Email/query", { accountId, filter, sort: [{ property: "receivedAt", isAscending: false }], limit: Math.min(options.limit ?? 30, 50) }, "q"],
+				[
+					"Email/get",
+					{
+						accountId,
+						"#ids": { resultOf: "q", name: "Email/query", path: "/ids" },
+						properties: ["id", "subject", "from", "to", "preview", "receivedAt", "keywords", "size"],
+					},
+					"g",
+				],
+			],
+		}),
+	});
+	const body = await readJson<{ methodResponses?: [string, { list?: Record<string, unknown>[] }, string][] }>(response);
+	const got = body.methodResponses?.find(([name]) => name === "Email/get")?.[1]?.list ?? [];
+	const addr = (arr: unknown) => {
+		const first = Array.isArray(arr) ? (arr[0] as { name?: string; email?: string } | undefined) : undefined;
+		return first?.email ? (first.name ? `${first.name} <${first.email}>` : first.email) : "";
+	};
+	return got.map((item) => {
+		const kw = (item.keywords && typeof item.keywords === "object" ? item.keywords : {}) as Record<string, boolean>;
+		return {
+			id: String(item.id ?? ""),
+			subject: String(item.subject ?? "(no subject)"),
+			from: addr(item.from),
+			to: addr(item.to),
+			preview: String(item.preview ?? ""),
+			receivedAt: String(item.receivedAt ?? ""),
+			seen: kw.$seen === true,
+			flagged: kw.$flagged === true,
+			size: Number(item.size ?? 0),
+		};
+	});
+}

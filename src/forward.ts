@@ -19,6 +19,16 @@ import { pgpKind, topEntity } from "./mime";
 import { getDomainRow, matchesSafeRegex } from "./domain-settings";
 import { effectiveAliasDestinations, recipientPolicy } from "./recipients";
 import { listLabels, toggleAliasLabels } from "./labels";
+import {
+	getMailboxMessage,
+	getMailboxMessageByForwardId,
+	LOCAL_MAILBOX_ADDRESS,
+	readMailboxRaw,
+	shouldStoreSkipped,
+	storeMailboxMessage,
+	type MailboxFolder,
+	type SkipReasonKind,
+} from "./mailbox";
 
 /**
  * RFC 4880 ASCII-armored OpenPGP message: optional standard armor headers, a blank line, strictly
@@ -241,6 +251,8 @@ export async function handleInbound(env: Env, config: AppConfig, event: InboundE
 		// A signed webhook could be replayed later, after the alias exists: record the delivery
 		// even when there is no such alias, so a replay is a duplicate.
 		claimUnknown: true,
+		// Mailflare already stores the message remotely; never download it just to archive a skipped message.
+		avoidExternalLoad: true,
 	});
 	// Mailflare has already accepted the message; there is nothing to refuse, and nothing to retry.
 	if (outcome.status === 404) return { status: 200, result: "skipped: no such alias" };
@@ -318,6 +330,8 @@ type ForwardInput = {
 	headers?: Headers;
 	/** Delivers the message unchanged, when it is too large to rewrite on the Free plan. */
 	passThrough?: (destination: string) => Promise<void>;
+	/** When true (Mailflare webhooks), archiving a skipped message will not trigger an external download. */
+	avoidExternalLoad?: boolean;
 	preloaded?: Preloaded;
 };
 
@@ -376,7 +390,25 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	const unknown =
 		!known &&
 		(regexBlocked || !createsAliasesFromMail(settings, aliasDomain) || (await newAliasesFromMailToday(db)) >= MAX_NEW_ALIASES_FROM_MAIL_PER_DAY);
-	if (unknown && !input.claimUnknown) return { status: 404, result: "no such alias" };
+	if (unknown && !input.claimUnknown) {
+		if (shouldStoreSkipped(settings, "unknown_alias")) {
+			try {
+				const loadedRaw = await input.load();
+				await storeMailboxMessage(env, config, settings, {
+					folder: "Skipped",
+					aliasAddress,
+					fromAddress: event.from ?? "",
+					toAddress: aliasAddress,
+					reason: "unknown_alias",
+					reasonDetail: "no such alias",
+					raw: loadedRaw.raw,
+				});
+			} catch {
+				// Best-effort storage must never change the 404 rejection outcome.
+			}
+		}
+		return { status: 404, result: "no such alias" };
+	}
 
 	const claimed = await claim(db, input.key, aliasAddress);
 	if (!("id" in claimed)) return claimed;
@@ -384,43 +416,100 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	// What the alias is now, not what it was when the message arrived: the owner may have turned it
 	// off, deleted it or changed where it forwards in between, and the message follows the row.
 	const current = claimed.alias;
-	const skip = async (reason: string): Promise<ForwardOutcome> => {
+
+	// Lazy single-read cache of raw bytes so skipped/failed/local-mailbox storage never double-reads the stream.
+	let cachedStored: StoredMessage | null = null;
+	let loadedOnce = false;
+	const loadOnce = async (): Promise<StoredMessage> => {
+		if (!loadedOnce) {
+			loadedOnce = true;
+			cachedStored = await input.load();
+		}
+		return cachedStored!;
+	};
+	let parsedEmail: Email | null = null;
+	let lastRecipientEmail: string | null = null;
+
+	const archive = async (
+		folder: MailboxFolder,
+		reason: string,
+		reasonDetail: string,
+		overrideRaw?: ArrayBuffer | Uint8Array | null,
+	): Promise<string | null> => {
+		if (!settings.mailboxEnabled) return null;
+		try {
+			let rawData: ArrayBuffer | Uint8Array | null = overrideRaw ?? cachedStored?.raw ?? null;
+			if (!rawData && !loadedOnce && !input.avoidExternalLoad) {
+				try {
+					rawData = (await loadOnce()).raw;
+				} catch {
+					rawData = null;
+				}
+			}
+			const storedMsg = await storeMailboxMessage(env, config, settings, {
+				folder,
+				aliasAddress,
+				forwardId,
+				fromAddress: parsedEmail?.from?.address ?? event.from ?? "",
+				fromName: parsedEmail?.from?.name ?? null,
+				toAddress: aliasAddress,
+				subject: parsedEmail?.subject ?? input.headers?.get("Subject") ?? undefined,
+				reason,
+				reasonDetail,
+				raw: rawData,
+				parsed: parsedEmail,
+			});
+			if (storedMsg) {
+				await db.prepare("UPDATE forwards SET mailbox_message_id = ? WHERE id = ?").bind(storedMsg.id, forwardId).run();
+				return storedMsg.id;
+			}
+		} catch (err) {
+			console.warn("Mailbox archive error:", forwardId, err instanceof Error ? err.message : err);
+		}
+		return null;
+	};
+
+	const skip = async (reason: string, kind: SkipReasonKind = "other"): Promise<ForwardOutcome> => {
 		await finish(db, forwardId, { status: "skipped", error: reason });
+		if (shouldStoreSkipped(settings, kind)) {
+			await archive("Skipped", kind, reason);
+		}
 		return { status: 200, result: `skipped: ${reason}` };
 	};
 	if (unknown) {
 		await finish(db, forwardId, { status: "skipped", error: "no such alias" });
+		if (shouldStoreSkipped(settings, "unknown_alias")) await archive("Skipped", "unknown_alias", "no such alias");
 		return { status: 404, result: "no such alias" };
 	}
 
 	try {
-		if (isReverseDomainOf(aliasDomain, settings.aliasDomains)) return await skip("the recipient is a reverse alias");
+		if (isReverseDomainOf(aliasDomain, settings.aliasDomains)) return await skip("the recipient is a reverse alias", "other");
 		// It was there when the message arrived and has been removed for good since (Forget): the
 		// owner wants it gone, so it is not made again from this message.
-		if (known && !current) return await skip("the alias was deleted");
+		if (known && !current) return await skip("the alias was deleted", "alias_off");
 		// A known alias that is deleted or off needs nothing from Mailflare: skip before downloading.
-		if (current?.deleted_at) return await skip("the alias was deleted");
-		if (current?.forward_mode === "none") return await skip("forwarding is off for this alias");
+		if (current?.deleted_at) return await skip("the alias was deleted", "alias_off");
+		if (current?.forward_mode === "none") return await skip("forwarding is off for this alias", "alias_off");
 		// A copy this Worker sent itself is recognised from its headers, before it is read.
-		if (input.headers?.get(LOOP_HEADER)) return await skip("already forwarded by this Worker");
+		if (input.headers?.get(LOOP_HEADER)) return await skip("already forwarded by this Worker", "other");
 		// Mail is passed through unchanged in receive-only mode, and on the Free plan when it is too
 		// large to rewrite in 10 ms of CPU. Only mail from Email Routing can be: Mailflare's is not ours to pass on.
 		const direct = settings.forwardMethod === "direct";
 		const tooLarge = config.workersPlan === "free" && (input.size ?? 0) > FREE_PLAN_REWRITE_BYTES;
 		const passThrough = input.passThrough && (direct || tooLarge) ? input.passThrough : null;
-		let stored = passThrough ? null : await input.load();
+		let stored: StoredMessage | null = passThrough ? null : await loadOnce();
 		// No address of its own: the alias follows its domain's default, or the account default.
 		const alias = await ensureAlias(db, aliasAddress, stored?.mailboxId ?? "", { forwardEnabled: settings.autoForwardNewAliases }, current);
 		const aliasTargets = (await effectiveAliasDestinations(db, alias, settings, domainRow?.default_recipient)).filter(
-			(addr) => !isOwnAddress(addr, [...settings.aliasDomains, aliasDomain]),
+			(addr) => addr === LOCAL_MAILBOX_ADDRESS || !isOwnAddress(addr, [...settings.aliasDomains, aliasDomain]),
 		);
 		const destination = aliasTargets[0] ?? "";
-		if (alias.deleted_at) return await skip("the alias was deleted");
-		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias");
+		if (alias.deleted_at) return await skip("the alias was deleted", "alias_off");
+		if (alias.forward_mode === "none") return await skip("forwarding is off for this alias", "alias_off");
 		if (!destination) {
 			const rawDest = alias.destination || domainRow?.default_recipient || settings.defaultDestination;
-			if (rawDest && isOwnAddress(rawDest, [...settings.aliasDomains, aliasDomain])) return await skip("destination would loop");
-			return await skip("no forwarding address");
+			if (rawDest && isOwnAddress(rawDest, [...settings.aliasDomains, aliasDomain])) return await skip("destination would loop", "other");
+			return await skip("no forwarding address", "alias_off");
 		}
 
 		if (passThrough) {
@@ -437,20 +526,20 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			if (!senders.length || senders.some((sender) => isReverseDomainOf(domainOf(sender), [...settings.aliasDomains, aliasDomain]))) return await skip("no usable sender");
 			for (const sender of senders) {
 				const blocked = await matchBlocklist(db, sender);
-				if (blocked) return await skip(`blocklist: ${blocked.value}`);
+				if (blocked) return await skip(`blocklist: ${blocked.value}`, "blocked_sender");
 			}
 			const { results: known } = await db
 				.prepare(`SELECT email, blocked, destination FROM contacts WHERE alias_address = ? AND email IN (${senders.map(() => "?").join(", ")})`)
 				.bind(aliasAddress, ...senders)
 				.all<{ email: string; blocked: number; destination: string | null }>();
-			if (known.some((contact) => contact.blocked)) return await skip("sender is blocked");
+			if (known.some((contact) => contact.blocked)) return await skip("sender is blocked", "blocked_sender");
 			// The From header's contact first: that is the sender the user sees.
 			const primarySender = parsedFrom[0] ?? envelopeSender!;
 			const redirect = (known.find((contact) => contact.email === primarySender) ?? known[0])?.destination;
 			if (alias.forward_mode === "no_promotions" && isPromotional([...headers].map(([key, value]) => ({ key, value })))) {
-				return await skip("promotional mail is blocked for this alias");
+				return await skip("promotional mail is blocked for this alias", "promotions");
 			}
-			// The message is passed on unchanged, so of a rule's actions only Block and Forward to act on it.
+			// The message is passed on unchanged, so of a rule's actions only Block, Store, Quarantine and Forward to act on it.
 			const passSpoofed = rawFromEntries.length !== 1 || parsedFrom.length !== 1 || dmarcFailedAtCloudflare(headers.get("Authentication-Results"));
 			const ruleSubject = await decodedSubject(headers.get("Subject"));
 			const rules = await runRules(db, "forwards", {
@@ -466,7 +555,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				extension,
 			});
 			await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: primarySender, subject: ruleSubject }, ownHosts(config));
-			if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
+			if (rules.block) return await skip(`blocked by the rule ${rules.block}`, "rule_block");
+			if (rules.quarantineInMailbox) return await skip("quarantined by rule", "rule_block");
 			if (rules.aliasDescription) {
 				await db.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(rules.aliasDescription, now(), aliasAddress).run();
 			}
@@ -475,8 +565,20 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			}
 			const ruleTarget = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 			const target = ruleTarget ?? (redirect && !isOwnAddress(redirect, [...settings.aliasDomains, aliasDomain]) ? redirect : destination);
+			lastRecipientEmail = target;
+			if (rules.storeInMailbox || target === LOCAL_MAILBOX_ADDRESS) {
+				const contact = await ensureContact(db, aliasAddress, primarySender, null, settings.includeSenderInReverseAlias);
+				await archive("INBOX", "local_mailbox", "stored in built-in mailbox");
+				const sentAt = now();
+				await db.batch([
+					db.prepare("UPDATE forwards SET status = 'sent', contact_id = ?, recipient_email = ?, updated_at = ? WHERE id = ?").bind(contact.id, LOCAL_MAILBOX_ADDRESS, sentAt, forwardId),
+					db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(sentAt, aliasAddress),
+					db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(sentAt, contact.id),
+				]);
+				return { status: 200, result: "stored in mailbox" };
+			}
 			const targetPolicy = await recipientPolicy(db, target);
-			if (!targetPolicy.active) return await skip("recipient is deactivated");
+			if (!targetPolicy.active) return await skip("recipient is deactivated", "alias_off");
 			// The sender is kept as a contact, so it can be blocked or redirected like any other.
 			// Mail to an address with encryption on is never passed on in the clear.
 			// Mail that is PGP encrypted already can go as it is only once the body itself is
@@ -487,7 +589,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				let verifiedEncrypted = false;
 				if (!tooLarge && pgpKind(`Content-Type: ${headers.get("Content-Type") ?? ""}`) === "encrypted") {
 					try {
-						const rawLoaded = await input.load();
+						const rawLoaded = await loadOnce();
 						const rawPgp = pgpKind(fullHeaderSection(rawLoaded.raw));
 						const rawKept = rawPgp === "encrypted" ? topEntity(rawLoaded.raw) : null;
 						if (rawKept) {
@@ -499,12 +601,12 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 					}
 				}
 				if (!verifiedEncrypted) {
-					await finish(db, forwardId, {
-						status: "failed",
-						error: direct
-							? "not sent: this forwarding address has PGP encryption on, and receive-only mode cannot encrypt"
-							: `not sent: this forwarding address has PGP encryption on, and a message larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB cannot be encrypted on the Workers Free plan`,
-					});
+					const errMsg = direct
+						? "not sent: this forwarding address has PGP encryption on, and receive-only mode cannot encrypt"
+						: `not sent: this forwarding address has PGP encryption on, and a message larger than ${FREE_PLAN_REWRITE_BYTES / 1024} KB cannot be encrypted on the Workers Free plan`;
+					await finish(db, forwardId, { status: "failed", error: errMsg });
+					await db.prepare("UPDATE forwards SET recipient_email = ? WHERE id = ?").bind(target, forwardId).run();
+					if (settings.storeFailed) await archive("Failed", "failed", errMsg);
 					return { status: 200, result: "not sent: cannot encrypt" };
 				}
 			}
@@ -539,14 +641,15 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		let email: Email;
 		try {
 			email = await PostalMime.parse(stored!.raw, { attachmentEncoding: "arraybuffer" });
+			parsedEmail = email;
 		} catch (error) {
 			const detail = error instanceof Error ? error.message : String(error);
-			return await skip(`unreadable message: ${detail.slice(0, 200)}`);
+			return await skip(`unreadable message: ${detail.slice(0, 200)}`, "other");
 		} finally {
-			// Drop the raw buffer before transforms and sending so GC can reclaim it.
+			// Keep stored.raw in cachedStored only while mailbox storage may need it; drop local ref.
 			stored = null;
 		}
-		if (headerValue(email, LOOP_HEADER)) return await skip("already forwarded by this Worker");
+		if (headerValue(email, LOOP_HEADER)) return await skip("already forwarded by this Worker", "other");
 
 		// The parsed From address must itself be one plain address. One that is not (a quoted
 		// local part hiding another address, or multiple From addresses/headers) is not trusted:
@@ -554,7 +657,7 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const headerSender = parseBareEmail(email.from?.address);
 		const missingOrMalformedFrom = !headerSender;
 		const senderEmail = headerSender ?? parseBareEmail(event.from);
-		if (!senderEmail || isReverseDomainOf(domainOf(senderEmail), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender");
+		if (!senderEmail || isReverseDomainOf(domainOf(senderEmail), [...settings.aliasDomains, aliasDomain])) return await skip("no usable sender", "other");
 		const multiFrom = headerBlock !== null && !!headerSender && !hasSingleFromHeader(headerBlock);
 		const spoofed = missingOrMalformedFrom || multiFrom || headerBlock === null || dmarcFailedAtCloudflare(firstAuthenticationResults(headerBlock));
 		await finish(db, forwardId, {
@@ -569,23 +672,23 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const envelopeSender = parseBareEmail(event.from);
 		for (const candidate of new Set([senderEmail, envelopeSender].filter((value): value is string => !!value))) {
 			const blocked = await matchBlocklist(db, candidate);
-			if (blocked) return await skip(`blocklist: ${blocked.value}`);
+			if (blocked) return await skip(`blocklist: ${blocked.value}`, "blocked_sender");
 		}
 		if (envelopeSender && envelopeSender !== senderEmail) {
 			const blockedEnvelope = await db
 				.prepare("SELECT 1 FROM contacts WHERE alias_address = ? AND email = ? AND blocked = 1")
 				.bind(aliasAddress, envelopeSender)
 				.first();
-			if (blockedEnvelope) return await skip("sender is blocked");
+			if (blockedEnvelope) return await skip("sender is blocked", "blocked_sender");
 		}
-		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias");
-		if (email.attachments.length > MAX_ATTACHMENTS) return await skip(`${email.attachments.length} attachments (at most ${MAX_ATTACHMENTS})`);
+		if (alias.forward_mode === "no_promotions" && isPromotional(email.headers)) return await skip("promotional mail is blocked for this alias", "promotions");
+		if (email.attachments.length > MAX_ATTACHMENTS) return await skip(`${email.attachments.length} attachments (at most ${MAX_ATTACHMENTS})`, "other");
 
 		// A display name from a message that failed DMARC is not trusted to rename a contact.
 		const senderName = spoofed ? null : email.from?.name?.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, MAX_NAME_LENGTH) || null;
 		const contact = await ensureContact(db, aliasAddress, senderEmail, senderName, settings.includeSenderInReverseAlias);
 		await finish(db, forwardId, { contact_id: contact.id });
-		if (contact.blocked) return await skip("sender is blocked");
+		if (contact.blocked) return await skip("sender is blocked", "blocked_sender");
 		// A sender can have an address of its own (set by an unsubscribe, say).
 		const ruleSenders = [senderEmail, ...(envelopeSender ? [envelopeSender] : [])];
 		const rules = await runRules(db, "forwards", {
@@ -601,7 +704,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 			extension,
 		});
 		await callWebhooks(config.signingSecret, rules.webhooks, { alias: aliasAddress, sender: senderEmail, subject: email.subject ?? "" }, ownHosts(config));
-		if (rules.block) return await skip(`blocked by the rule ${rules.block}`);
+		if (rules.block) return await skip(`blocked by the rule ${rules.block}`, "rule_block");
+		if (rules.quarantineInMailbox) return await skip("quarantined by rule", "rule_block");
 		if (rules.aliasDescription) {
 			await db.prepare("UPDATE aliases SET note = ?, updated_at = ? WHERE address = ?").bind(rules.aliasDescription, now(), aliasAddress).run();
 		}
@@ -612,13 +716,26 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		const ruleRecipient = await ruleTargetOf(db, settings, rules.forwardTo, aliasDomain);
 		const targetList = ruleRecipient
 			? [ruleRecipient]
-			: contact.destination && !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain])
+			: contact.destination && (contact.destination === LOCAL_MAILBOX_ADDRESS || !isOwnAddress(contact.destination, [...settings.aliasDomains, aliasDomain]))
 				? [contact.destination]
 				: aliasTargets;
-		const policies = await Promise.all(targetList.map(async (addr) => ({ email: addr, policy: await recipientPolicy(db, addr) })));
+		if (rules.storeInMailbox || (targetList.length === 1 && targetList[0] === LOCAL_MAILBOX_ADDRESS)) {
+			await archive("INBOX", "local_mailbox", "stored in built-in mailbox");
+			const sentAt = now();
+			await db.batch([
+				db.prepare("UPDATE forwards SET status = 'sent', recipient_email = ?, updated_at = ? WHERE id = ?").bind(LOCAL_MAILBOX_ADDRESS, sentAt, forwardId),
+				db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(sentAt, contact.id),
+				db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(sentAt, aliasAddress),
+			]);
+			return { status: 200, result: "stored in mailbox" };
+		}
+		const externalTargets = targetList.filter((addr) => addr !== LOCAL_MAILBOX_ADDRESS);
+		const alsoStoreLocal = targetList.includes(LOCAL_MAILBOX_ADDRESS);
+		const policies = await Promise.all(externalTargets.map(async (addr) => ({ email: addr, policy: await recipientPolicy(db, addr) })));
 		const activeTargets = policies.filter((item) => item.policy.active);
-		if (!activeTargets.length) return await skip("recipient is deactivated");
-		const primaryRecipient = activeTargets[0]!.email;
+		if (!activeTargets.length && !alsoStoreLocal) return await skip("recipient is deactivated", "alias_off");
+		const primaryRecipient = activeTargets[0]?.email ?? LOCAL_MAILBOX_ADDRESS;
+		lastRecipientEmail = primaryRecipient;
 
 		// Thread forwarded copies together: point at the copies the user's client already has.
 		const parentIds = [...parseMessageIds(email.inReplyTo), ...parseMessageIds(email.references).slice(-MAX_REFERENCES)];
@@ -737,7 +854,10 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 				(rules.encryption !== undefined ? rules.encryption : policy.shouldEncrypt || settings.pgpRecipients.includes(normalizeEmail(recipient)));
 			const pgpKey = wantsEncryption ? (policy.pgpKey ?? (await anyPgpKeyFor(db, recipient))) : null;
 			if (wantsEncryption && !pgpKey) {
-				await finish(db, forwardId, { status: "failed", error: "not sent: this forwarding address has PGP encryption on, but its key is missing" });
+				const errMsg = "not sent: this forwarding address has PGP encryption on, but its key is missing";
+				await finish(db, forwardId, { status: "failed", error: errMsg });
+				await db.prepare("UPDATE forwards SET recipient_email = ? WHERE id = ?").bind(recipient, forwardId).run();
+				if (settings.storeFailed) await archive("Failed", "failed", errMsg);
 				return { status: 200, result: "not sent: cannot encrypt" };
 			}
 			const result = pgpKey
@@ -749,6 +869,9 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 					: await env.EMAIL.send(outgoing);
 			firstResult ??= result;
 		}
+		if (alsoStoreLocal || settings.storeForwardedCopy) {
+			await archive("INBOX", alsoStoreLocal ? "local_mailbox" : "forwarded_copy", alsoStoreLocal ? "stored in built-in mailbox" : "copy of forwarded mail");
+		}
 		const result = firstResult ?? {};
 		void primaryRecipient;
 		void anyKeepsSigned;
@@ -759,8 +882,8 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 		try {
 			await db.batch([
 				db
-					.prepare("UPDATE forwards SET status = 'sent', forwarded_message_id = ?, trackers_removed = ?, updated_at = ? WHERE id = ?")
-					.bind(ensureAngle(result.messageId) ?? null, body.trackersRemoved, sentAt, forwardId),
+					.prepare("UPDATE forwards SET status = 'sent', forwarded_message_id = ?, trackers_removed = ?, recipient_email = ?, updated_at = ? WHERE id = ?")
+					.bind(ensureAngle(result.messageId) ?? null, body.trackersRemoved, primaryRecipient, sentAt, forwardId),
 				db.prepare("UPDATE contacts SET forward_count = forward_count + 1, last_forward_at = ? WHERE id = ?").bind(sentAt, contact.id),
 				db.prepare("UPDATE aliases SET last_used_at = ? WHERE address = ?").bind(sentAt, aliasAddress),
 			]);
@@ -771,15 +894,52 @@ async function forwardMessage(env: Env, config: AppConfig, input: ForwardInput):
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);
 		await finish(db, forwardId, { status: "failed", error: message.slice(0, 1000) });
+		if (lastRecipientEmail) {
+			await db.prepare("UPDATE forwards SET recipient_email = ? WHERE id = ?").bind(lastRecipientEmail, forwardId).run().catch(() => undefined);
+		}
 		// A message Mailflare no longer has, or one too large to send, will never succeed. Too
 		// large is reported as such, so mail delivered directly can be refused with a bounce.
 		if (error instanceof MailflareError && (error.status === 404 || error.status === 413)) {
 			await finish(db, forwardId, { status: "skipped" });
 			return { status: error.status === 413 ? 413 : 200, result: `skipped: ${message.slice(0, 200)}` };
 		}
+		if (settings.storeFailed) {
+			await archive("Failed", "failed", message.slice(0, 1000));
+		}
 		console.error("Forward failed", event.messageId, message);
 		return { status: 500, result: "failed" };
 	}
+}
+
+/** Re-sends a stored mailbox message (e.g. from Failed or Skipped) through the forwarding pipeline. */
+export async function resendMailboxMessage(env: Env, config: AppConfig, messageId: string): Promise<{ ok: boolean; detail: string }> {
+	const msg = await getMailboxMessage(env.DB, messageId);
+	if (!msg || !msg.alias_address) return { ok: false, detail: "Message not found or has no target alias." };
+	const raw = await readMailboxRaw(env, config, msg);
+	if (!raw) return { ok: false, detail: "No raw message copy is stored for this entry." };
+	const rawCopy = raw.slice().buffer as ArrayBuffer;
+	const outcome = await forwardMessage(env, config, {
+		key: `resend:${msg.id}:${now()}:${crypto.randomUUID().slice(0, 8)}`,
+		aliasAddress: msg.alias_address,
+		envelopeFrom: msg.from_address || undefined,
+		origin: config.siteOrigin,
+		load: async () => ({ mailboxId: "", raw: rawCopy }),
+		size: raw.byteLength,
+	});
+	if (outcome.status === 200 && (outcome.result === "forwarded" || outcome.result === "stored in mailbox" || outcome.result === "passed through")) {
+		if (msg.forward_id) {
+			await env.DB.prepare("UPDATE forwards SET resent_at = ?, updated_at = ? WHERE id = ?").bind(now(), now(), msg.forward_id).run();
+		}
+		return { ok: true, detail: outcome.result };
+	}
+	return { ok: false, detail: outcome.result };
+}
+
+/** Re-sends a failed delivery by its forwards.id (addy.io POST /v1/failed-deliveries/:id/resend). */
+export async function resendStoredForward(env: Env, config: AppConfig, forwardId: string): Promise<{ ok: boolean; detail: string }> {
+	const msg = await getMailboxMessageByForwardId(env.DB, forwardId);
+	if (!msg) return { ok: false, detail: "No stored copy of this failed delivery was found." };
+	return resendMailboxMessage(env, config, msg.id);
 }
 
 /**

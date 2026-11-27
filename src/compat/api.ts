@@ -56,6 +56,8 @@ import {
 	validateNewDomain,
 	type DomainView,
 } from "../domain-settings";
+import { resendStoredForward } from "../forward";
+import { getMailboxMessageByForwardId, readMailboxRaw } from "../mailbox";
 import {
 	ClientError,
 	cleanPrefix,
@@ -1576,36 +1578,58 @@ api.post("/v1/reorder-rules", async (c) => {
 
 // ---------- failed deliveries ----------
 
-// Forwards that could not be sent. No copy is kept, so one cannot be downloaded or sent again.
-// Deleting one only hides it here: the row is also the forward's retry record and its activity
-// entry, so a redelivery of the same message does not start its attempts over.
-type FailedRow = { id: string; alias_address: string; error: string | null; created_at: number; updated_at: number; alias_uid: string | null; alias_note: string | null; sender: string | null };
+// Forwards that could not be sent. When the built-in mailbox stored the original .eml,
+// clients can download or resend it directly from here.
+type FailedRow = {
+	id: string;
+	alias_address: string;
+	error: string | null;
+	created_at: number;
+	updated_at: number;
+	alias_uid: string | null;
+	alias_note: string | null;
+	sender: string | null;
+	recipient_email: string | null;
+	email_type: string | null;
+	resent_at: number | null;
+	mailbox_message_id: string | null;
+	storage_kind: string | null;
+};
 
-const FAILED_SELECT = `SELECT f.id, f.alias_address, f.error, f.created_at, f.updated_at, a.uid AS alias_uid, a.note AS alias_note, ct.email AS sender
-	FROM forwards f LEFT JOIN aliases a ON a.address = f.alias_address LEFT JOIN contacts ct ON ct.id = f.contact_id WHERE f.status = 'failed' AND f.dismissed = 0`;
+const FAILED_SELECT = `SELECT f.id, f.alias_address, f.error, f.created_at, f.updated_at, f.recipient_email, f.email_type, f.resent_at, f.mailbox_message_id,
+	a.uid AS alias_uid, a.note AS alias_note, ct.email AS sender, mm.storage_kind AS storage_kind
+	FROM forwards f
+	LEFT JOIN aliases a ON a.address = f.alias_address
+	LEFT JOIN contacts ct ON ct.id = f.contact_id
+	LEFT JOIN mailbox_messages mm ON mm.id = f.mailbox_message_id
+	WHERE f.status = 'failed' AND f.dismissed = 0`;
 
-function addyFailed(row: FailedRow) {
+async function addyFailed(row: FailedRow) {
+	const recEmail = row.recipient_email || null;
+	const recId = recEmail ? (await destinationIds(recEmail)).uid : null;
+	const emailType = row.email_type === "R" || row.email_type === "S" ? row.email_type : "F";
+	const isStored = !!row.mailbox_message_id && !!row.storage_kind && row.storage_kind !== "headers_only";
 	return {
 		id: row.id,
 		user_id: OWNER_ID,
-		recipient_id: null,
-		recipient_email: null,
+		recipient_id: recId,
+		recipient_email: recEmail,
 		alias_id: row.alias_uid,
 		alias_email: row.alias_address,
 		alias_description: row.alias_note,
 		bounce_type: "soft",
 		remote_mta: "",
 		sender: row.sender,
-		destination: null,
+		destination: recEmail,
 		ir_dedupe_key: null,
 		type: "failed",
-		email_type: "F",
-		email_type_text: "Forward",
+		email_type: emailType,
+		email_type_text: emailType === "R" ? "Reply" : emailType === "S" ? "Send" : "Forward",
 		status: "failed",
 		code: (row.error ?? "").slice(0, 500),
-		is_stored: false,
+		is_stored: isStored,
 		quarantined: false,
-		resent: false,
+		resent: !!row.resent_at,
 		attempted_at: addyDate(row.updated_at),
 		created_at: addyDate(row.created_at),
 		updated_at: addyDate(row.updated_at),
@@ -1630,7 +1654,7 @@ api.get("/v1/failed-deliveries", async (c) => {
 		return next.toString();
 	};
 	return c.json({
-		data: rows.map(addyFailed),
+		data: await Promise.all(rows.map(addyFailed)),
 		links: { first: pageUrl(1), last: pageUrl(lastPage), prev: pageNumber > 1 ? pageUrl(pageNumber - 1) : null, next: pageNumber < lastPage ? pageUrl(pageNumber + 1) : null },
 		meta: { current_page: pageNumber, from, last_page: lastPage, links: [], path: `${url.origin}${url.pathname}`, per_page: size, to: from ? from + rows.length - 1 : null, total },
 	});
@@ -1638,16 +1662,44 @@ api.get("/v1/failed-deliveries", async (c) => {
 api.get("/v1/failed-deliveries/:id", async (c) => {
 	const row = await c.env.DB.prepare(`${FAILED_SELECT} AND f.id = ?`).bind(c.req.param("id")).first<FailedRow>();
 	if (!row) throw new ClientError(404, "Not found");
-	return c.json({ data: addyFailed(row) });
+	return c.json({ data: await addyFailed(row) });
 });
 api.delete("/v1/failed-deliveries/:id", async (c) => {
 	const result = await c.env.DB.prepare("UPDATE forwards SET dismissed = 1 WHERE id = ? AND status = 'failed' AND dismissed = 0").bind(c.req.param("id")).run();
 	if (!result.meta.changes) throw new ClientError(404, "Not found");
 	return c.body(null, 204);
 });
-for (const path of ["/v1/failed-deliveries/:id/resend", "/v1/failed-deliveries/:id/download"]) {
-	api.all(path, (c) => c.json({ message: "aliasflare keeps no copy of a message that failed, so it cannot be sent again or downloaded." }, 422));
-}
+api.post("/v1/failed-deliveries/delete/bulk", async (c) => {
+	const input = await jsonBody(c);
+	const ids = Array.isArray(input.ids) ? [...new Set(input.ids.filter((id): id is string => typeof id === "string"))].slice(0, 100) : [];
+	if (!ids.length) throw new ClientError(422, "The ids field is required.");
+	const dismissed: string[] = [];
+	for (const id of ids) {
+		const res = await c.env.DB.prepare("UPDATE forwards SET dismissed = 1 WHERE id = ? AND status = 'failed' AND dismissed = 0").bind(id).run();
+		if (res.meta.changes) dismissed.push(id);
+	}
+	if (!dismissed.length) return c.json({ message: "No failed deliveries found" }, 404);
+	return c.json({ message: `${dismissed.length} failed deliver${dismissed.length === 1 ? "y" : "ies"} deleted`, ids: dismissed });
+});
+api.get("/v1/failed-deliveries/:id/download", async (c) => {
+	const row = await c.env.DB.prepare(`${FAILED_SELECT} AND f.id = ?`).bind(c.req.param("id")).first<FailedRow>();
+	if (!row) throw new ClientError(404, "Not found");
+	const stored = await getMailboxMessageByForwardId(c.env.DB, row.id);
+	const raw = stored ? await readMailboxRaw(c.env, c.get("config"), stored) : null;
+	if (!raw) return c.json({ message: "No stored copy of this message is available to download." }, 422);
+	return c.body(raw as Uint8Array<ArrayBuffer>, 200, {
+		"Content-Type": "message/rfc822",
+		"Content-Disposition": `attachment; filename="failed-${row.id}.eml"`,
+		"Cache-Control": "no-store",
+	});
+});
+api.post("/v1/failed-deliveries/:id/resend", async (c) => {
+	const row = await c.env.DB.prepare(`${FAILED_SELECT} AND f.id = ?`).bind(c.req.param("id")).first<FailedRow>();
+	if (!row) throw new ClientError(404, "Not found");
+	const outcome = await resendStoredForward(c.env, c.get("config"), row.id);
+	if (!outcome.ok) return c.json({ message: outcome.detail }, 422);
+	return c.json({ message: "Email resent successfully.", detail: outcome.detail });
+});
 
 api.all("*", (c) => c.json({ error: "Not supported by aliasflare", message: "Not Found" }, 404));
 

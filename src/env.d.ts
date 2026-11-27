@@ -23,4 +23,14 @@ interface Env {
 	WORKERS_PLAN?: string;
 	/** Optional service binding to the Mailflare Worker, used instead of its public URL. */
 	MAILFLARE_SERVICE?: Fetcher;
+	/** Optional Cloudflare R2 bucket for storing built-in mailbox raw .eml messages. */
+	MAILBOX_BUCKET?: R2Bucket;
+	/** Optional S3-compatible object storage overrides (AWS S3, Backblaze B2, MinIO, R2 S3 API, Garage...). */
+	MAILBOX_S3_ENDPOINT?: string;
+	MAILBOX_S3_BUCKET?: string;
+	MAILBOX_S3_REGION?: string;
+	MAILBOX_S3_ACCESS_KEY_ID?: string;
+	MAILBOX_S3_SECRET_ACCESS_KEY?: string;
+	MAILBOX_S3_PATH_STYLE?: string;
+	MAILBOX_S3_PREFIX?: string;
 }

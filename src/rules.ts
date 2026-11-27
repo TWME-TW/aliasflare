@@ -34,6 +34,8 @@ export const ACTION_TYPES = [
 	"encryption",
 	"aliasDescription",
 	"addLabel",
+	"store",
+	"quarantine",
 ] as const;
 /** Actions that act on replies/sends too; the others only make sense for forwarded mail. */
 export const REPLY_ACTIONS: readonly ActionType[] = ["block", "subject", "removeAttachments"];
@@ -120,7 +122,7 @@ function cleanAction(raw: unknown, ownHosts: string[]): Action | null {
 	const { type, value } = raw as Record<string, unknown>;
 	if (!ACTION_TYPES.includes(type as ActionType)) throw new RuleError("unsupported");
 	const kind = type as ActionType;
-	if (kind === "block" || kind === "removeAttachments") return { type: kind, value: "true" };
+	if (kind === "block" || kind === "removeAttachments" || kind === "store" || kind === "quarantine") return { type: kind, value: "true" };
 	if (kind === "banner") {
 		if (value === "off" || value === "top" || value === "bottom") return { type: kind, value };
 		return null;
@@ -415,6 +417,10 @@ export type RuleOutcome = {
 	encryption?: boolean;
 	aliasDescription?: string;
 	addLabels?: string[];
+	/** Store directly into built-in INBOX without external forwarding. */
+	storeInMailbox?: boolean;
+	/** Quarantine directly into built-in Skipped folder without external forwarding. */
+	quarantineInMailbox?: boolean;
 	/** Webhooks to call, with the name of the rule that asked. */
 	webhooks?: { rule: string; url: string }[];
 	applied: string[];
@@ -480,6 +486,8 @@ export async function runRules(db: D1Database, kind: "forwards" | "replies" | "s
 			} else if (action.type === "encryption") outcome.encryption = action.value === "true";
 			else if (action.type === "aliasDescription") outcome.aliasDescription = action.value;
 			else if (action.type === "addLabel") (outcome.addLabels ??= []).push(action.value);
+			else if (action.type === "store") outcome.storeInMailbox = true;
+			else if (action.type === "quarantine") outcome.quarantineInMailbox = true;
 			else if (action.type === "webhook" && (outcome.webhooks ??= []).length < MAX_WEBHOOKS) outcome.webhooks.push({ rule: rule.name, url: action.value });
 		}
 		if (applied) outcome.applied.push(rule.id);

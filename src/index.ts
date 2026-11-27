@@ -30,7 +30,26 @@ import { aliasDomainOfReverse, clashingDomain, contactReverseAddress, isOwnAddre
 import { verifyWebhookSignature } from "./crypto";
 import { ensureContact, getAlias, isForwardMode, newId, now, setForwardMode, type AliasRow, type BlocklistRow, type ContactRow } from "./db";
 import { domainOf, extractEmail, hostnameOf, isPublicHost, MAX_NOTE_LENGTH, normalizeEmail, pageParam } from "./format";
-import { handleDirectInbound, handleInbound, type InboundEvent } from "./forward";
+import { handleDirectInbound, handleInbound, resendMailboxMessage, type InboundEvent } from "./forward";
+import {
+	deleteMailboxMessage,
+	emptyMailboxFolder,
+	folderStats,
+	getMailboxMessage,
+	isMailboxFolder,
+	listMailboxMessages,
+	moveMailboxMessage,
+	readMailboxRaw,
+	storeMailboxMessage,
+	updateMailboxFlags,
+	type MailboxFolder,
+} from "./mailbox";
+import { mailboxComposePage, mailboxDetailPage, mailboxListPage } from "./mailbox-ui";
+import { listMailflareEmails, mailflareConfig, sendViaMailflare } from "./mailflare";
+import { buildMime, newMessageId } from "./mime";
+import { sendOutbound } from "./outbound";
+import { resolveStorageBackend, validS3Endpoint } from "./storage";
+import PostalMime from "postal-mime";
 import { exportAliases } from "./export";
 import {
 	addSimpleLoginContacts,
@@ -107,10 +126,12 @@ app.use("*", async (c, next) => {
 	c.header("X-Frame-Options", "DENY");
 	if (new URL(c.req.url).protocol === "https:") c.header("Strict-Transport-Security", "max-age=31536000");
 	if (NO_STORE.test(c.req.path)) c.header("Cache-Control", "no-store");
-	c.header(
-		"Content-Security-Policy",
-		"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-	);
+	if (!c.res.headers.has("Content-Security-Policy")) {
+		c.header(
+			"Content-Security-Policy",
+			"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; frame-src 'self'; manifest-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+		);
+	}
 });
 
 /** A CSV import of at most 5 MB, with room for the rest of the form. */
@@ -661,6 +682,229 @@ async function activityTotal(db: D1Database, query = ""): Promise<number> {
 	return row?.total ?? 0;
 }
 
+// ---------- built-in mailbox (Webmail) ----------
+
+app.get("/mailbox", async (c) => {
+	const db = c.env.DB;
+	const settings = await pageSettings(c);
+	const config = c.get("config");
+	const source = c.req.query("source") === "mailflare" && mailflareReady(config) && settings.mailboxMailflareIntegration ? "mailflare" : "local";
+	const rawFolder = c.req.query("folder") ?? "all";
+	const folder: MailboxFolder | "all" = isMailboxFolder(rawFolder) ? rawFolder : "all";
+	const query = (c.req.query("q") ?? "").trim().slice(0, 200);
+	const pageNum = pageParam(c.req.query("page"), 1);
+	const perPage = 30;
+	const stats = await folderStats(db);
+	const storageBackend = resolveStorageBackend(c.env, config, settings.mailboxStorageBackend);
+
+	if (source === "mailflare") {
+		try {
+			const mailflareMessages = await listMailflareEmails(mailflareConfig(config), { text: query || undefined, limit: 30 });
+			return c.html(
+				mailboxListPage(c.get("t"), {
+					folder,
+					source,
+					messages: [],
+					mailflareMessages,
+					mailflareEnabled: true,
+					stats,
+					storageBackend,
+					query,
+					page: 1,
+					lastPage: 1,
+					total: mailflareMessages.length,
+					notice: noticeFrom(c),
+				}),
+			);
+		} catch (error) {
+			return c.html(
+				mailboxListPage(c.get("t"), {
+					folder,
+					source,
+					messages: [],
+					mailflareError: error instanceof Error ? error.message : String(error),
+					mailflareEnabled: true,
+					stats,
+					storageBackend,
+					query,
+					page: 1,
+					lastPage: 1,
+					total: 0,
+					notice: noticeFrom(c),
+				}),
+			);
+		}
+	}
+
+	const { messages, total } = await listMailboxMessages(db, { folder, search: query, limit: perPage, offset: (pageNum - 1) * perPage });
+	const lastPage = Math.max(1, Math.ceil(total / perPage));
+	return c.html(
+		mailboxListPage(c.get("t"), {
+			folder,
+			source,
+			messages,
+			mailflareEnabled: mailflareReady(config) && settings.mailboxMailflareIntegration,
+			stats,
+			storageBackend,
+			query,
+			page: pageNum,
+			lastPage,
+			total,
+			notice: noticeFrom(c),
+		}),
+	);
+});
+
+app.get("/mailbox/compose", async (c) => {
+	const { results } = await c.env.DB.prepare("SELECT address FROM aliases WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT 200").all<{ address: string }>();
+	const aliases = results.map((r) => r.address);
+	return c.html(
+		mailboxComposePage(c.get("t"), {
+			aliases,
+			from: c.req.query("from") ?? aliases[0] ?? "",
+			to: c.req.query("to") ?? "",
+			subject: c.req.query("subject") ?? "",
+			text: "",
+			notice: noticeFrom(c),
+		}),
+	);
+});
+
+app.post("/mailbox/compose", async (c) => {
+	const form = await c.req.parseBody();
+	const fromAddr = normalizeEmail(typeof form.from === "string" ? form.from : "");
+	const toAddr = extractEmail(typeof form.to === "string" ? form.to : "");
+	const subject = (typeof form.subject === "string" ? form.subject : "").trim().slice(0, 500) || "(no subject)";
+	const text = typeof form.text === "string" ? form.text : "";
+	const alias = await getAlias(c.env.DB, fromAddr);
+	if (!alias || alias.deleted_at || !toAddr) return redirectWithNotice(c, "/mailbox/compose", "notice.mbSendFailed");
+	const config = c.get("config");
+	const settings = await loadSettings(c.env.DB);
+	const displayName = alias.name || settings.defaultFromName || "";
+	const fromHeader = displayName ? { name: displayName, email: alias.address } : alias.address;
+	try {
+		if (alias.mailbox_id && mailflareReady(config)) {
+			await sendViaMailflare(mailflareConfig(config), {
+				mailboxId: alias.mailbox_id,
+				from: displayName ? `"${displayName}" <${alias.address}>` : alias.address,
+				to: [toAddr],
+				subject,
+				text,
+			});
+		} else {
+			await sendOutbound(c.env, config, { from: fromHeader, to: toAddr, subject, text });
+		}
+		if (settings.mailboxEnabled && settings.storeSentCopy) {
+			const rawMime = buildMime({ from: fromHeader, to: toAddr, subject, text }, newMessageId(fromHeader));
+			await storeMailboxMessage(c.env, config, settings, {
+				folder: "Sent",
+				aliasAddress: alias.address,
+				fromAddress: alias.address,
+				fromName: displayName || null,
+				toAddress: toAddr,
+				subject,
+				reason: "sent",
+				flags: ["\\Seen"],
+				raw: new TextEncoder().encode(rawMime),
+			});
+		}
+		return redirectWithNotice(c, "/mailbox?folder=Sent", "notice.mbSent");
+	} catch (error) {
+		console.error("Mailbox compose failed:", error instanceof Error ? error.message : error);
+		return redirectWithNotice(c, "/mailbox/compose", "notice.mbSendFailed");
+	}
+});
+
+app.post("/mailbox/empty", async (c) => {
+	const form = await c.req.parseBody();
+	const folder = typeof form.folder === "string" && (form.folder === "Trash" || form.folder === "Skipped") ? form.folder : null;
+	if (!folder) return redirectWithNotice(c, "/mailbox", "notice.bulkBad");
+	await emptyMailboxFolder(c.env, c.get("config"), folder);
+	return redirectWithNotice(c, `/mailbox?folder=${folder}`, "notice.mbEmptied");
+});
+
+app.get("/mailbox/:id", async (c) => {
+	const msg = await getMailboxMessage(c.env.DB, c.req.param("id"));
+	if (!msg) return c.notFound();
+	if (!msg.flags.includes("\\Seen")) {
+		await updateMailboxFlags(c.env.DB, msg.id, { add: ["\\Seen"] });
+		msg.flags.push("\\Seen");
+	}
+	const raw = await readMailboxRaw(c.env, c.get("config"), msg);
+	const parsed = raw ? await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" }).catch(() => null) : null;
+	return c.html(mailboxDetailPage(c.get("t"), { message: msg, parsed, hasRaw: !!raw, notice: noticeFrom(c) }));
+});
+
+app.get("/mailbox/:id/html", async (c) => {
+	const msg = await getMailboxMessage(c.env.DB, c.req.param("id"));
+	if (!msg) return c.notFound();
+	const raw = await readMailboxRaw(c.env, c.get("config"), msg);
+	const parsed = raw ? await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" }).catch(() => null) : null;
+	if (!parsed?.html) return c.notFound();
+	// Strict sandbox CSP: zero scripts, zero external images/fonts/connections, allowed only inside our iframe.
+	c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'self'");
+	c.header("X-Frame-Options", "SAMEORIGIN");
+	c.header("Cache-Control", "no-store");
+	return c.html(parsed.html);
+});
+
+app.get("/mailbox/:id/raw", async (c) => {
+	const msg = await getMailboxMessage(c.env.DB, c.req.param("id"));
+	if (!msg) return c.notFound();
+	const raw = await readMailboxRaw(c.env, c.get("config"), msg);
+	if (!raw) return c.notFound();
+	return c.body(raw as Uint8Array<ArrayBuffer>, 200, {
+		"Content-Type": "message/rfc822",
+		"Content-Disposition": `attachment; filename="${msg.id}.eml"`,
+		"Cache-Control": "no-store",
+	});
+});
+
+app.get("/mailbox/:id/attachment/:index", async (c) => {
+	const msg = await getMailboxMessage(c.env.DB, c.req.param("id"));
+	if (!msg) return c.notFound();
+	const idx = Number(c.req.param("index"));
+	if (!Number.isInteger(idx) || idx < 0) return c.notFound();
+	const raw = await readMailboxRaw(c.env, c.get("config"), msg);
+	const parsed = raw ? await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" }).catch(() => null) : null;
+	const att = parsed?.attachments[idx];
+	if (!att) return c.notFound();
+	const filename = (att.filename ?? `attachment-${idx + 1}`).replace(/["\r\n/\\]/g, "_").slice(0, 120);
+	const bytes = typeof att.content === "string" ? new TextEncoder().encode(att.content) : new Uint8Array(att.content);
+	return c.body(bytes as Uint8Array<ArrayBuffer>, 200, {
+		"Content-Type": att.mimeType || "application/octet-stream",
+		"Content-Disposition": `attachment; filename="${filename}"`,
+		"Cache-Control": "no-store",
+	});
+});
+
+app.post("/mailbox/:id/resend", async (c) => {
+	const id = c.req.param("id");
+	const outcome = await resendMailboxMessage(c.env, c.get("config"), id);
+	return redirectWithNotice(c, `/mailbox/${encodeURIComponent(id)}`, outcome.ok ? "notice.mbResent" : "notice.mbResendFailed");
+});
+
+app.post("/mailbox/:id/read", async (c) => {
+	const id = c.req.param("id");
+	const form = await c.req.parseBody();
+	const seen = form.seen === "1";
+	await updateMailboxFlags(c.env.DB, id, seen ? { add: ["\\Seen"] } : { remove: ["\\Seen"] });
+	return c.redirect(`/mailbox/${encodeURIComponent(id)}`);
+});
+
+app.post("/mailbox/:id/move", async (c) => {
+	const id = c.req.param("id");
+	const form = await c.req.parseBody();
+	const target = isMailboxFolder(form.folder) ? form.folder : "Trash";
+	await moveMailboxMessage(c.env.DB, id, target);
+	return redirectWithNotice(c, `/mailbox?folder=${encodeURIComponent(target)}`, "notice.mbMoved");
+});
+
+app.post("/mailbox/:id/delete", async (c) => {
+	await deleteMailboxMessage(c.env, c.get("config"), c.req.param("id"));
+	return redirectWithNotice(c, "/mailbox?folder=Trash", "notice.mbDeleted");
+});
+
 app.get("/activity", async (c) => {
 	const db = c.env.DB;
 	const query = (c.req.query("q") ?? "").trim().slice(0, 100);
@@ -805,6 +1049,43 @@ app.post("/settings", async (c) => {
 	}
 	const bannerLocation =
 		typeof form.bannerLocation === "string" ? form.bannerLocation : form.showBanner === "1" ? "top" : "off";
+	const currentSettings = await loadSettings(c.env.DB);
+	const mailboxShown = form.mailboxSettingsShown === "1";
+	const mailboxPatch = mailboxShown
+		? {
+				mailboxEnabled: form.mailboxEnabled === "1",
+				storeFailed: form.storeFailed === "1",
+				storeSkippedAliasOff: form.storeSkippedAliasOff === "1",
+				storeSkippedPromotions: form.storeSkippedPromotions === "1",
+				storeSkippedRuleBlock: form.storeSkippedRuleBlock === "1",
+				storeSkippedBlockedSender: form.storeSkippedBlockedSender === "1",
+				storeSkippedUnknownAlias: form.storeSkippedUnknownAlias === "1",
+				storeForwardedCopy: form.storeForwardedCopy === "1",
+				storeSentCopy: form.storeSentCopy === "1",
+				mailboxMailflareIntegration: form.mailboxMailflareIntegration === "1",
+				mailboxRetentionDays: form.mailboxRetentionDays,
+				mailboxMaxMessageKb: form.mailboxMaxMessageKb,
+				mailboxQuotaMb: form.mailboxQuotaMb,
+				mailboxQuotaPolicy: form.mailboxQuotaPolicy,
+				mailboxStorageBackend: form.mailboxStorageBackend,
+			}
+		: {
+				mailboxEnabled: currentSettings.mailboxEnabled,
+				storeFailed: currentSettings.storeFailed,
+				storeSkippedAliasOff: currentSettings.storeSkippedAliasOff,
+				storeSkippedPromotions: currentSettings.storeSkippedPromotions,
+				storeSkippedRuleBlock: currentSettings.storeSkippedRuleBlock,
+				storeSkippedBlockedSender: currentSettings.storeSkippedBlockedSender,
+				storeSkippedUnknownAlias: currentSettings.storeSkippedUnknownAlias,
+				storeForwardedCopy: currentSettings.storeForwardedCopy,
+				storeSentCopy: currentSettings.storeSentCopy,
+				mailboxMailflareIntegration: currentSettings.mailboxMailflareIntegration,
+				mailboxRetentionDays: currentSettings.mailboxRetentionDays,
+				mailboxMaxMessageKb: currentSettings.mailboxMaxMessageKb,
+				mailboxQuotaMb: currentSettings.mailboxQuotaMb,
+				mailboxQuotaPolicy: currentSettings.mailboxQuotaPolicy,
+				mailboxStorageBackend: currentSettings.mailboxStorageBackend,
+			};
 	const settings = normalizeSettings({
 		simpleloginApi: form.simpleloginApi === "1",
 		addyApi: form.addyApi === "1",
@@ -837,6 +1118,7 @@ app.post("/settings", async (c) => {
 		language: form.language,
 		// The bare address, so "Owner <owner@example.com>" is stored as owner@example.com.
 		defaultDestination: destination ? (extractEmail(destination) ?? "") : "",
+		...mailboxPatch,
 	});
 	// Which addresses get encrypted mail is set on the Encryption page, not here.
 	const { pgpRecipients: _kept, ...changed } = settings;
@@ -848,10 +1130,19 @@ async function renderConnection(c: C, config: AppConfig, setup?: DomainSetup[]) 
 	const settings = await pageSettings(c);
 	return c.html(
 		connectionPage(c.get("t"), {
-			values: { mailflareUrl: config.mailflareUrl, publicUrl: config.publicUrl, outboundProvider: config.outboundProvider, workersPlan: config.workersPlan, outboundOptions: config.outboundOptions },
+			values: {
+				mailflareUrl: config.mailflareUrl,
+				publicUrl: config.publicUrl,
+				outboundProvider: config.outboundProvider,
+				workersPlan: config.workersPlan,
+				outboundOptions: config.outboundOptions,
+				mailboxS3: config.mailboxS3,
+			},
 			hasOutboundKey: !!config.outboundApiKey,
 			hasApiKey: !!config.mailflareApiKey,
 			hasWebhookSecret: !!config.webhookSecret,
+			hasS3Secret: !!config.mailboxS3.secretAccessKey,
+			hasR2: !!c.env.MAILBOX_BUCKET,
 			mailflare: mailflareReady(config),
 			fixed: envOverrides(c.env),
 			webhookUrl: `${publicOrigin(c)}/webhook`,
@@ -963,8 +1254,21 @@ app.post("/connection", async (c) => {
 		if (!isWorkersPlan(text("workersPlan"))) return redirectWithNotice(c, "/connection", "notice.badProvider");
 		values.workersPlan = text("workersPlan");
 	}
+	// S3-compatible mailbox storage fields.
+	if (!fixed.has("mailboxS3Endpoint") && typeof form.mailboxS3Endpoint === "string") {
+		const selfHosts = [reqHost, ...[config.publicUrl, values.publicUrl, config.siteOrigin].map(hostnameOf)].filter((h): h is string => !!h);
+		const ep = validS3Endpoint(text("mailboxS3Endpoint"), selfHosts);
+		if (ep === null) return redirectWithNotice(c, "/connection", "notice.badS3");
+		values.mailboxS3Endpoint = ep;
+	}
+	for (const key of ["mailboxS3Bucket", "mailboxS3Region", "mailboxS3AccessKeyId", "mailboxS3Prefix"] as const) {
+		if (!fixed.has(key) && typeof form[key] === "string") values[key] = text(key);
+	}
+	if (!fixed.has("mailboxS3PathStyle") && form.mailboxS3PathStyleShown === "1") {
+		values.mailboxS3PathStyle = form.mailboxS3PathStyle === "1" ? "true" : "false";
+	}
 	// Secret fields are write-only: blank keeps the stored value.
-	for (const key of ["mailflareApiKey", "webhookSecret", "outboundApiKey"] as const) {
+	for (const key of ["mailflareApiKey", "webhookSecret", "outboundApiKey", "mailboxS3SecretAccessKey"] as const) {
 		if (!fixed.has(key) && text(key)) values[key] = text(key);
 	}
 	await saveConfig(c.env.DB, values);
@@ -1709,7 +2013,13 @@ export default {
 		return app.fetch(request, env, ctx);
 	},
 	async scheduled(_controller, env, ctx) {
-		ctx.waitUntil(cleanUp(env.DB));
+		ctx.waitUntil(
+			(async () => {
+				const config = await loadConfig(env);
+				const settings = await loadSettings(env.DB);
+				await cleanUp(env.DB, now(), { env, config, settings });
+			})(),
+		);
 	},
 	async email(message, env) {
 		// One D1 round trip for what every message needs: the configuration, the settings and the

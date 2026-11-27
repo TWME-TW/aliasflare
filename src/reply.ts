@@ -29,6 +29,7 @@ import { getDomainRow } from "./domain-settings";
 import { effectiveAliasDestinations, recipientPolicy } from "./recipients";
 import { ruleForwardAddresses, runRules } from "./rules";
 import { OUTBOUND_ATTACHMENT_LIMITS, sendOutbound, unsendableAttachments } from "./outbound";
+import { storeMailboxMessage } from "./mailbox";
 
 /** Mailflare's limit per message. */
 const MAX_ATTACHMENTS = 10;
@@ -362,6 +363,7 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 		return;
 	}
 
+	let rawCopyForFailed: Uint8Array | null = settings.mailboxEnabled && settings.storeFailed ? raw.slice() : null;
 	let email: Email;
 	try {
 		email = await PostalMime.parse(raw, { attachmentEncoding: "arraybuffer" });
@@ -513,11 +515,24 @@ export async function handleReverseAliasMail(message: ForwardableEmailMessage, e
 	} catch (error) {
 		const detail = error instanceof Error ? error.message : String(error);
 		console.error("Reply failed", contact.id, detail);
-		await recordEvent(db, { kind: "reply", contactId: contact.id, aliasAddress: contact.alias_address, status: "failed", detail });
+		await recordEvent(db, { kind: isReply ? "reply" : "send", contactId: contact.id, aliasAddress: contact.alias_address, status: "failed", detail });
+		if (settings.mailboxEnabled && settings.storeFailed) {
+			await storeMailboxMessage(env, config, settings, {
+				folder: "Failed",
+				aliasAddress: contact.alias_address,
+				fromAddress: contact.alias_address,
+				toAddress: contact.email,
+				subject,
+				reason: "failed",
+				reasonDetail: detail,
+				raw: rawCopyForFailed,
+			}).catch(() => undefined);
+		}
 		// Rejecting bounces the message back to the user, who learns it was not delivered.
 		message.setReject("This message could not be sent. Check the aliasflare activity log.");
 		return;
 	}
+	rawCopyForFailed = null;
 
 	// The reply is out. A failure to record it must not throw: Email Routing would retry the
 	// delivery and the correspondent would get the reply twice.
